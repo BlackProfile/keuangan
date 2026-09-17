@@ -12,14 +12,25 @@ import type {
   Summary,
 } from "@/lib/types";
 
-// GET /api/dashboard
-export async function GET() {
+// GET /api/dashboard?month=YYYY-MM
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const monthParam = searchParams.get("month");
+
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    let viewYear = now.getFullYear();
+    let viewMonth = now.getMonth();
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [y, m] = monthParam.split("-").map(Number);
+      viewYear = y;
+      viewMonth = m - 1;
+    }
+
+    const monthStart = new Date(viewYear, viewMonth, 1);
     const monthEnd = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
+      viewYear,
+      viewMonth + 1,
       0,
       23,
       59,
@@ -71,11 +82,11 @@ export async function GET() {
       monthTransactionCount: monthTransactions.length,
     };
 
-    // Monthly data for the last 6 months
+    // Monthly data for the last 6 months ending at the viewed month
     const monthsToShow = 6;
     const monthlyMap = new Map<string, MonthlyData>();
     for (let i = monthsToShow - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const d = new Date(viewYear, viewMonth - i, 1);
       const key = getMonthKey(d);
       monthlyMap.set(key, {
         month: key,

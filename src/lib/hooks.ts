@@ -38,10 +38,10 @@ export function useCategories(type?: string) {
   });
 }
 
-export function useDashboard() {
+export function useDashboard(month?: string) {
   return useQuery({
-    queryKey: queryKeys.dashboard,
-    queryFn: () => api.getDashboard(),
+    queryKey: month ? ["dashboard", month] : queryKeys.dashboard,
+    queryFn: () => api.getDashboard(month),
   });
 }
 

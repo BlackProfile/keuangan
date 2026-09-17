@@ -14,11 +14,13 @@ import type { Summary } from "@/lib/types";
 interface Props {
   summary?: Summary;
   loading?: boolean;
+  viewDate?: Date;
 }
 
-export function SummaryCards({ summary, loading }: Props) {
+export function SummaryCards({ summary, loading, viewDate }: Props) {
   const now = new Date();
-  const monthLabel = getMonthYearLabel(now);
+  const d = viewDate ?? now;
+  const monthLabel = getMonthYearLabel(d);
 
   if (loading || !summary) {
     return (

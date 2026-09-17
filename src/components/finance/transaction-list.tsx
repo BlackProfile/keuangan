@@ -3,6 +3,7 @@
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Download,
   Inbox,
   Pencil,
   Search,
@@ -34,6 +35,7 @@ import {
   formatDateLong,
   relativeDay,
 } from "@/lib/format";
+import { api } from "@/lib/api";
 import { useCategories, useTransactions } from "@/lib/hooks";
 import type { Transaction, TransactionType } from "@/lib/types";
 
@@ -97,6 +99,7 @@ export function TransactionList({
   const totalExpense = (transactions ?? [])
     .filter((t) => t.type === "EXPENSE")
     .reduce((s, t) => s + t.amount, 0);
+  const totalBalance = totalIncome - totalExpense;
 
   const hasActiveFilters =
     !!debouncedSearch || type !== "ALL" || categoryId !== "ALL" || from || to;
@@ -109,8 +112,47 @@ export function TransactionList({
     setTo("");
   }
 
+  function handleExport() {
+    const url = api.exportTransactionsUrl({
+      type: type === "ALL" ? undefined : type,
+      from: from || undefined,
+      to: to || undefined,
+    });
+    // Trigger download
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   return (
     <div className="space-y-4">
+      {/* Summary strip — total for current filter */}
+      {showFilters && total > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <SummaryStat
+            label="Pemasukan"
+            value={totalIncome}
+            variant="income"
+            loading={isLoading}
+          />
+          <SummaryStat
+            label="Pengeluaran"
+            value={totalExpense}
+            variant="expense"
+            loading={isLoading}
+          />
+          <SummaryStat
+            label="Selisih"
+            value={totalBalance}
+            variant={totalBalance >= 0 ? "income" : "expense"}
+            loading={isLoading}
+          />
+        </div>
+      )}
+
       {showFilters && (
         <Card className="p-3 sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -221,6 +263,18 @@ export function TransactionList({
                 </PopoverContent>
               </Popover>
 
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={total === 0}
+                className="h-9 gap-1.5"
+                title="Ekspor ke CSV"
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">CSV</span>
+              </Button>
+
               {hasActiveFilters && (
                 <Button
                   variant="ghost"
@@ -241,13 +295,6 @@ export function TransactionList({
               <span className="text-muted-foreground">
                 {total} transaksi
                 {isFetching && " · memperbarui..."}
-              </span>
-              <span className="text-border">·</span>
-              <span className="font-medium text-income">
-                +{formatCurrency(totalIncome)}
-              </span>
-              <span className="font-medium text-expense">
-                −{formatCurrency(totalExpense)}
               </span>
             </div>
           )}
@@ -318,6 +365,41 @@ export function TransactionList({
         </div>
       )}
     </div>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  variant,
+  loading,
+}: {
+  label: string;
+  value: number;
+  variant: "income" | "expense";
+  loading?: boolean;
+}) {
+  const isIncome = variant === "income";
+  return (
+    <Card className="p-3 sm:p-4">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+        {label}
+      </p>
+      {loading ? (
+        <Skeleton className="mt-1.5 h-5 w-20" />
+      ) : (
+        <p
+          className={cn(
+            "mt-1 text-sm font-bold tabular-nums sm:text-base",
+            isIncome ? "text-income" : "text-expense"
+          )}
+        >
+          {value < 0 && !isIncome ? "−" : ""}
+          {value >= 0 && isIncome ? "+" : ""}
+          {formatCurrency(Math.abs(value))}
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -406,3 +488,4 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   }, [value, delay]);
   return debounced;
 }
+

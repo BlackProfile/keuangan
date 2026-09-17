@@ -80,7 +80,24 @@ export const api = {
     request<void>(`/api/categories/${id}`, { method: "DELETE" }),
 
   // Dashboard
-  getDashboard: () => request<DashboardData>("/api/dashboard"),
+  getDashboard: (month?: string) => {
+    const qs = month ? `?month=${month}` : "";
+    return request<DashboardData>(`/api/dashboard${qs}`);
+  },
+
+  // Export CSV
+  exportTransactionsUrl: (params?: {
+    type?: string;
+    from?: string;
+    to?: string;
+  }) => {
+    const sp = new URLSearchParams();
+    if (params?.type && params.type !== "ALL") sp.set("type", params.type);
+    if (params?.from) sp.set("from", params.from);
+    if (params?.to) sp.set("to", params.to);
+    const qs = sp.toString();
+    return `/api/export/transactions${qs ? `?${qs}` : ""}`;
+  },
 
   // Seed
   seed: () => request<{ message: string }>("/api/seed", { method: "POST" }),

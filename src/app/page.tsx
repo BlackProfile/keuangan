@@ -163,18 +163,41 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto border-t border-border bg-muted/30">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-4 py-4 text-center text-xs text-muted-foreground sm:flex-row sm:px-6 sm:text-left">
-          <span className="flex items-center gap-1.5">
-            <Wallet className="h-3.5 w-3.5 text-primary" />
+      <footer className="mt-auto border-t border-border bg-muted/40">
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Wallet className="h-4 w-4" />
+              </span>
+              <div className="text-center sm:text-left">
+                <p className="text-sm font-semibold text-foreground">DompetKu</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Catatan keuangan pribadi
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[11px] text-muted-foreground sm:text-xs">
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-income" />
+                Pemasukan
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-expense" />
+                Pengeluaran
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Saldo
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-col items-center justify-between gap-2 border-t border-border pt-4 text-center text-[11px] text-muted-foreground sm:flex-row sm:text-left">
             <span>
-              <strong className="font-medium text-foreground">DompetKu</strong>{" "}
-              · Catatan keuangan pribadi
+              Data tersimpan lokal di perangkat Anda · {new Date().getFullYear()}
             </span>
-          </span>
-          <span>
-            Dibuat dengan Next.js &amp; Prisma · {new Date().getFullYear()}
-          </span>
+            <span>Dibuat dengan Next.js, Prisma &amp; shadcn/ui</span>
+          </div>
         </div>
       </footer>
 

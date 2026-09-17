@@ -87,3 +87,43 @@ Stage Summary:
 - Semua cacat visual utama diperbaiki: tidak ada floating N, gradient konsisten, tidak ada redundansi, chart menampilkan data, format angka konsisten, kolom rapi, tidak ada duplikat close, FAB tidak overlap
 - UI sekarang polish tinggi: 9.2/10 dari VLM, production-ready
 - Tema emerald dipoles dengan kontras lebih baik, gradient lebih subtle, dark mode premium
+
+---
+Task ID: g1-g6
+Agent: main (orchestrator)
+Task: Perbaikan cacat tersisa + tambah fitur agar aplikasi "lengkap"
+
+Work Log:
+- Analisis VLM kritikal menemukan cacat utama: hero card & stat cards gradient TIDAK tampil (bg-card menang atas gradient-hero)
+  * Root cause: komponen Card set `background-color: var(--card)` (white). Gradient pakai `background:` shorthand yang reset background-color ke transparent, tapi cascade-nya bg-card menang.
+  * Fix: ubah `.gradient-*` dari `background:` shorthand ke `background-image:` longhand dengan !important. background-image selalu render di atas background-color.
+- Fitur baru 1: Export CSV
+  * API /api/export/transactions (GET) - return CSV dengan BOM UTF-8, kolom: Tanggal, Tipe, Kategori, Keterangan, Jumlah, Catatan
+  * Tombol CSV di TransactionList, export sesuai filter aktif (type, from, to)
+- Fitur baru 2: Navigasi bulan di Dashboard
+  * API /api/dashboard terima query ?month=YYYY-MM
+  * Hero card ada tombol chevron prev/next + label bulan
+  * Summary cards & charts update sesuai bulan yang dipilih
+  * Button next disabled saat di bulan current
+- Fitur baru 3: Summary strip di tab Transaksi
+  * 3 kartu: Pemasukan, Pengeluaran, Selisih (sesuai filter aktif)
+  * Bantu user lihat total cepat tanpa scroll
+- Polish: footer lebih substansial (logo + tagline + legend warna + info data lokal + tech credit)
+- Polish: dark mode gradient-balance dicerahkan (oklch 0.38 → 0.3) agar tidak menyatu dengan background
+- Polish: hero layout mobile responsive (saldo & month nav stack ke kolom di mobile)
+- Verifikasi VLM:
+  * Dashboard light: 9/10 - gradient jelas, month nav berfungsi
+  * Tab Transaksi: summary strip + CSV button tampil, footer lengkap
+  * Navigasi bulan: klik prev → "Agustus 2026", data update
+  * Dark mode: gradient-balance sekarang terlihat jelas terpisah
+  * Mobile: 9/10 - hero tidak overlap, text utuh
+  * Export CSV: format benar (Tanggal,Tipe,Kategori,Keterangan,Jumlah,Catatan)
+- Lint: 0 errors, 0 warnings
+
+Stage Summary:
+- Cacat utama (gradient tidak tampil) FIXED dengan background-image longhand
+- 3 fitur baru ditambahkan: Export CSV, Navigasi bulan, Summary strip di Transaksi
+- Footer lebih lengkap & profesional
+- Dark mode polish (balance card lebih terlihat)
+- Mobile layout hero responsive (tidak overlap)
+- Aplikasi sekarang lebih "lengkap" sebagai pengelola keuangan: dashboard bulan-aware, export data, summary cepat

@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Plus, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Sparkles,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,7 +21,9 @@ import {
   formatCurrency,
   formatCurrencyCompact,
   getGreeting,
+  getMonthYearLabel,
   relativeDay,
+  getMonthKey,
 } from "@/lib/format";
 import { useDashboard } from "@/lib/hooks";
 import { SummaryCards } from "./summary-cards";
@@ -27,13 +37,28 @@ interface Props {
 }
 
 export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
-  const { data, isLoading } = useDashboard();
+  const now = new Date();
+  const [viewDate, setViewDate] = React.useState<Date>(now);
+  const monthKey = getMonthKey(viewDate);
+  const isCurrentMonth =
+    viewDate.getFullYear() === now.getFullYear() &&
+    viewDate.getMonth() === now.getMonth();
+
+  const { data, isLoading } = useDashboard(monthKey);
   const summary = data?.summary;
   const recent = data?.recentTransactions ?? [];
 
+  function prevMonth() {
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+  }
+  function nextMonth() {
+    if (isCurrentMonth) return;
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+  }
+
   return (
     <div className="space-y-5">
-      {/* Hero — compact, shows total balance + quick stats */}
+      {/* Hero — compact, shows total balance + quick stats + month nav */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -45,9 +70,13 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
           <div className="relative">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm text-white/75">{getGreeting()} 👋</p>
+                <p className="text-sm text-white/75">
+                  {isCurrentMonth ? `${getGreeting()} 👋` : "Ringkasan bulan"}
+                </p>
                 <p className="mt-0.5 text-base font-semibold text-white/95">
-                  Ringkasan keuanganmu
+                  {isCurrentMonth
+                    ? "Ini ringkasan keuanganmu"
+                    : getMonthYearLabel(viewDate)}
                 </p>
               </div>
               <Button
@@ -60,13 +89,40 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
               </Button>
             </div>
 
-            <div className="mt-5">
-              <p className="text-xs uppercase tracking-wide text-white/60">
-                Total Saldo
-              </p>
-              <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
-                {isLoading ? "···" : formatCurrency(summary?.balance ?? 0)}
-              </p>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-wide text-white/60">
+                  Total Saldo
+                </p>
+                <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
+                  {isLoading ? "···" : formatCurrency(summary?.balance ?? 0)}
+                </p>
+              </div>
+              {/* Month navigation */}
+              <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={prevMonth}
+                  className="h-8 w-8 border border-white/15 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  aria-label="Bulan sebelumnya"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="min-w-[7rem] text-center text-xs font-medium text-white/90">
+                  {getMonthYearLabel(viewDate)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={nextMonth}
+                  disabled={isCurrentMonth}
+                  className="h-8 w-8 border border-white/15 bg-white/10 text-white hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Bulan berikutnya"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
@@ -75,7 +131,7 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
                   <TrendingUp className="h-4 w-4 text-emerald-100" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[11px] text-white/65">Pemasukan</p>
+                  <p className="text-[11px] text-white/65">Total Pemasukan</p>
                   <p className="truncate text-sm font-semibold text-emerald-50">
                     {isLoading ? "—" : formatCurrencyCompact(summary?.totalIncome ?? 0)}
                   </p>
@@ -86,7 +142,7 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
                   <TrendingDown className="h-4 w-4 text-rose-100" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[11px] text-white/65">Pengeluaran</p>
+                  <p className="text-[11px] text-white/65">Total Pengeluaran</p>
                   <p className="truncate text-sm font-semibold text-rose-50">
                     {isLoading ? "—" : formatCurrencyCompact(summary?.totalExpense ?? 0)}
                   </p>
@@ -97,8 +153,8 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
         </Card>
       </motion.div>
 
-      {/* Summary cards — this month metrics */}
-      <SummaryCards summary={summary} loading={isLoading} />
+      {/* Summary cards — viewed month metrics */}
+      <SummaryCards summary={summary} loading={isLoading} viewDate={viewDate} />
 
       {/* Charts */}
       <FinanceCharts
