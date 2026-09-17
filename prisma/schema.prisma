@@ -1,0 +1,41 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        String        @id @default(cuid())
+  name      String
+  type      String        // "INCOME" | "EXPENSE"
+  icon      String        // Lucide icon name
+  color     String        // hex color e.g. "#10b981"
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  transactions Transaction[]
+
+  @@index([type])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  type        String   // "INCOME" | "EXPENSE"
+  amount      Float
+  description String
+  date        DateTime
+  categoryId  String
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([type])
+  @@index([date])
+  @@index([categoryId])
+}
