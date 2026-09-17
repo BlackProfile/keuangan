@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import {
   Bar,
   BarChart,
@@ -18,10 +19,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { LucideIcon } from "@/components/lucide-icon";
 import {
   formatCurrency,
+  formatCurrencyAxis,
   formatCurrencyCompact,
 } from "@/lib/format";
 import type { CategoryBreakdown, MonthlyData } from "@/lib/types";
 import { PieChart as PieIcon, TrendingDown, Wallet } from "lucide-react";
+
+// Explicit colors (resolved at render time, no CSS var dependency)
+const INCOME_COLOR = "#10b981";
+const EXPENSE_COLOR = "#f43f5e";
 
 interface Props {
   monthlyData?: MonthlyData[];
@@ -36,7 +42,7 @@ function ChartTooltipContent({
   label,
 }: {
   active?: boolean;
-  payload?: Array<{ name?: string; value?: number; color?: string; dataKey?: string }>;
+  payload?: Array<{ name?: string; value?: number; color?: string }>;
   label?: string;
 }) {
   if (!active || !payload || payload.length === 0) return null;
@@ -88,15 +94,26 @@ export function FinanceCharts({
   incomeByCategory,
   loading,
 }: Props) {
+  // Filter out leading zero months (only show from first month with any data)
+  const filteredMonthly = React.useMemo(() => {
+    if (!monthlyData || monthlyData.length === 0) return [];
+    const firstWith = monthlyData.findIndex(
+      (m) => m.income > 0 || m.expense > 0
+    );
+    if (firstWith <= 0) return monthlyData;
+    // Keep at most 6, starting from first month with data
+    return monthlyData.slice(Math.max(0, firstWith));
+  }, [monthlyData]);
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
       {/* Monthly chart */}
       <Card className="lg:col-span-3">
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
           <div>
-            <CardTitle className="text-base">Arus Kas 6 Bulan Terakhir</CardTitle>
+            <CardTitle className="text-base">Arus Kas Bulanan</CardTitle>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Perbandingan pemasukan & pengeluaran per bulan
+              Perbandingan pemasukan & pengeluaran
             </p>
           </div>
           <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground sm:flex">
@@ -106,12 +123,14 @@ export function FinanceCharts({
         <CardContent className="pl-2">
           {loading ? (
             <Skeleton className="h-64 w-full rounded-xl" />
+          ) : filteredMonthly.length === 0 ? (
+            <EmptyChart label="Belum ada data transaksi" />
           ) : (
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={monthlyData}
-                  margin={{ top: 8, right: 12, left: -8, bottom: 0 }}
+                  data={filteredMonthly}
+                  margin={{ top: 8, right: 8, left: -8, bottom: 0 }}
                   barGap={4}
                 >
                   <CartesianGrid
@@ -126,14 +145,14 @@ export function FinanceCharts({
                     tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   />
                   <YAxis
-                    tickFormatter={(v) => formatCurrencyCompact(Number(v))}
+                    tickFormatter={(v) => formatCurrencyAxis(Number(v))}
                     tickLine={false}
                     axisLine={false}
-                    width={56}
+                    width={48}
                     tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   />
                   <Tooltip
-                    cursor={{ fill: "var(--accent)", opacity: 0.4 }}
+                    cursor={{ fill: "var(--accent)", opacity: 0.5 }}
                     content={<ChartTooltipContent />}
                   />
                   <Legend
@@ -143,16 +162,16 @@ export function FinanceCharts({
                   <Bar
                     name="Pemasukan"
                     dataKey="income"
-                    fill="var(--income)"
+                    fill={INCOME_COLOR}
                     radius={[6, 6, 0, 0]}
-                    maxBarSize={36}
+                    maxBarSize={40}
                   />
                   <Bar
                     name="Pengeluaran"
                     dataKey="expense"
-                    fill="var(--expense)"
+                    fill={EXPENSE_COLOR}
                     radius={[6, 6, 0, 0]}
-                    maxBarSize={36}
+                    maxBarSize={40}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -166,9 +185,7 @@ export function FinanceCharts({
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
           <div>
             <CardTitle className="text-base">Pengeluaran per Kategori</CardTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Bulan ini
-            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Bulan ini</p>
           </div>
           <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground sm:flex">
             <PieIcon className="h-4 w-4" />
@@ -209,28 +226,28 @@ export function FinanceCharts({
                   <span className="text-[10px] text-muted-foreground">
                     Total
                   </span>
-                  <span className="text-sm font-bold">
+                  <span className="text-sm font-bold tabular-nums">
                     {formatCurrencyCompact(
                       expenseByCategory.reduce((s, c) => s + c.total, 0)
                     )}
                   </span>
                 </div>
               </div>
-              <div className="max-h-40 w-full flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-1">
+              <div className="max-h-40 w-full flex-1 space-y-2.5 overflow-y-auto custom-scrollbar pr-1">
                 {expenseByCategory.slice(0, 6).map((c) => (
                   <div key={c.category.id} className="space-y-1">
                     <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="flex items-center gap-1.5 truncate">
+                      <span className="flex min-w-0 items-center gap-1.5">
                         <LucideIcon
                           name={c.category.icon}
-                          className="h-3.5 w-3.5"
+                          className="h-3.5 w-3.5 shrink-0"
                           style={{ color: c.category.color }}
                         />
                         <span className="truncate text-foreground">
                           {c.category.name}
                         </span>
                       </span>
-                      <span className="shrink-0 font-medium text-foreground">
+                      <span className="shrink-0 font-medium tabular-nums text-foreground">
                         {formatCurrencyCompact(c.total)}
                       </span>
                     </div>
@@ -294,7 +311,7 @@ export function FinanceCharts({
                       {c.count} transaksi · {c.percentage.toFixed(0)}%
                     </div>
                   </div>
-                  <div className="text-sm font-semibold text-income">
+                  <div className="shrink-0 text-sm font-semibold tabular-nums text-income">
                     +{formatCurrencyCompact(c.total)}
                   </div>
                 </div>

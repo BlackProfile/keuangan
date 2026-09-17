@@ -67,7 +67,7 @@ export function CategoryManager() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <CategoryGroup
           title="Kategori Pemasukan"
           description="Sumber pemasukan Anda"
@@ -282,7 +282,7 @@ function CategoryFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl">
+      <DialogContent showCloseButton={false} className="max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl">
         <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
           <div className="flex items-center justify-between">
             <div>
@@ -292,7 +292,7 @@ function CategoryFormDialog({
               </DialogDescription>
             </div>
             <DialogClose asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
                 <X className="h-4 w-4" />
               </Button>
             </DialogClose>

@@ -41,6 +41,22 @@ export function formatCurrencyCompact(amount: number): string {
   return `${sign}Rp${NUMBER.format(abs)}`;
 }
 
+/** Ultra-short format for chart axes: "9,7jt", "350rb" */
+export function formatCurrencyAxis(amount: number): string {
+  const value = Number.isFinite(amount) ? amount : 0;
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) {
+    return `${(abs / 1_000_000_000).toFixed(1).replace(".", ",")}M`;
+  }
+  if (abs >= 1_000_000) {
+    return `${(abs / 1_000_000).toFixed(1).replace(".", ",")}jt`;
+  }
+  if (abs >= 1_000) {
+    return `${Math.round(abs / 1_000)}rb`;
+  }
+  return `${abs}`;
+}
+
 export function formatNumber(value: number): string {
   return NUMBER.format(Number.isFinite(value) ? value : 0);
 }

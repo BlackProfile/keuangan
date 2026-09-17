@@ -112,7 +112,7 @@ export function TransactionList({
   return (
     <div className="space-y-4">
       {showFilters && (
-        <Card className="p-3">
+        <Card className="p-3 sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -147,10 +147,7 @@ export function TransactionList({
                 </SelectContent>
               </Select>
 
-              <Select
-                value={categoryId}
-                onValueChange={setCategoryId}
-              >
+              <Select value={categoryId} onValueChange={setCategoryId}>
                 <SelectTrigger className="h-9 w-[150px]">
                   <SelectValue placeholder="Kategori" />
                 </SelectTrigger>
@@ -182,7 +179,7 @@ export function TransactionList({
                     )}
                   >
                     <SlidersHorizontal className="h-4 w-4" />
-                    Tanggal
+                    <span className="hidden sm:inline">Tanggal</span>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-72" align="end">
@@ -232,30 +229,28 @@ export function TransactionList({
                   className="h-9 text-muted-foreground"
                 >
                   <X className="mr-1 h-3.5 w-3.5" />
-                  Reset
+                  <span className="hidden sm:inline">Reset</span>
                 </Button>
               )}
             </div>
           </div>
 
           {/* Result summary */}
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
-            <span>
-              {total} transaksi
-              {isFetching && total > 0 && " · memperbarui..."}
-            </span>
-            {total > 0 && (
-              <>
-                <span className="text-border">·</span>
-                <span className="text-income">
-                  +{formatCurrency(totalIncome)}
-                </span>
-                <span className="text-expense">
-                  −{formatCurrency(totalExpense)}
-                </span>
-              </>
-            )}
-          </div>
+          {total > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-3 text-xs">
+              <span className="text-muted-foreground">
+                {total} transaksi
+                {isFetching && " · memperbarui..."}
+              </span>
+              <span className="text-border">·</span>
+              <span className="font-medium text-income">
+                +{formatCurrency(totalIncome)}
+              </span>
+              <span className="font-medium text-expense">
+                −{formatCurrency(totalExpense)}
+              </span>
+            </div>
+          )}
         </Card>
       )}
 
@@ -267,41 +262,58 @@ export function TransactionList({
           ))}
         </div>
       ) : grouped.length === 0 ? (
-        <EmptyState
-          title={emptyTitle}
-          description={emptyDescription}
-        />
+        <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
         <div className="space-y-5">
           <AnimatePresence mode="popLayout">
-            {grouped.map(([day, items]) => (
-              <motion.div
-                key={day}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-2"
-              >
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {day}
-                  </span>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {items.length} transaksi
-                  </Badge>
-                </div>
-                <Card className="divide-y divide-border overflow-hidden p-0">
-                  {items.map((t) => (
-                    <TransactionRow
-                      key={t.id}
-                      transaction={t}
-                      onEdit={() => onEdit(t)}
-                    />
-                  ))}
-                </Card>
-              </motion.div>
-            ))}
+            {grouped.map(([day, items]) => {
+              const dayIncome = items
+                .filter((t) => t.type === "INCOME")
+                .reduce((s, t) => s + t.amount, 0);
+              const dayExpense = items
+                .filter((t) => t.type === "EXPENSE")
+                .reduce((s, t) => s + t.amount, 0);
+              return (
+                <motion.div
+                  key={day}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-2"
+                >
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {day}
+                    </span>
+                    <div className="flex items-center gap-2 text-xs">
+                      {dayIncome > 0 && (
+                        <span className="font-medium text-income">
+                          +{formatCurrency(dayIncome)}
+                        </span>
+                      )}
+                      {dayExpense > 0 && (
+                        <span className="font-medium text-expense">
+                          −{formatCurrency(dayExpense)}
+                        </span>
+                      )}
+                      <Badge variant="secondary" className="text-[10px] font-normal">
+                        {items.length}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Card className="divide-y divide-border overflow-hidden p-0">
+                    {items.map((t) => (
+                      <TransactionRow
+                        key={t.id}
+                        transaction={t}
+                        onEdit={() => onEdit(t)}
+                      />
+                    ))}
+                  </Card>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
       )}
@@ -331,18 +343,16 @@ function TransactionRow({
         />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium text-foreground">
-            {transaction.description}
-          </p>
-        </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="truncate">{cat?.name ?? "Tanpa kategori"}</span>
-          <span>·</span>
-          <span className="shrink-0">{formatDateLong(transaction.date)}</span>
-        </div>
+        <p className="truncate text-sm font-medium text-foreground">
+          {transaction.description}
+        </p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {cat?.name ?? "Tanpa kategori"}
+          <span className="mx-1 text-border">·</span>
+          {formatDateLong(transaction.date)}
+        </p>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         <div className="text-right">
           <div
             className={cn(
@@ -357,7 +367,7 @@ function TransactionRow({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+          className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
           onClick={onEdit}
           aria-label="Edit transaksi"
         >
@@ -377,7 +387,7 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-12 text-center">
-      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent">
         <Inbox className="h-6 w-6 text-muted-foreground" />
       </span>
       <div>

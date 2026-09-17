@@ -115,8 +115,8 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Main content */}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 sm:py-6">
+      {/* Main content — extra bottom padding on mobile so FAB doesn't overlap */}
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 pb-24 sm:px-6 sm:py-6 sm:pb-6">
         <AnimatePresence mode="wait">
           <motion.div
             key={tab}
@@ -178,14 +178,16 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Floating Action Button (mobile) */}
-      <button
-        onClick={openAdd}
-        className="fixed bottom-6 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95 sm:hidden"
-        aria-label="Tambah transaksi"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {/* Floating Action Button (mobile only) — hidden on categories tab */}
+      {tab !== "categories" && (
+        <button
+          onClick={openAdd}
+          className="safe-bottom fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform hover:scale-105 active:scale-95 sm:hidden"
+          aria-label="Tambah transaksi"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      )}
 
       {/* Loading overlay for seed */}
       {seedMut.isPending && (
@@ -220,7 +222,7 @@ function TabTrigger({
     <TabsTrigger
       value={value}
       className={cn(
-        "h-12 gap-1.5 rounded-none border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground",
+        "relative h-12 gap-1.5 rounded-none border-b-2 border-transparent px-4 text-sm font-medium text-muted-foreground transition-colors",
         "data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none",
         "hover:text-foreground"
       )}

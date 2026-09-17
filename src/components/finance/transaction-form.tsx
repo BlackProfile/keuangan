@@ -189,7 +189,7 @@ export function TransactionForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl">
+      <DialogContent showCloseButton={false} className="max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl">
         <DialogHeader className="space-y-0 border-b border-border bg-muted/30 p-5 pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -220,7 +220,7 @@ export function TransactionForm({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 shrink-0"
                 aria-label="Tutup"
               >
                 <X className="h-4 w-4" />

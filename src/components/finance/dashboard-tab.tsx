@@ -2,14 +2,19 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Plus, Sparkles } from "lucide-react";
+import { ArrowRight, Plus, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LucideIcon } from "@/components/lucide-icon";
 import { cn } from "@/lib/utils";
-import { formatCurrency, getGreeting, relativeDay } from "@/lib/format";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+  getGreeting,
+  relativeDay,
+} from "@/lib/format";
 import { useDashboard } from "@/lib/hooks";
 import { SummaryCards } from "./summary-cards";
 import { FinanceCharts } from "./charts";
@@ -28,27 +33,27 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* Greeting + balance hero */}
+      {/* Hero — compact, shows total balance + quick stats */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 p-6 text-white shadow-xl">
-          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
-          <div className="absolute -bottom-12 right-20 h-32 w-32 rounded-full bg-white/5" />
+        <Card className="relative overflow-hidden border-0 p-5 text-white shadow-xl ring-inner-glow gradient-hero sm:p-6">
+          <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10" />
+          <div className="absolute -bottom-16 right-24 h-32 w-32 rounded-full bg-white/5" />
           <div className="relative">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-white/80">{getGreeting()}, 👋</p>
-                <p className="mt-0.5 text-lg font-semibold">
-                  Ini ringkasan keuanganmu
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-white/75">{getGreeting()} 👋</p>
+                <p className="mt-0.5 text-base font-semibold text-white/95">
+                  Ringkasan keuanganmu
                 </p>
               </div>
               <Button
                 onClick={onAdd}
                 size="sm"
-                className="border border-white/20 bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                className="shrink-0 border border-white/20 bg-white/15 text-white backdrop-blur hover:bg-white/25"
               >
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">Tambah</span>
@@ -56,33 +61,43 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
             </div>
 
             <div className="mt-5">
-              <p className="text-xs text-white/70">Saldo saat ini</p>
-              <p className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
-                {isLoading
-                  ? "Rp ..."
-                  : formatCurrency(summary?.balance ?? 0)}
+              <p className="text-xs uppercase tracking-wide text-white/60">
+                Total Saldo
+              </p>
+              <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
+                {isLoading ? "···" : formatCurrency(summary?.balance ?? 0)}
               </p>
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-white/10 p-3 backdrop-blur">
-                <p className="text-[11px] text-white/70">Pemasukan</p>
-                <p className="mt-0.5 text-sm font-semibold text-emerald-100">
-                  {isLoading ? "—" : formatCurrency(summary?.totalIncome ?? 0)}
-                </p>
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/10 px-3 py-2.5 backdrop-blur">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-400/25">
+                  <TrendingUp className="h-4 w-4 text-emerald-100" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-white/65">Pemasukan</p>
+                  <p className="truncate text-sm font-semibold text-emerald-50">
+                    {isLoading ? "—" : formatCurrencyCompact(summary?.totalIncome ?? 0)}
+                  </p>
+                </div>
               </div>
-              <div className="rounded-xl bg-white/10 p-3 backdrop-blur">
-                <p className="text-[11px] text-white/70">Pengeluaran</p>
-                <p className="mt-0.5 text-sm font-semibold text-rose-100">
-                  {isLoading ? "—" : formatCurrency(summary?.totalExpense ?? 0)}
-                </p>
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/10 px-3 py-2.5 backdrop-blur">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-400/25">
+                  <TrendingDown className="h-4 w-4 text-rose-100" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-white/65">Pengeluaran</p>
+                  <p className="truncate text-sm font-semibold text-rose-50">
+                    {isLoading ? "—" : formatCurrencyCompact(summary?.totalExpense ?? 0)}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </Card>
       </motion.div>
 
-      {/* Summary cards */}
+      {/* Summary cards — this month metrics */}
       <SummaryCards summary={summary} loading={isLoading} />
 
       {/* Charts */}
@@ -117,7 +132,7 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
         ) : recent.length === 0 ? (
           <EmptyTransactions onAdd={onAdd} />
         ) : (
-          <div className="divide-y divide-border">
+          <div className="-mx-1 divide-y divide-border">
             {recent.map((t) => {
               const isIncome = t.type === "INCOME";
               const cat = t.category;
@@ -125,7 +140,7 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
                 <button
                   key={t.id}
                   onClick={() => onEdit(t)}
-                  className="group flex w-full items-center gap-3 py-2.5 text-left transition-colors hover:bg-muted/40 sm:px-2"
+                  className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-left transition-colors hover:bg-muted/50"
                 >
                   <span
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
@@ -141,7 +156,7 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
                     <p className="truncate text-sm font-medium text-foreground">
                       {t.description}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="truncate text-xs text-muted-foreground">
                       {cat?.name} · {relativeDay(t.date)}
                     </p>
                   </div>
