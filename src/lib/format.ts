@@ -163,3 +163,132 @@ export function getGreeting(): string {
   if (h < 19) return "Selamat sore";
   return "Selamat malam";
 }
+
+/** Hidden amount placeholder for privacy mode */
+export function hiddenAmount(): string {
+  return "Rp••••••";
+}
+
+/** Format currency with optional hidden mode */
+export function formatCurrencyHidden(
+  amount: number,
+  hidden: boolean,
+  withDecimals = false
+): string {
+  if (hidden) return hiddenAmount();
+  return formatCurrency(amount, withDecimals);
+}
+
+export function formatCurrencyCompactHidden(
+  amount: number,
+  hidden: boolean
+): string {
+  if (hidden) return "Rp••••";
+  return formatCurrencyCompact(amount);
+}
+
+/** Calculate streak of consecutive days with at least one transaction */
+export function calculateStreak(dates: Array<string | Date>): number {
+  if (dates.length === 0) return 0;
+  const daySet = new Set<string>();
+  for (const d of dates) {
+    const dt = parseDateLocal(d);
+    daySet.add(formatDateInput(dt));
+  }
+  let streak = 0;
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+  // If no transaction today, allow yesterday to start streak
+  if (!daySet.has(formatDateInput(cursor))) {
+    cursor.setDate(cursor.getDate() - 1);
+    if (!daySet.has(formatDateInput(cursor))) return 0;
+  }
+  while (daySet.has(formatDateInput(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+/** Parse tags string "a,b,c" into array */
+export function parseTags(tags: string | null | undefined): string[] {
+  if (!tags) return [];
+  return tags
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+/** Format percentage with sign */
+export function formatPercent(value: number, withSign = false): string {
+  const v = Number.isFinite(value) ? value : 0;
+  const sign = withSign && v > 0 ? "+" : "";
+  return `${sign}${v.toFixed(1).replace(".", ",")}%`;
+}
+
+/** Compute estimated completion date for a goal given monthly contribution */
+export function estimateGoalDate(
+  remaining: number,
+  monthlyContribution: number
+): Date | null {
+  if (monthlyContribution <= 0 || remaining <= 0) return null;
+  const months = Math.ceil(remaining / monthlyContribution);
+  const d = new Date();
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+/** Weekday labels in Indonesian (Monday-first) */
+export const WEEKDAYS_ID = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+
+/** Get weekday index (0=Monday) from date */
+export function getWeekdayMondayFirst(date: Date): number {
+  return (date.getDay() + 6) % 7;
+}
+
+/** Hash a PIN using SubtleCrypto (client-side) — returns hex string */
+export async function hashPin(pin: string): Promise<string> {
+  const enc = new TextEncoder().encode(pin);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/** Add months to a date */
+export function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+/** Add days to a date */
+export function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+/** Compute next date for recurring transaction */
+export function computeNextDate(
+  current: Date,
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY",
+  interval: number
+): Date {
+  const d = new Date(current);
+  switch (frequency) {
+    case "DAILY":
+      d.setDate(d.getDate() + interval);
+      break;
+    case "WEEKLY":
+      d.setDate(d.getDate() + interval * 7);
+      break;
+    case "MONTHLY":
+      d.setMonth(d.getMonth() + interval);
+      break;
+    case "YEARLY":
+      d.setFullYear(d.getFullYear() + interval);
+      break;
+  }
+  return d;
+}

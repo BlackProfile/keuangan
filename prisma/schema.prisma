@@ -14,13 +14,49 @@ model Category {
   id        String        @id @default(cuid())
   name      String
   type      String        // "INCOME" | "EXPENSE"
-  icon      String        // Lucide icon name
-  color     String        // hex color e.g. "#10b981"
+  icon      String
+  color     String
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
-  transactions Transaction[]
+  transactions   Transaction[]
+  budgets        Budget[]
+  recurring      RecurringTransaction[]
 
   @@index([type])
+}
+
+model Account {
+  id          String        @id @default(cuid())
+  name        String
+  type        String        // "CASH" | "BANK" | "EWALLET" | "INVESTMENT"
+  icon        String
+  color       String
+  balance     Float         @default(0)
+  isDefault   Boolean       @default(false)
+  note        String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  transactions       Transaction[]
+  transfersOut       Transfer[] @relation("FromAccount")
+  transfersIn        Transfer[] @relation("ToAccount")
+  recurring          RecurringTransaction[]
+
+  @@index([type])
+}
+
+model Transfer {
+  id          String   @id @default(cuid())
+  fromAccountId String
+  toAccountId   String
+  amount       Float
+  date        DateTime
+  note        String?
+  fee         Float    @default(0)
+  createdAt   DateTime @default(now())
+  fromAccount Account  @relation("FromAccount", fields: [fromAccountId], references: [id], onDelete: Cascade)
+  toAccount   Account  @relation("ToAccount", fields: [toAccountId], references: [id], onDelete: Cascade)
+
+  @@index([date])
 }
 
 model Transaction {
@@ -30,12 +66,81 @@ model Transaction {
   description String
   date        DateTime
   categoryId  String
+  accountId   String?
   note        String?
+  tags        String?  // comma-separated tag names
+  merchant    String?
+  isRecurringGenerated Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  account     Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
 
   @@index([type])
   @@index([date])
   @@index([categoryId])
+  @@index([accountId])
+  @@index([merchant])
+}
+
+model Budget {
+  id         String   @id @default(cuid())
+  categoryId String
+  amount     Float
+  period     String   @default("MONTHLY") // "MONTHLY" | "WEEKLY" | "YEARLY"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId])
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  name        String
+  targetAmount Float
+  currentAmount Float  @default(0)
+  targetDate  DateTime?
+  icon        String   @default("Target")
+  color       String   @default("#10b981")
+  note        String?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RecurringTransaction {
+  id          String   @id @default(cuid())
+  type        String   // "INCOME" | "EXPENSE"
+  amount      Float
+  description String
+  categoryId  String
+  accountId   String?
+  frequency   String   // "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY"
+  interval    Int      @default(1) // every N frequency units
+  startDate   DateTime
+  nextDate    DateTime
+  endDate     DateTime?
+  note        String?
+  active      Boolean  @default(true)
+  lastRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  account     Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([nextDate])
+  @@index([active])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#6b7280")
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  id    String @id
+  value String
 }

@@ -45,23 +45,34 @@ import { LucideIcon } from "@/components/lucide-icon";
 import { cn } from "@/lib/utils";
 import { formatDateInput } from "@/lib/format";
 import {
+  useAccounts,
   useCategories,
   useCreateTransaction,
   useDeleteTransaction,
   useUpdateTransaction,
 } from "@/lib/hooks";
 import type { Transaction, TransactionType } from "@/lib/types";
+import { QUICK_ADD_PRESETS } from "@/lib/constants";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   transaction?: Transaction | null;
+  prefill?: {
+    type?: TransactionType;
+    amount?: number;
+    description?: string;
+    date?: string;
+    categoryId?: string;
+    merchant?: string;
+  } | null;
 }
 
 export function TransactionForm({
   open,
   onOpenChange,
   transaction,
+  prefill,
 }: Props) {
   const isEdit = !!transaction;
 
@@ -69,11 +80,15 @@ export function TransactionForm({
   const [amount, setAmount] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [categoryId, setCategoryId] = React.useState("");
+  const [accountId, setAccountId] = React.useState<string>("");
   const [date, setDate] = React.useState(formatDateInput(new Date()));
   const [note, setNote] = React.useState("");
+  const [merchant, setMerchant] = React.useState("");
+  const [tags, setTags] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
 
   const { data: categories, isLoading: catsLoading } = useCategories();
+  const { data: accounts } = useAccounts();
   const createMut = useCreateTransaction();
   const updateMut = useUpdateTransaction();
   const deleteMut = useDeleteTransaction();
@@ -86,18 +101,34 @@ export function TransactionForm({
       setAmount(String(transaction.amount));
       setDescription(transaction.description);
       setCategoryId(transaction.categoryId);
+      setAccountId(transaction.accountId ?? "");
       setDate(formatDateInput(transaction.date));
       setNote(transaction.note ?? "");
+      setMerchant(transaction.merchant ?? "");
+      setTags(transaction.tags ?? "");
+    } else if (prefill) {
+      setType(prefill.type ?? "EXPENSE");
+      setAmount(prefill.amount ? String(prefill.amount) : "");
+      setDescription(prefill.description ?? "");
+      setCategoryId(prefill.categoryId ?? "");
+      setAccountId("");
+      setDate(prefill.date ?? formatDateInput(new Date()));
+      setNote("");
+      setMerchant(prefill.merchant ?? "");
+      setTags("");
     } else {
       setType("EXPENSE");
       setAmount("");
       setDescription("");
       setCategoryId("");
+      setAccountId("");
       setDate(formatDateInput(new Date()));
       setNote("");
+      setMerchant("");
+      setTags("");
     }
     setError(null);
-  }, [open, transaction]);
+  }, [open, transaction, prefill]);
 
   // Filter categories by selected type and reset category if type changes
   const filteredCategories = React.useMemo(
@@ -144,8 +175,11 @@ export function TransactionForm({
       amount: amt,
       description: description.trim(),
       categoryId,
+      accountId: accountId || undefined,
       date,
       note: note.trim() || undefined,
+      merchant: merchant.trim() || undefined,
+      tags: tags.trim() || undefined,
     };
 
     if (isEdit && transaction) {
@@ -281,6 +315,21 @@ export function TransactionForm({
                   autoFocus
                 />
               </div>
+              {/* Quick add presets */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {QUICK_ADD_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() =>
+                      setAmount((prev) => String(Number(prev || 0) + p.amount))
+                    }
+                    className="rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    +{p.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Description */}
@@ -296,6 +345,20 @@ export function TransactionForm({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={80}
+              />
+            </div>
+
+            {/* Merchant */}
+            <div className="space-y-1.5">
+              <Label htmlFor="merchant">
+                Merchant <span className="text-muted-foreground">(opsional)</span>
+              </Label>
+              <Input
+                id="merchant"
+                placeholder="cth. Indomaret, Gojek"
+                value={merchant}
+                onChange={(e) => setMerchant(e.target.value)}
+                maxLength={50}
               />
             </div>
 
@@ -343,6 +406,34 @@ export function TransactionForm({
               />
             </div>
 
+            {/* Account */}
+            {accounts && accounts.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>
+                  Akun <span className="text-muted-foreground">(opsional)</span>
+                </Label>
+                <Select value={accountId} onValueChange={setAccountId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Pilih akun" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        <span className="flex items-center gap-2">
+                          <LucideIcon
+                            name={a.icon}
+                            className="h-4 w-4"
+                            style={{ color: a.color }}
+                          />
+                          {a.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Note */}
             <div className="space-y-1.5">
               <Label htmlFor="note">
@@ -355,6 +446,20 @@ export function TransactionForm({
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
                 maxLength={200}
+              />
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-1.5">
+              <Label htmlFor="tags">
+                Tag <span className="text-muted-foreground">(opsional, pisahkan koma)</span>
+              </Label>
+              <Input
+                id="tags"
+                placeholder="cth. liburan, urgent, reimburse"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                maxLength={100}
               />
             </div>
 

@@ -10,7 +10,17 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { type, amount, description, date, categoryId, note } = body ?? {};
+    const {
+      type,
+      amount,
+      description,
+      date,
+      categoryId,
+      accountId,
+      note,
+      tags,
+      merchant,
+    } = body ?? {};
 
     if (!type || (type !== "INCOME" && type !== "EXPENSE")) {
       return NextResponse.json(
@@ -68,6 +78,16 @@ export async function PUT(
       );
     }
 
+    // Revert old account balance
+    if (existing.accountId) {
+      const oldDelta =
+        existing.type === "INCOME" ? -existing.amount : existing.amount;
+      await db.account.update({
+        where: { id: existing.accountId },
+        data: { balance: { increment: oldDelta } },
+      });
+    }
+
     const updated = await db.transaction.update({
       where: { id },
       data: {
@@ -76,10 +96,22 @@ export async function PUT(
         description: description.trim(),
         date: parseDateLocal(date),
         categoryId,
+        accountId: accountId || null,
         note: note?.trim() || null,
+        tags: tags?.trim() || null,
+        merchant: merchant?.trim() || null,
       },
-      include: { category: true },
+      include: { category: true, account: true },
     });
+
+    // Apply new account balance
+    if (accountId) {
+      const delta = type === "INCOME" ? amt : -amt;
+      await db.account.update({
+        where: { id: accountId },
+        data: { balance: { increment: delta } },
+      });
+    }
 
     return NextResponse.json(updated);
   } catch (err) {
@@ -104,6 +136,15 @@ export async function DELETE(
         { error: "Transaksi tidak ditemukan." },
         { status: 404 }
       );
+    }
+    // Revert account balance
+    if (existing.accountId) {
+      const delta =
+        existing.type === "INCOME" ? -existing.amount : existing.amount;
+      await db.account.update({
+        where: { id: existing.accountId },
+        data: { balance: { increment: delta } },
+      });
     }
     await db.transaction.delete({ where: { id } });
     return new NextResponse(null, { status: 204 });
