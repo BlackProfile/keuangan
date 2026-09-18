@@ -1,0 +1,2002 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import { toast } from "sonner";
+     5→import {
+     6→  AlertTriangle,
+     7→  Eye,
+     8→  EyeOff,
+     9→  Fingerprint,
+    10→  History,
+    11→  KeyRound,
+    12→  Loader2,
+    13→  Lock,
+    14→  ShieldAlert,
+    15→  ShieldCheck,
+    16→  Smartphone,
+    17→  Trash2,
+    18→  Network,
+    19→  DatabaseBackup,
+    20→  FileLock2,
+    21→  Timer,
+    22→  BellRing,
+    23→  UserX,
+    24→  Server,
+    25→  Copy,
+    26→  Check,
+    27→  Plus,
+    28→  Power,
+    29→} from "lucide-react";
+    30→
+    31→import { Badge } from "@/components/ui/badge";
+    32→import { Button } from "@/components/ui/button";
+    33→import { Card } from "@/components/ui/card";
+    34→import { Checkbox } from "@/components/ui/checkbox";
+    35→import {
+    36→  Dialog,
+    37→  DialogClose,
+    38→  DialogContent,
+    39→  DialogDescription,
+    40→  DialogFooter,
+    41→  DialogHeader,
+    42→  DialogTitle,
+    43→} from "@/components/ui/dialog";
+    44→import {
+    45→  AlertDialog,
+    46→  AlertDialogAction,
+    47→  AlertDialogCancel,
+    48→  AlertDialogContent,
+    49→  AlertDialogDescription,
+    50→  AlertDialogFooter,
+    51→  AlertDialogHeader,
+    52→  AlertDialogTitle,
+    53→  AlertDialogTrigger,
+    54→} from "@/components/ui/alert-dialog";
+    55→import { Input } from "@/components/ui/input";
+    56→import { Label } from "@/components/ui/label";
+    57→import { ScrollArea } from "@/components/ui/scroll-area";
+    58→import {
+    59→  Select,
+    60→  SelectContent,
+    61→  SelectItem,
+    62→  SelectTrigger,
+    63→  SelectValue,
+    64→} from "@/components/ui/select";
+    65→import { Separator } from "@/components/ui/separator";
+    66→import { Skeleton } from "@/components/ui/skeleton";
+    67→import { Slider } from "@/components/ui/slider";
+    68→import { Switch } from "@/components/ui/switch";
+    69→import {
+    70→  Table,
+    71→  TableBody,
+    72→  TableCell,
+    73→  TableHead,
+    74→  TableHeader,
+    75→  TableRow,
+    76→} from "@/components/ui/table";
+    77→import {
+    78→  Popover,
+    79→  PopoverContent,
+    80→  PopoverTrigger,
+    81→} from "@/components/ui/popover";
+    82→
+    83→import { cn } from "@/lib/utils";
+    84→import {
+    85→  useAccounts,
+    86→  useAuditLog,
+    87→  useBiometricList,
+    88→  useCategories,
+    89→  useDeleteBiometric,
+    90→  usePanicWipe,
+    91→  useRegisterBiometric,
+    92→  useRevokeTrustedDevice,
+    93→  useSecuritySettings,
+    94→  useTrustedDevices,
+    95→  useUpdateSecurityBulk,
+    96→} from "@/lib/hooks";
+    97→import {
+    98→  DEFAULT_SECURITY_CONFIG,
+    99→  parseSecurityConfig,
+   100→  serializeSecurityConfig,
+   101→  type SecurityConfig,
+   102→} from "@/lib/security-defaults";
+   103→import {
+   104→  AUDIT_ACTIONS,
+   105→  auditLog,
+   106→} from "@/lib/audit";
+   107→import {
+   108→  generateRecoveryPhrase,
+   109→  hashSecret,
+   110→  validateRecoveryPhrase,
+   111→} from "@/lib/crypto";
+   112→import { useSecurityStore } from "@/lib/security-store";
+   113→import { formatDateLong } from "@/lib/format";
+   114→
+   115→// ============================================================
+   116→// Helpers
+   117→// ============================================================
+   118→
+   119→function bufferToBase64(buffer: ArrayBuffer): string {
+   120→  const bytes = new Uint8Array(buffer);
+   121→  let str = "";
+   122→  for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+   123→  return btoa(str);
+   124→}
+   125→
+   126→function passwordStrength(
+   127→  pw: string,
+   128→): { score: 0 | 1 | 2 | 3 | 4; label: string; color: string } {
+   129→  if (!pw) return { score: 0, label: "Kosong", color: "bg-muted" };
+   130→  let score = 0;
+   131→  if (pw.length >= 8) score++;
+   132→  if (pw.length >= 12) score++;
+   133→  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+   134→  if (/[0-9]/.test(pw) && /[^a-zA-Z0-9]/.test(pw)) score++;
+   135→  const labels = ["Sangat Lemah", "Lemah", "Sedang", "Kuat", "Sangat Kuat"];
+   136→  const colors = [
+   137→    "bg-rose-500",
+   138→    "bg-rose-500",
+   139→    "bg-amber-500",
+   140→    "bg-emerald-500",
+   141→    "bg-emerald-600",
+   142→  ];
+   143→  return {
+   144→    score: score as 0 | 1 | 2 | 3 | 4,
+   145→    label: labels[score],
+   146→    color: colors[score],
+   147→  };
+   148→}
+   149→
+   150→function formatTimeAgo(iso: string): string {
+   151→  const date = new Date(iso);
+   152→  const diff = Date.now() - date.getTime();
+   153→  const minutes = Math.floor(diff / 60_000);
+   154→  if (minutes < 1) return "Baru saja";
+   155→  if (minutes < 60) return `${minutes} menit lalu`;
+   156→  const hours = Math.floor(minutes / 60);
+   157→  if (hours < 24) return `${hours} jam lalu`;
+   158→  const days = Math.floor(hours / 24);
+   159→  if (days < 30) return `${days} hari lalu`;
+   160→  return formatDateLong(iso);
+   161→}
+   162→
+   163→function auditActionLabel(action: string): string {
+   164→  const map: Record<string, string> = {
+   165→    [AUDIT_ACTIONS.LOGIN_SUCCESS]: "Login Berhasil",
+   166→    [AUDIT_ACTIONS.LOGIN_FAILED]: "Login Gagal",
+   167→    [AUDIT_ACTIONS.LOGOUT]: "Logout",
+   168→    [AUDIT_ACTIONS.LOCK]: "Kunci",
+   169→    [AUDIT_ACTIONS.UNLOCK]: "Buka Kunci",
+   170→    [AUDIT_ACTIONS.PIN_CHANGE]: "Ubah PIN",
+   171→    [AUDIT_ACTIONS.EXPORT]: "Ekspor",
+   172→    [AUDIT_ACTIONS.IMPORT]: "Impor",
+   173→    [AUDIT_ACTIONS.DELETE_TX]: "Hapus Transaksi",
+   174→    [AUDIT_ACTIONS.DELETE_ACCOUNT]: "Hapus Akun",
+   175→    [AUDIT_ACTIONS.SETTING_CHANGE]: "Ubah Pengaturan",
+   176→    [AUDIT_ACTIONS.PANIC_WIPE]: "Panic Wipe",
+   177→    [AUDIT_ACTIONS.DECOY_ACCESS]: "Akses Decoy",
+   178→    [AUDIT_ACTIONS.BIOMETRIC_REGISTER]: "Daftar Biometrik",
+   179→    [AUDIT_ACTIONS.BIOMETRIC_LOGIN]: "Login Biometrik",
+   180→    [AUDIT_ACTIONS.RATE_LIMIT_HIT]: "Rate Limit",
+   181→    [AUDIT_ACTIONS.TRUSTED_DEVICE_ADD]: "Perangkat Terpercaya",
+   182→    [AUDIT_ACTIONS.BACKUP_CREATE]: "Backup",
+   183→    [AUDIT_ACTIONS.RESTORE]: "Restore",
+   184→  };
+   185→  return map[action] ?? action;
+   186→}
+   187→
+   188→// ============================================================
+   189→// Layout components
+   190→// ============================================================
+   191→
+   192→function SectionCard({
+   193→  icon,
+   194→  title,
+   195→  description,
+   196→  children,
+   197→  tone = "default",
+   198→}: {
+   199→  icon: React.ReactNode;
+   200→  title: string;
+   201→  description?: string;
+   202→  children: React.ReactNode;
+   203→  tone?: "default" | "danger";
+   204→}) {
+   205→  return (
+   206→    <Card
+   207→      className={cn(
+   208→        "p-5",
+   209→        tone === "danger" && "border-rose-500/40 ring-1 ring-rose-500/10",
+   210→      )}
+   211→    >
+   212→      <div className="mb-3 flex items-center gap-2.5">
+   213→        <span
+   214→          className={cn(
+   215→            "flex h-8 w-8 items-center justify-center rounded-lg",
+   216→            tone === "danger"
+   217→              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+   218→              : "bg-primary/10 text-primary",
+   219→          )}
+   220→        >
+   221→          {icon}
+   222→        </span>
+   223→        <div>
+   224→          <h3 className="text-base font-semibold">{title}</h3>
+   225→          {description && (
+   226→            <p className="text-xs text-muted-foreground">{description}</p>
+   227→          )}
+   228→        </div>
+   229→      </div>
+   230→      <div className="divide-y divide-border">{children}</div>
+   231→    </Card>
+   232→  );
+   233→}
+   234→
+   235→function SettingRow({
+   236→  icon,
+   237→  title,
+   238→  description,
+   239→  children,
+   240→}: {
+   241→  icon?: React.ReactNode;
+   242→  title: string;
+   243→  description?: React.ReactNode;
+   244→  children?: React.ReactNode;
+   245→}) {
+   246→  return (
+   247→    <div className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
+   248→      <div className="flex min-w-0 items-start gap-3">
+   249→        {icon && (
+   250→          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+   251→            {icon}
+   252→          </span>
+   253→        )}
+   254→        <div className="min-w-0">
+   255→          <p className="text-sm font-medium text-foreground">{title}</p>
+   256→          {description && (
+   257→            <div className="mt-0.5 text-xs text-muted-foreground">
+   258→              {description}
+   259→            </div>
+   260→          )}
+   261→        </div>
+   262→      </div>
+   263→      {children && <div className="shrink-0">{children}</div>}
+   264→    </div>
+   265→  );
+   266→}
+   267→
+   268→function SubHeader({ children }: { children: React.ReactNode }) {
+   269→  return (
+   270→    <div className="pt-2 first:pt-0">
+   271→      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+   272→        {children}
+   273→      </p>
+   274→    </div>
+   275→  );
+   276→}
+   277→
+   278→function InfoNote({ children }: { children: React.ReactNode }) {
+   279→  return (
+   280→    <div className="mt-2 flex items-start gap-2 rounded-md bg-muted/60 p-2.5 text-[11px] text-muted-foreground">
+   281→      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+   282→      <span>{children}</span>
+   283→    </div>
+   284→  );
+   285→}
+   286→
+   287→// ============================================================
+   288→// Main SecuritySection
+   289→// ============================================================
+   290→
+   291→export function SecuritySection() {
+   292→  const { data: rawConfig, isLoading } = useSecuritySettings();
+   293→  const bulkMut = useUpdateSecurityBulk();
+   294→
+   295→  const serverConfig = React.useMemo(
+   296→    () => (rawConfig ? parseSecurityConfig(rawConfig) : DEFAULT_SECURITY_CONFIG),
+   297→    [rawConfig],
+   298→  );
+   299→
+   300→  const [localConfig, setLocalConfig] =
+   301→    React.useState<SecurityConfig>(DEFAULT_SECURITY_CONFIG);
+   302→  // Sync from server only on initial load to avoid overwriting unsaved local
+   303→  // edits after a bulk save triggers a query refetch.
+   304→  const hasInitializedRef = React.useRef(false);
+   305→  const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+   306→  const mutateRef = React.useRef(bulkMut.mutate);
+   307→  React.useEffect(() => {
+   308→    mutateRef.current = bulkMut.mutate;
+   309→  }, [bulkMut.mutate]);
+   310→  const retryCountRef = React.useRef(0);
+   311→
+   312→  // Sync from server on first load (and when raw data first arrives)
+   313→  React.useEffect(() => {
+   314→    if (rawConfig && !hasInitializedRef.current) {
+   315→      setLocalConfig(serverConfig);
+   316→      hasInitializedRef.current = true;
+   317→    }
+   318→  }, [rawConfig, serverConfig]);
+   319→
+   320→  // Debounced bulk save (skipped until first server sync completes)
+   321→  React.useEffect(() => {
+   322→    if (!hasInitializedRef.current) return;
+   323→    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+   324→    saveTimerRef.current = setTimeout(() => {
+   325→      mutateRef.current(serializeSecurityConfig(localConfig), {
+   326→        onSuccess: () => {
+   327→          retryCountRef.current = 0;
+   328→          toast.success("Pengaturan disimpan");
+   329→        },
+   330→        onError: (err) => {
+   331→          // Retry up to 3 times with backoff for transient failures
+   332→          if (retryCountRef.current < 3) {
+   333→            retryCountRef.current += 1;
+   334→            const delay = 1000 * retryCountRef.current;
+   335→            setTimeout(() => {
+   336→              mutateRef.current(serializeSecurityConfig(localConfig), {
+   337→                onSuccess: () => {
+   338→                  retryCountRef.current = 0;
+   339→                  toast.success("Pengaturan disimpan");
+   340→                },
+   341→                onError: () => {
+   342→                  if (retryCountRef.current >= 3) {
+   343→                    toast.error("Gagal menyimpan — server tidak tersambung");
+   344→                  }
+   345→                },
+   346→              });
+   347→            }, delay);
+   348→          } else {
+   349→            toast.error("Gagal menyimpan — server tidak tersambung");
+   350→          }
+   351→        },
+   352→      });
+   353→    }, 500);
+   354→    return () => {
+   355→      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+   356→    };
+   357→  }, [localConfig]);
+   358→
+   359→  const updateConfig = React.useCallback(
+   360→    (partial: Partial<SecurityConfig>) => {
+   361→      setLocalConfig((prev) => ({ ...prev, ...partial }));
+   362→    },
+   363→    [],
+   364→  );
+   365→
+   366→  return (
+   367→    <div className="space-y-4">
+   368→      <div>
+   369→        <h2 className="text-xl font-bold tracking-tight">Keamanan</h2>
+   370→        <p className="mt-0.5 text-sm text-muted-foreground">
+   371→          Konfigurasi perlindungan data keuangan Anda. Perubahan disimpan otomatis.
+   372→        </p>
+   373→      </div>
+   374→
+   375→      {isLoading ? (
+   376→        <div className="space-y-4">
+   377→          {Array.from({ length: 6 }).map((_, i) => (
+   378→            <Skeleton key={i} className="h-40 w-full rounded-2xl" />
+   379→          ))}
+   380→        </div>
+   381→      ) : (
+   382→        <div className="space-y-4">
+   383→          <AppLockSection config={localConfig} updateConfig={updateConfig} />
+   384→          <RateLimitSection config={localConfig} updateConfig={updateConfig} />
+   385→          <ReauthSection config={localConfig} updateConfig={updateConfig} />
+   386→          <PrivacySection config={localConfig} updateConfig={updateConfig} />
+   387→          <DecoySection config={localConfig} updateConfig={updateConfig} />
+   388→          <SessionSection config={localConfig} updateConfig={updateConfig} />
+   389→          <TrustedDevicesSection />
+   390→          <NetworkSection config={localConfig} updateConfig={updateConfig} />
+   391→          <EncryptionSection config={localConfig} updateConfig={updateConfig} />
+   392→          <BackupSection config={localConfig} updateConfig={updateConfig} />
+   393→          <AuditLogSection config={localConfig} updateConfig={updateConfig} />
+   394→          <EmergencySection />
+   395→        </div>
+   396→      )}
+   397→    </div>
+   398→  );
+   399→}
+   400→
+   401→// ============================================================
+   402→// A. Kunci Aplikasi (App Lock)
+   403→// ============================================================
+   404→
+   405→function AppLockSection({
+   406→  config,
+   407→  updateConfig,
+   408→}: {
+   409→  config: SecurityConfig;
+   410→  updateConfig: (p: Partial<SecurityConfig>) => void;
+   411→}) {
+   412→  const setSecrets = useSecurityStore((s) => s.setSecrets);
+   413→  const [pinDialog, setPinDialog] = React.useState(false);
+   414→  const [passwordDialog, setPasswordDialog] = React.useState(false);
+   415→
+   416→  function handlePinToggle(enabled: boolean) {
+   417→    if (enabled) {
+   418→      setPinDialog(true);
+   419→    } else {
+   420→      updateConfig({ pinEnabled: false });
+   421→      setSecrets({ pinHash: null });
+   422→      auditLog(AUDIT_ACTIONS.PIN_CHANGE, "PIN dinonaktifkan", true);
+   423→      toast.success("PIN dinonaktifkan");
+   424→    }
+   425→  }
+   426→
+   427→  function handlePasswordToggle(enabled: boolean) {
+   428→    if (enabled) {
+   429→      setPasswordDialog(true);
+   430→    } else {
+   431→      updateConfig({ passwordEnabled: false });
+   432→      setSecrets({ passwordHash: null });
+   433→      toast.success("Password Master dinonaktifkan");
+   434→    }
+   435→  }
+   436→
+   437→  async function handlePatternToggle(enabled: boolean) {
+   438→    updateConfig({ patternEnabled: enabled });
+   439→    toast.success(
+   440→      enabled
+   441→        ? "Pola aktif. Fitur pattern lock akan aktif."
+   442→        : "Pattern lock dinonaktifkan.",
+   443→    );
+   444→  }
+   445→
+   446→  return (
+   447→    <SectionCard
+   448→      icon={<Lock className="h-4 w-4" />}
+   449→      title="Kunci Aplikasi"
+   450→      description="Metode pembukaan kunci dan perilaku auto-lock."
+   451→    >
+   452→      <SubHeader>Metode Kunci</SubHeader>
+   453→
+   454→      <SettingRow
+   455→        icon={<KeyRound className="h-4 w-4" />}
+   456→        title="PIN Lock"
+   457→        description="Buka kunci dengan PIN 4-6 digit."
+   458→      >
+   459→        <Switch
+   460→          checked={config.pinEnabled}
+   461→          onCheckedChange={handlePinToggle}
+   462→          aria-label="Aktifkan PIN"
+   463→        />
+   464→      </SettingRow>
+   465→
+   466→      <SettingRow
+   467→        icon={<Lock className="h-4 w-4" />}
+   468→        title="Password Master"
+   469→        description="Password panjang sebagai cadangan. Minimal 8 karakter."
+   470→      >
+   471→        <Switch
+   472→          checked={config.passwordEnabled}
+   473→          onCheckedChange={handlePasswordToggle}
+   474→          aria-label="Aktifkan Password Master"
+   475→        />
+   476→      </SettingRow>
+   477→
+   478→      <SettingRow
+   479→        icon={<EyeOff className="h-4 w-4" />}
+   480→        title="Pattern Lock"
+   481→        description="Buka kunci dengan pola titik 3×3."
+   482→      >
+   483→        <Switch
+   484→          checked={config.patternEnabled}
+   485→          onCheckedChange={handlePatternToggle}
+   486→          aria-label="Aktifkan Pattern Lock"
+   487→        />
+   488→      </SettingRow>
+   489→
+   490→      <BiometricRow
+   491→        enabled={config.biometricEnabled}
+   492→        onToggle={(v) => updateConfig({ biometricEnabled: v })}
+   493→      />
+   494→
+   495→      <SubHeader>Auto-Lock</SubHeader>
+   496→
+   497→      <SettingRow
+   498→        icon={<Timer className="h-4 w-4" />}
+   499→        title="Auto-Lock"
+   500→        description="Kunci otomatis saat idle."
+   501→      >
+   502→        <Switch
+   503→          checked={config.autoLockEnabled}
+   504→          onCheckedChange={(v) => updateConfig({ autoLockEnabled: v })}
+   505→          aria-label="Aktifkan Auto-Lock"
+   506→        />
+   507→      </SettingRow>
+   508→
+   509→      {config.autoLockEnabled && (
+   510→        <SettingRow
+   511→          title="Waktu Auto-Lock"
+   512→          description={`Kunci setelah ${config.autoLockMinutes} menit tidak aktif.`}
+   513→        >
+   514→          <div className="flex w-44 items-center gap-3">
+   515→            <Slider
+   516→              value={[config.autoLockMinutes]}
+   517→              min={1}
+   518→              max={60}
+   519→              step={1}
+   520→              onValueChange={(v) =>
+   521→                updateConfig({ autoLockMinutes: v[0] ?? 5 })
+   522→              }
+   523→              aria-label="Menit auto-lock"
+   524→            />
+   525→            <span className="w-12 text-right text-xs font-medium tabular-nums text-muted-foreground">
+   526→              {config.autoLockMinutes}m
+   527→            </span>
+   528→          </div>
+   529→        </SettingRow>
+   530→      )}
+   531→
+   532→      <SettingRow
+   533→        title="Lock saat Ganti Tab"
+   534→        description="Kunci saat pengguna beralih ke tab lain."
+   535→      >
+   536→        <Switch
+   537→          checked={config.lockOnTabSwitch}
+   538→          onCheckedChange={(v) => updateConfig({ lockOnTabSwitch: v })}
+   539→          aria-label="Lock saat ganti tab"
+   540→        />
+   541→      </SettingRow>
+   542→
+   543→      <SettingRow
+   544→        title="Lock saat App Ditutup"
+   545→        description="Kunci saat aplikasi ditutup atau refresh."
+   546→      >
+   547→        <Switch
+   548→          checked={config.lockOnAppClose}
+   549→          onCheckedChange={(v) => updateConfig({ lockOnAppClose: v })}
+   550→          aria-label="Lock saat app ditutup"
+   551→        />
+   552→      </SettingRow>
+   553→
+   554→      <PinSetupDialog
+   555→        open={pinDialog}
+   556→        onOpenChange={setPinDialog}
+   557→        onConfirm={async (pin) => {
+   558→          try {
+   559→            const hash = await hashSecret(pin);
+   560→            setSecrets({ pinHash: hash });
+   561→            updateConfig({ pinEnabled: true });
+   562→            auditLog(AUDIT_ACTIONS.PIN_CHANGE, "PIN baru dibuat", true);
+   563→            toast.success("PIN aktif. Aplikasi akan terkunci saat dibuka.");
+   564→            setPinDialog(false);
+   565→          } catch {
+   566→            toast.error("Gagal meng-hash PIN.");
+   567→          }
+   568→        }}
+   569→      />
+   570→
+   571→      <PasswordSetupDialog
+   572→        open={passwordDialog}
+   573→        onOpenChange={setPasswordDialog}
+   574→        onConfirm={async (pw) => {
+   575→          try {
+   576→            const hash = await hashSecret(pw);
+   577→            setSecrets({ passwordHash: hash });
+   578→            updateConfig({ passwordEnabled: true });
+   579→            auditLog(AUDIT_ACTIONS.PIN_CHANGE, "Password Master dibuat", true);
+   580→            toast.success("Password Master aktif.");
+   581→            setPasswordDialog(false);
+   582→          } catch {
+   583→            toast.error("Gagal meng-hash password.");
+   584→          }
+   585→        }}
+   586→      />
+   587→    </SectionCard>
+   588→  );
+   589→}
+   590→
+   591→// ---- PIN setup dialog ----
+   592→
+   593→function PinSetupDialog({
+   594→  open,
+   595→  onOpenChange,
+   596→  onConfirm,
+   597→}: {
+   598→  open: boolean;
+   599→  onOpenChange: (v: boolean) => void;
+   600→  onConfirm: (pin: string) => void | Promise<void>;
+   601→}) {
+   602→  const [pin, setPin] = React.useState("");
+   603→  const [confirm, setConfirm] = React.useState("");
+   604→  const [submitting, setSubmitting] = React.useState(false);
+   605→
+   606→  React.useEffect(() => {
+   607→    if (!open) {
+   608→      setPin("");
+   609→      setConfirm("");
+   610→      setSubmitting(false);
+   611→    }
+   612→  }, [open]);
+   613→
+   614→  const validLength = pin.length >= 4 && pin.length <= 6;
+   615→  const allDigits = /^\d*$/.test(pin) && pin.length > 0;
+   616→  const match = pin.length > 0 && pin === confirm;
+   617→
+   618→  async function handleSubmit() {
+   619→    if (!validLength || !allDigits || !match) return;
+   620→    setSubmitting(true);
+   621→    try {
+   622→      await onConfirm(pin);
+   623→    } finally {
+   624→      setSubmitting(false);
+   625→    }
+   626→  }
+   627→
+   628→  return (
+   629→    <Dialog open={open} onOpenChange={onOpenChange}>
+   630→      <DialogContent showCloseButton={false} className="max-w-sm">
+   631→        <DialogHeader>
+   632→          <DialogTitle>Buat PIN</DialogTitle>
+   633→          <DialogDescription>
+   634→            PIN 4-6 digit. Ingat baik-baik — tidak bisa dipulihkan jika lupa.
+   635→          </DialogDescription>
+   636→        </DialogHeader>
+   637→
+   638→        <div className="space-y-3 py-2">
+   639→          <div className="space-y-1.5">
+   640→            <Label htmlFor="pin-input">PIN</Label>
+   641→            <Input
+   642→              id="pin-input"
+   643→              type="password"
+   644→              inputMode="numeric"
+   645→              autoComplete="off"
+   646→              value={pin}
+   647→              maxLength={6}
+   648→              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+   649→              placeholder="4-6 digit"
+   650→              autoFocus
+   651→            />
+   652→          </div>
+   653→          <div className="space-y-1.5">
+   654→            <Label htmlFor="pin-confirm">Konfirmasi PIN</Label>
+   655→            <Input
+   656→              id="pin-confirm"
+   657→              type="password"
+   658→              inputMode="numeric"
+   659→              autoComplete="off"
+   660→              value={confirm}
+   661→              maxLength={6}
+   662→              onChange={(e) => setConfirm(e.target.value.replace(/\D/g, ""))}
+   663→              placeholder="Ulangi PIN"
+   664→            />
+   665→          </div>
+   666→
+   667→          {pin.length > 0 && !validLength && (
+   668→            <p className="text-xs text-rose-500">PIN harus 4-6 digit.</p>
+   669→          )}
+   670→          {confirm.length > 0 && !match && (
+   671→            <p className="text-xs text-rose-500">PIN tidak cocok.</p>
+   672→          )}
+   673→        </div>
+   674→
+   675→        <DialogFooter>
+   676→          <DialogClose asChild>
+   677→            <Button variant="outline">Batal</Button>
+   678→          </DialogClose>
+   679→          <Button
+   680→            onClick={handleSubmit}
+   681→            disabled={!validLength || !match || submitting}
+   682→            className="gap-1.5"
+   683→          >
+   684→            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+   685→            Simpan PIN
+   686→          </Button>
+   687→        </DialogFooter>
+   688→      </DialogContent>
+   689→    </Dialog>
+   690→  );
+   691→}
+   692→
+   693→// ---- Password setup dialog ----
+   694→
+   695→function PasswordSetupDialog({
+   696→  open,
+   697→  onOpenChange,
+   698→  onConfirm,
+   699→}: {
+   700→  open: boolean;
+   701→  onOpenChange: (v: boolean) => void;
+   702→  onConfirm: (pw: string) => void | Promise<void>;
+   703→}) {
+   704→  const [pw, setPw] = React.useState("");
+   705→  const [confirm, setConfirm] = React.useState("");
+   706→  const [show, setShow] = React.useState(false);
+   707→  const [submitting, setSubmitting] = React.useState(false);
+   708→
+   709→  React.useEffect(() => {
+   710→    if (!open) {
+   711→      setPw("");
+   712→      setConfirm("");
+   713→      setShow(false);
+   714→      setSubmitting(false);
+   715→    }
+   716→  }, [open]);
+   717→
+   718→  const strength = passwordStrength(pw);
+   719→  const longEnough = pw.length >= 8;
+   720→  const match = pw.length > 0 && pw === confirm;
+   721→
+   722→  async function handleSubmit() {
+   723→    if (!longEnough || !match) return;
+   724→    setSubmitting(true);
+   725→    try {
+   726→      await onConfirm(pw);
+   727→    } finally {
+   728→      setSubmitting(false);
+   729→    }
+   730→  }
+   731→
+   732→  return (
+   733→    <Dialog open={open} onOpenChange={onOpenChange}>
+   734→      <DialogContent showCloseButton={false} className="max-w-sm">
+   735→        <DialogHeader>
+   736→          <DialogTitle>Buat Password Master</DialogTitle>
+   737→          <DialogDescription>
+   738→            Minimal 8 karakter. Disimpan terenkripsi di perangkat ini.
+   739→          </DialogDescription>
+   740→        </DialogHeader>
+   741→
+   742→        <div className="space-y-3 py-2">
+   743→          <div className="space-y-1.5">
+   744→            <Label htmlFor="pw-input">Password</Label>
+   745→            <div className="relative">
+   746→              <Input
+   747→                id="pw-input"
+   748→                type={show ? "text" : "password"}
+   749→                value={pw}
+   750→                onChange={(e) => setPw(e.target.value)}
+   751→                placeholder="Min. 8 karakter"
+   752→                autoComplete="new-password"
+   753→                className="pr-10"
+   754→              />
+   755→              <button
+   756→                type="button"
+   757→                onClick={() => setShow((s) => !s)}
+   758→                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+   759→                aria-label={show ? "Sembunyikan" : "Tampilkan"}
+   760→              >
+   761→                {show ? (
+   762→                  <EyeOff className="h-4 w-4" />
+   763→                ) : (
+   764→                  <Eye className="h-4 w-4" />
+   765→                )}
+   766→              </button>
+   767→            </div>
+   768→            {pw.length > 0 && (
+   769→              <div className="flex items-center gap-2 pt-1">
+   770→                <div className="flex h-1.5 flex-1 gap-1">
+   771→                  {[0, 1, 2, 3].map((i) => (
+   772→                    <div
+   773→                      key={i}
+   774→                      className={cn(
+   775→                        "h-full flex-1 rounded-full transition-colors",
+   776→                        i < strength.score ? strength.color : "bg-muted",
+   777→                      )}
+   778→                    />
+   779→                  ))}
+   780→                </div>
+   781→                <span className="w-24 text-right text-[11px] font-medium text-muted-foreground">
+   782→                  {strength.label}
+   783→                </span>
+   784→              </div>
+   785→            )}
+   786→          </div>
+   787→          <div className="space-y-1.5">
+   788→            <Label htmlFor="pw-confirm">Konfirmasi Password</Label>
+   789→            <Input
+   790→              id="pw-confirm"
+   791→              type={show ? "text" : "password"}
+   792→              value={confirm}
+   793→              onChange={(e) => setConfirm(e.target.value)}
+   794→              placeholder="Ulangi password"
+   795→              autoComplete="new-password"
+   796→            />
+   797→          </div>
+   798→          {!longEnough && pw.length > 0 && (
+   799→            <p className="text-xs text-rose-500">
+   800→              Password minimal 8 karakter.
+   801→            </p>
+   802→          )}
+   803→          {confirm.length > 0 && !match && (
+   804→            <p className="text-xs text-rose-500">Password tidak cocok.</p>
+   805→          )}
+   806→        </div>
+   807→
+   808→        <DialogFooter>
+   809→          <DialogClose asChild>
+   810→            <Button variant="outline">Batal</Button>
+   811→          </DialogClose>
+   812→          <Button
+   813→            onClick={handleSubmit}
+   814→            disabled={!longEnough || !match || submitting}
+   815→            className="gap-1.5"
+   816→          >
+   817→            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+   818→            Simpan Password
+   819→          </Button>
+   820→        </DialogFooter>
+   821→      </DialogContent>
+   822→    </Dialog>
+   823→  );
+   824→}
+   825→
+   826→// ---- Biometric row + dialog ----
+   827→
+   828→function BiometricRow({
+   829→  enabled,
+   830→  onToggle,
+   831→}: {
+   832→  enabled: boolean;
+   833→  onToggle: (v: boolean) => void;
+   834→}) {
+   835→  const biometricList = useBiometricList();
+   836→  const registerMut = useRegisterBiometric();
+   837→  const deleteMut = useDeleteBiometric();
+   838→  const [registering, setRegistering] = React.useState(false);
+   839→
+   840→  async function handleRegister() {
+   841→    if (typeof window === "undefined" || !window.PublicKeyCredential) {
+   842→      toast.error("Browser tidak mendukung WebAuthn.");
+   843→      return;
+   844→    }
+   845→    try {
+   846→      const available =
+   847→        await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+   848→      if (!available) {
+   849→        toast.error("Tidak ada autentikator biometrik pada perangkat ini.");
+   850→        return;
+   851→      }
+   852→    } catch {
+   853→      toast.error("Gagal memeriksa dukungan biometrik.");
+   854→      return;
+   855→    }
+   856→
+   857→    setRegistering(true);
+   858→    try {
+   859→      const challenge = new Uint8Array(32);
+   860→      crypto.getRandomValues(challenge);
+   861→      const userId = new TextEncoder().encode(
+   862→        `dompetku-user-${Date.now()}`,
+   863→      );
+   864→
+   865→      const credential = (await navigator.credentials.create({
+   866→        publicKey: {
+   867→          challenge,
+   868→          rp: { name: "DompetKu" },
+   869→          user: {
+   870→            id: userId,
+   871→            name: "user@dompetku",
+   872→            displayName: "DompetKu User",
+   873→          },
+   874→          pubKeyCredParams: [
+   875→            { type: "public-key", alg: -7 },
+   876→            { type: "public-key", alg: -257 },
+   877→          ],
+   878→          authenticatorSelection: {
+   879→            authenticatorAttachment: "platform",
+   880→            userVerification: "required",
+   881→            residentKey: "preferred",
+   882→          },
+   883→          timeout: 60_000,
+   884→          attestation: "none",
+   885→        },
+   886→      })) as PublicKeyCredential | null;
+   887→
+   888→      if (!credential) {
+   889→        toast.error("Pendaftaran biometrik dibatalkan.");
+   890→        return;
+   891→      }
+   892→
+   893→      const credentialId = bufferToBase64(credential.rawId);
+   894→      const today = new Date().toISOString().slice(0, 10);
+   895→      const name = `Device Fingerprint ${today}`;
+   896→
+   897→      await registerMut.mutateAsync({
+   898→        name,
+   899→        credentialId,
+   900→        publicKey: credentialId,
+   901→        counter: 0,
+   902→      });
+   903→      auditLog(
+   904→        AUDIT_ACTIONS.BIOMETRIC_REGISTER,
+   905→        `Mendaftarkan biometrik: ${name}`,
+   906→        true,
+   907→      );
+   908→      toast.success("Biometrik berhasil didaftarkan.");
+   909→      if (!enabled) onToggle(true);
+   910→    } catch (err) {
+   911→      const msg = err instanceof Error ? err.message : String(err);
+   912→      if (msg.includes("cancel") || msg.includes("Abort")) {
+   913→        toast.error("Pendaftaran dibatalkan.");
+   914→      } else {
+   915→        toast.error("Gagal mendaftarkan biometrik.");
+   916→      }
+   917→    } finally {
+   918→      setRegistering(false);
+   919→    }
+   920→  }
+   921→
+   922→  function handleDelete(id: string, name: string) {
+   923→    deleteMut.mutate(id, {
+   924→      onSuccess: () => {
+   925→        auditLog(
+   926→          AUDIT_ACTIONS.BIOMETRIC_REGISTER,
+   927→          `Menghapus biometrik: ${name}`,
+   928→          true,
+   929→        );
+   930→        toast.success("Biometrik dihapus.");
+   931→      },
+   932→      onError: () => toast.error("Gagal menghapus biometrik."),
+   933→    });
+   934→  }
+   935→
+   936→  const items = biometricList.data ?? [];
+   937→
+   938→  return (
+   939→    <>
+   940→      <SettingRow
+   941→        icon={<Fingerprint className="h-4 w-4" />}
+   942→        title="Biometrik"
+   943→        description="Buka kunci dengan sidik jari / wajah via WebAuthn."
+   944→      >
+   945→        <Switch
+   946→          checked={enabled}
+   947→          onCheckedChange={onToggle}
+   948→          aria-label="Aktifkan biometrik"
+   949→        />
+   950→      </SettingRow>
+   951→
+   952→      {enabled && (
+   953→        <div className="py-3">
+   954→          <div className="mb-2 flex items-center justify-between">
+   955→            <p className="text-xs font-medium text-muted-foreground">
+   956→              Kredensial Terdaftar
+   957→            </p>
+   958→            <Button
+   959→              size="sm"
+   960→              variant="outline"
+   961→              onClick={handleRegister}
+   962→              disabled={registering}
+   963→              className="gap-1.5"
+   964→            >
+   965→              {registering ? (
+   966→                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   967→              ) : (
+   968→                <Plus className="h-3.5 w-3.5" />
+   969→              )}
+   970→              Daftarkan
+   971→            </Button>
+   972→          </div>
+   973→          {items.length === 0 ? (
+   974→            <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+   975→              Belum ada kredensial biometrik terdaftar.
+   976→            </p>
+   977→          ) : (
+   978→            <div className="max-h-40 space-y-1.5 overflow-y-auto custom-scrollbar pr-1">
+   979→              {items.map((b) => (
+   980→                <div
+   981→                  key={b.id}
+   982→                  className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2"
+   983→                >
+   984→                  <div className="min-w-0">
+   985→                    <p className="truncate text-xs font-medium">{b.name}</p>
+   986→                    <p className="text-[11px] text-muted-foreground">
+   987→                      {formatTimeAgo(b.createdAt)}
+   988→                    </p>
+   989→                  </div>
+   990→                  <Button
+   991→                    size="sm"
+   992→                    variant="ghost"
+   993→                    className="h-7 w-7 p-0 text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
+   994→                    onClick={() => handleDelete(b.id, b.name)}
+   995→                    disabled={deleteMut.isPending}
+   996→                    aria-label={`Hapus ${b.name}`}
+   997→                  >
+   998→                    <Trash2 className="h-3.5 w-3.5" />
+   999→                  </Button>
+  1000→                </div>
+  1001→              ))}
+  1002→            </div>
+  1003→          )}
+  1004→        </div>
+  1005→      )}
+  1006→    </>
+  1007→  );
+  1008→}
+  1009→
+  1010→// ============================================================
+  1011→// B. Rate Limit & Brute Force Protection
+  1012→// ============================================================
+  1013→
+  1014→function RateLimitSection({
+  1015→  config,
+  1016→  updateConfig,
+  1017→}: {
+  1018→  config: SecurityConfig;
+  1019→  updateConfig: (p: Partial<SecurityConfig>) => void;
+  1020→}) {
+  1021→  return (
+  1022→    <SectionCard
+  1023→      icon={<ShieldAlert className="h-4 w-4" />}
+  1024→      title="Rate Limit & Brute Force"
+  1025→      description="Proteksi percobaan pembukaan kunci yang berulang."
+  1026→    >
+  1027→      <SettingRow
+  1028→        title="Maksimal Percobaan"
+  1029→        description="Jumlah percobaan gagal sebelum lockout."
+  1030→      >
+  1031→        <Select
+  1032→          value={String(config.rateLimitMaxAttempts)}
+  1033→          onValueChange={(v) =>
+  1034→            updateConfig({ rateLimitMaxAttempts: Number(v) })
+  1035→          }
+  1036→        >
+  1037→          <SelectTrigger size="sm" className="w-24" aria-label="Maksimal percobaan">
+  1038→            <SelectValue />
+  1039→          </SelectTrigger>
+  1040→          <SelectContent>
+  1041→            <SelectItem value="3">3 kali</SelectItem>
+  1042→            <SelectItem value="5">5 kali</SelectItem>
+  1043→            <SelectItem value="10">10 kali</SelectItem>
+  1044→          </SelectContent>
+  1045→        </Select>
+  1046→      </SettingRow>
+  1047→
+  1048→      <SettingRow
+  1049→        title="Durasi Lockout"
+  1050→        description="Berapa lama akun terkunci setelah maksimal percobaan."
+  1051→      >
+  1052→        <Select
+  1053→          value={String(config.rateLockoutMinutes)}
+  1054→          onValueChange={(v) =>
+  1055→            updateConfig({ rateLockoutMinutes: Number(v) })
+  1056→          }
+  1057→        >
+  1058→          <SelectTrigger size="sm" className="w-28" aria-label="Durasi lockout">
+  1059→            <SelectValue />
+  1060→          </SelectTrigger>
+  1061→          <SelectContent>
+  1062→            <SelectItem value="1">1 menit</SelectItem>
+  1063→            <SelectItem value="5">5 menit</SelectItem>
+  1064→            <SelectItem value="15">15 menit</SelectItem>
+  1065→            <SelectItem value="30">30 menit</SelectItem>
+  1066→          </SelectContent>
+  1067→        </Select>
+  1068→      </SettingRow>
+  1069→
+  1070→      <SettingRow
+  1071→        title="Exponential Backoff"
+  1072→        description="Durasi lockout meningkat setiap kelompok percobaan gagal."
+  1073→      >
+  1074→        <Switch
+  1075→          checked={config.exponentialBackoff}
+  1076→          onCheckedChange={(v) => updateConfig({ exponentialBackoff: v })}
+  1077→          aria-label="Exponential backoff"
+  1078→        />
+  1079→      </SettingRow>
+  1080→
+  1081→      <SettingRow
+  1082→        title="Wipe Setelah Percobaan Gagal"
+  1083→        description="Hapus semua data setelah N percobaan gagal. 0 = nonaktif."
+  1084→      >
+  1085→        <Select
+  1086→          value={String(config.wipeAfterFailedAttempts)}
+  1087→          onValueChange={(v) =>
+  1088→            updateConfig({ wipeAfterFailedAttempts: Number(v) })
+  1089→          }
+  1090→        >
+  1091→          <SelectTrigger
+  1092→            size="sm"
+  1093→            className="w-32"
+  1094→            aria-label="Wipe setelah percobaan gagal"
+  1095→          >
+  1096→            <SelectValue />
+  1097→          </SelectTrigger>
+  1098→          <SelectContent>
+  1099→            <SelectItem value="0">Nonaktif</SelectItem>
+  1100→            <SelectItem value="5">5 kali</SelectItem>
+  1101→            <SelectItem value="10">10 kali</SelectItem>
+  1102→            <SelectItem value="20">20 kali</SelectItem>
+  1103→          </SelectContent>
+  1104→        </Select>
+  1105→      </SettingRow>
+  1106→
+  1107→      {config.wipeAfterFailedAttempts > 0 && (
+  1108→        <InfoNote>
+  1109→          <strong>Peringatan:</strong> Setelah {config.wipeAfterFailedAttempts}{" "}
+  1110→          kali percobaan gagal, SEMUA data keuangan Anda akan dihapus permanen
+  1111→          tanpa bisa dikembalikan. Aktifkan hanya jika Anda benar-benar
+  1112→          membutuhkan proteksi ekstrem.
+  1113→        </InfoNote>
+  1114→      )}
+  1115→    </SectionCard>
+  1116→  );
+  1117→}
+  1118→
+  1119→// ============================================================
+  1120→// C. Re-Authentication
+  1121→// ============================================================
+  1122→
+  1123→function ReauthSection({
+  1124→  config,
+  1125→  updateConfig,
+  1126→}: {
+  1127→  config: SecurityConfig;
+  1128→  updateConfig: (p: Partial<SecurityConfig>) => void;
+  1129→}) {
+  1130→  return (
+  1131→    <SectionCard
+  1132→      icon={<ShieldCheck className="h-4 w-4" />}
+  1133→      title="Re-Authentication"
+  1134→      description="Minta PIN/password untuk aksi sensitif."
+  1135→    >
+  1136→      <SettingRow
+  1137→        title="Hapus Transaksi"
+  1138→        description="Minta re-auth saat menghapus transaksi."
+  1139→      >
+  1140→        <Switch
+  1141→          checked={config.reauthForDelete}
+  1142→          onCheckedChange={(v) => updateConfig({ reauthForDelete: v })}
+  1143→          aria-label="Re-auth hapus transaksi"
+  1144→        />
+  1145→      </SettingRow>
+  1146→
+  1147→      <SettingRow
+  1148→        title="Ekspor Data"
+  1149→        description="Minta re-auth saat mengekspor data."
+  1150→      >
+  1151→        <Switch
+  1152→          checked={config.reauthForExport}
+  1153→          onCheckedChange={(v) => updateConfig({ reauthForExport: v })}
+  1154→          aria-label="Re-auth ekspor"
+  1155→        />
+  1156→      </SettingRow>
+  1157→
+  1158→      <SettingRow
+  1159→        title="Ubah Pengaturan"
+  1160→        description="Minta re-auth saat mengubah pengaturan keamanan."
+  1161→      >
+  1162→        <Switch
+  1163→          checked={config.reauthForSettings}
+  1164→          onCheckedChange={(v) => updateConfig({ reauthForSettings: v })}
+  1165→          aria-label="Re-auth pengaturan"
+  1166→        />
+  1167→      </SettingRow>
+  1168→
+  1169→      <SettingRow
+  1170→        title="Hapus Akun"
+  1171→        description="Minta re-auth saat menghapus akun."
+  1172→      >
+  1173→        <Switch
+  1174→          checked={config.reauthForAccountDelete}
+  1175→          onCheckedChange={(v) => updateConfig({ reauthForAccountDelete: v })}
+  1176→          aria-label="Re-auth hapus akun"
+  1177→        />
+  1178→      </SettingRow>
+  1179→    </SectionCard>
+  1180→  );
+  1181→}
+  1182→
+  1183→// ============================================================
+  1184→// D. Privasi & Anti-Snooping
+  1185→// ============================================================
+  1186→
+  1187→function PrivacySection({
+  1188→  config,
+  1189→  updateConfig,
+  1190→}: {
+  1191→  config: SecurityConfig;
+  1192→  updateConfig: (p: Partial<SecurityConfig>) => void;
+  1193→}) {
+  1194→  // Local UI state for "Hide Specific Accounts" toggle, derived from whether
+  1195→  // any accounts are currently hidden but tracked separately so toggling ON
+  1196→  // reveals the multi-select before any account is picked.
+  1197→  const [hideAccountsEnabled, setHideAccountsEnabled] = React.useState(
+  1198→    config.hiddenAccountIds !== "",
+  1199→  );
+  1200→
+  1201→  function handleToggleHideAccounts(v: boolean) {
+  1202→    setHideAccountsEnabled(v);
+  1203→    if (!v) updateConfig({ hiddenAccountIds: "" });
+  1204→  }
+  1205→
+  1206→  return (
+  1207→    <SectionCard
+  1208→      icon={<EyeOff className="h-4 w-4" />}
+  1209→      title="Privasi & Anti-Snooping"
+  1210→      description="Sembunyikan informasi sensitif dari pengintaian."
+  1211→    >
+  1212→      <SettingRow
+  1213→        icon={<EyeOff className="h-4 w-4" />}
+  1214→        title="Sembunyikan Nominal"
+  1215→        description="Tampilkan Rp•••• alih-alih nominal."
+  1216→      >
+  1217→        <Switch
+  1218→          checked={config.hiddenAmounts}
+  1219→          onCheckedChange={(v) => updateConfig({ hiddenAmounts: v })}
+  1220→          aria-label="Sembunyikan nominal"
+  1221→        />
+  1222→      </SettingRow>
+  1223→
+  1224→      <SettingRow
+  1225→        title="Sembunyikan Kategori Sensitif"
+  1226→        description="Pilih kategori yang ingin disembunyikan."
+  1227→      >
+  1228→        <Switch
+  1229→          checked={config.hideSensitiveCategories}
+  1230→          onCheckedChange={(v) =>
+  1231→            updateConfig({ hideSensitiveCategories: v })
+  1232→          }
+  1233→          aria-label="Sembunyikan kategori sensitif"
+  1234→        />
+  1235→      </SettingRow>
+  1236→
+  1237→      {config.hideSensitiveCategories && (
+  1238→        <HiddenCategoriesRow
+  1239→          value={config.hiddenCategoryIds}
+  1240→          onChange={(v) => updateConfig({ hiddenCategoryIds: v })}
+  1241→        />
+  1242→      )}
+  1243→
+  1244→      <SettingRow
+  1245→        title="Sembunyikan Akun Tertentu"
+  1246→        description="Pilih akun yang ingin disembunyikan."
+  1247→      >
+  1248→        <Switch
+  1249→          checked={hideAccountsEnabled}
+  1250→          onCheckedChange={handleToggleHideAccounts}
+  1251→          aria-label="Sembunyikan akun tertentu"
+  1252→        />
+  1253→      </SettingRow>
+  1254→
+  1255→      {hideAccountsEnabled && (
+  1256→        <HiddenAccountsRow
+  1257→          value={config.hiddenAccountIds}
+  1258→          onChange={(v) => updateConfig({ hiddenAccountIds: v })}
+  1259→        />
+  1260→      )}
+  1261→
+  1262→      <SubHeader>Anti-Snooping</SubHeader>
+  1263→
+  1264→      <SettingRow
+  1265→        title="Blur saat Hilang Fokus"
+  1266→        description="Kaburkan layar saat tab kehilangan fokus."
+  1267→      >
+  1268→        <Switch
+  1269→          checked={config.blurOnBackground}
+  1270→          onCheckedChange={(v) => updateConfig({ blurOnBackground: v })}
+  1271→          aria-label="Blur saat hilang fokus"
+  1272→        />
+  1273→      </SettingRow>
+  1274→
+  1275→      <SettingRow
+  1276→        title="Blur saat Minimize"
+  1277→        description="Kaburkan layar saat aplikasi di-minimize."
+  1278→      >
+  1279→        <Switch
+  1280→          checked={config.blurOnMinimize}
+  1281→          onCheckedChange={(v) => updateConfig({ blurOnMinimize: v })}
+  1282→          aria-label="Blur saat minimize"
+  1283→        />
+  1284→      </SettingRow>
+  1285→
+  1286→      <SettingRow
+  1287→        title="Cegah Screenshot"
+  1288→        description="Blokir pengambilan screenshot layar (jika didukung)."
+  1289→      >
+  1290→        <Switch
+  1291→          checked={config.preventScreenCapture}
+  1292→          onCheckedChange={(v) => updateConfig({ preventScreenCapture: v })}
+  1293→          aria-label="Cegah screenshot"
+  1294→        />
+  1295→      </SettingRow>
+  1296→
+  1297→      <SettingRow
+  1298→        title="Clear Clipboard"
+  1299→        description="Hapus isi clipboard yang berisi data sensitif."
+  1300→      >
+  1301→        <Select
+  1302→          value={String(config.clearClipboardSeconds)}
+  1303→          onValueChange={(v) =>
+  1304→            updateConfig({ clearClipboardSeconds: Number(v) })
+  1305→          }
+  1306→        >
+  1307→          <SelectTrigger size="sm" className="w-32" aria-label="Clear clipboard">
+  1308→            <SelectValue />
+  1309→          </SelectTrigger>
+  1310→          <SelectContent>
+  1311→            <SelectItem value="0">Nonaktif</SelectItem>
+  1312→            <SelectItem value="10">10 detik</SelectItem>
+  1313→            <SelectItem value="30">30 detik</SelectItem>
+  1314→            <SelectItem value="60">60 detik</SelectItem>
+  1315→          </SelectContent>
+  1316→        </Select>
+  1317→      </SettingRow>
+  1318→
+  1319→      <SettingRow
+  1320→        title="Nonaktifkan Seleksi Teks"
+  1321→        description="Cegah copy-paste teks dari aplikasi."
+  1322→      >
+  1323→        <Switch
+  1324→          checked={config.disableTextSelection}
+  1325→          onCheckedChange={(v) => updateConfig({ disableTextSelection: v })}
+  1326→          aria-label="Nonaktifkan seleksi teks"
+  1327→        />
+  1328→      </SettingRow>
+  1329→
+  1330→      <SettingRow
+  1331→        title="Watermark"
+  1332→        description="Tampilkan watermark samar di seluruh aplikasi."
+  1333→      >
+  1334→        <Switch
+  1335→          checked={config.watermarkEnabled}
+  1336→          onCheckedChange={(v) => updateConfig({ watermarkEnabled: v })}
+  1337→          aria-label="Aktifkan watermark"
+  1338→        />
+  1339→      </SettingRow>
+  1340→
+  1341→      {config.watermarkEnabled && (
+  1342→        <SettingRow title="Teks Watermark" description="Teks yang ditampilkan.">
+  1343→          <Input
+  1344→            value={config.watermarkText}
+  1345→            onChange={(e) => updateConfig({ watermarkText: e.target.value })}
+  1346→            placeholder="Pribadi"
+  1347→            className="h-8 w-44"
+  1348→            maxLength={60}
+  1349→          />
+  1350→        </SettingRow>
+  1351→      )}
+  1352→
+  1353→      <SettingRow
+  1354→        title="Panic Gesture"
+  1355→        description="Ketuk logo 5 kali cepat untuk memicu aksi panic."
+  1356→      >
+  1357→        <Switch
+  1358→          checked={config.panicGestureEnabled}
+  1359→          onCheckedChange={(v) => updateConfig({ panicGestureEnabled: v })}
+  1360→          aria-label="Panic gesture"
+  1361→        />
+  1362→      </SettingRow>
+  1363→    </SectionCard>
+  1364→  );
+  1365→}
+  1366→
+  1367→// ---- Multi-select Popover (shared) ----
+  1368→
+  1369→function MultiSelectPopover({
+  1370→  type,
+  1371→  value,
+  1372→  onChange,
+  1373→}: {
+  1374→  type: "category" | "account";
+  1375→  value: string;
+  1376→  onChange: (v: string) => void;
+  1377→}) {
+  1378→  const cats = useCategories();
+  1379→  const accs = useAccounts();
+  1380→
+  1381→  const items = React.useMemo(() => {
+  1382→    if (type === "category") {
+  1383→      return (cats.data ?? []).map((c) => ({
+  1384→        id: c.id,
+  1385→        label: c.name,
+  1386→        color: c.color,
+  1387→      }));
+  1388→    }
+  1389→    return (accs.data ?? []).map((a) => ({
+  1390→      id: a.id,
+  1391→      label: a.name,
+  1392→      color: a.color,
+  1393→    }));
+  1394→  }, [type, cats.data, accs.data]);
+  1395→
+  1396→  const selected = React.useMemo(
+  1397→    () => (value ? value.split(",").filter(Boolean) : []),
+  1398→    [value],
+  1399→  );
+  1400→
+  1401→  function toggle(id: string) {
+  1402→    const next = selected.includes(id)
+  1403→      ? selected.filter((x) => x !== id)
+  1404→      : [...selected, id];
+  1405→    onChange(next.join(","));
+  1406→  }
+  1407→
+  1408→  const triggerLabel =
+  1409→    selected.length === 0
+  1410→      ? "Pilih…"
+  1411→      : `${selected.length} dipilih`;
+  1412→
+  1413→  return (
+  1414→    <Popover>
+  1415→      <PopoverTrigger asChild>
+  1416→        <Button variant="outline" size="sm" className="gap-1.5">
+  1417→          <Check className="h-3.5 w-3.5 text-primary" />
+  1418→          {triggerLabel}
+  1419→        </Button>
+  1420→      </PopoverTrigger>
+  1421→      <PopoverContent className="w-72 p-0" align="end">
+  1422→        <ScrollArea className="h-64">
+  1423→          <div className="space-y-0.5 p-2">
+  1424→            {items.length === 0 && (
+  1425→              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+  1426→                Tidak ada item.
+  1427→              </p>
+  1428→            )}
+  1429→            {items.map((item) => {
+  1430→              const checked = selected.includes(item.id);
+  1431→              return (
+  1432→                <label
+  1433→                  key={item.id}
+  1434→                  className={cn(
+  1435→                    "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted",
+  1436→                    checked && "bg-muted",
+  1437→                  )}
+  1438→                >
+  1439→                  <Checkbox
+  1440→                    checked={checked}
+  1441→                    onCheckedChange={() => toggle(item.id)}
+  1442→                  />
+  1443→                  <span
+  1444→                    className="h-2.5 w-2.5 rounded-full"
+  1445→                    style={{ backgroundColor: item.color }}
+  1446→                  />
+  1447→                  <span className="flex-1 truncate">{item.label}</span>
+  1448→                </label>
+  1449→              );
+  1450→            })}
+  1451→          </div>
+  1452→        </ScrollArea>
+  1453→      </PopoverContent>
+  1454→    </Popover>
+  1455→  );
+  1456→}
+  1457→
+  1458→function HiddenCategoriesRow({
+  1459→  value,
+  1460→  onChange,
+  1461→}: {
+  1462→  value: string;
+  1463→  onChange: (v: string) => void;
+  1464→}) {
+  1465→  return (
+  1466→    <SettingRow
+  1467→      title="Daftar Kategori"
+  1468→      description="Pilih kategori yang ingin disembunyikan dari tampilan."
+  1469→    >
+  1470→      <MultiSelectPopover type="category" value={value} onChange={onChange} />
+  1471→    </SettingRow>
+  1472→  );
+  1473→}
+  1474→
+  1475→function HiddenAccountsRow({
+  1476→  value,
+  1477→  onChange,
+  1478→}: {
+  1479→  value: string;
+  1480→  onChange: (v: string) => void;
+  1481→}) {
+  1482→  return (
+  1483→    <SettingRow
+  1484→      title="Daftar Akun"
+  1485→      description="Pilih akun yang ingin disembunyikan dari tampilan."
+  1486→    >
+  1487→      <MultiSelectPopover type="account" value={value} onChange={onChange} />
+  1488→    </SettingRow>
+  1489→  );
+  1490→}
+  1491→
+  1492→// ============================================================
+  1493→// E. Decoy & Duress
+  1494→// ============================================================
+  1495→
+  1496→function DecoySection({
+  1497→  config,
+  1498→  updateConfig,
+  1499→}: {
+  1500→  config: SecurityConfig;
+  1501→  updateConfig: (p: Partial<SecurityConfig>) => void;
+  1502→}) {
+  1503→  const setSecrets = useSecurityStore((s) => s.setSecrets);
+  1504→  const [duressDialog, setDuressDialog] = React.useState(false);
+  1505→
+  1506→  return (
+  1507→    <SectionCard
+  1508→      icon={<UserX className="h-4 w-4" />}
+  1509→      title="Decoy & Duress"
+  1510→      description="Mode umpan untuk situasi paksaan."
+  1511→    >
+  1512→      <SettingRow
+  1513→        icon={<EyeOff className="h-4 w-4" />}
+  1514→        title="Decoy Mode"
+  1515→        description="PIN duress akan membuka data decoy, bukan data asli."
+  1516→      >
+  1517→        <Switch
+  1518→          checked={config.decoyEnabled}
+  1519→          onCheckedChange={(v) => updateConfig({ decoyEnabled: v })}
+  1520→          aria-label="Aktifkan decoy mode"
+  1521→        />
+  1522→      </SettingRow>
+  1523→
+  1524→      <SettingRow
+  1525→        title="Set Duress PIN"
+  1526→        description={
+  1527→          config.duressPinHash
+  1528→            ? "PIN duress sudah diatur. Klik untuk mengganti."
+  1529→            : "PIN yang akan membuka mode decoy saat dipaksa."
+  1530→        }
+  1531→      >
+  1532→        <Button
+  1533→          size="sm"
+  1534→          variant="outline"
+  1535→          onClick={() => setDuressDialog(true)}
+  1536→          className="gap-1.5"
+  1537→        >
+  1538→          <KeyRound className="h-3.5 w-3.5" />
+  1539→          {config.duressPinHash ? "Ganti PIN" : "Atur PIN"}
+  1540→        </Button>
+  1541→      </SettingRow>
+  1542→
+  1543→      <SettingRow
+  1544→        title="Panic Wipe"
+  1545→        description="Hapus SEMUA data saat gesture panic dipicu."
+  1546→      >
+  1547→        <Switch
+  1548→          checked={config.panicWipeEnabled}
+  1549→          onCheckedChange={(v) => updateConfig({ panicWipeEnabled: v })}
+  1550→          aria-label="Aktifkan panic wipe"
+  1551→        />
+  1552→      </SettingRow>
+  1553→
+  1554→      {config.decoyEnabled && (
+  1555→        <InfoNote>
+  1556→          Saat PIN duress dimasukkan, aplikasi akan masuk ke mode decoy
+  1557→          dengan tampilan kosong / contoh data palsu. Aktivitas ini dicatat
+  1558→          diam-diam di audit log.
+  1559→        </InfoNote>
+  1560→      )}
+  1561→
+  1562→      <PinSetupDialog
+  1563→        open={duressDialog}
+  1564→        onOpenChange={setDuressDialog}
+  1565→        onConfirm={async (pin) => {
+  1566→          try {
+  1567→            const hash = await hashSecret(pin);
+  1568→            setSecrets({ duressPinHash: hash });
+  1569→            updateConfig({ duressPinHash: hash, decoyEnabled: true });
+  1570→            auditLog(
+  1571→              AUDIT_ACTIONS.PIN_CHANGE,
+  1572→              "PIN duress dibuat",
+  1573→              true,
+  1574→            );
+  1575→            toast.success("PIN duress disimpan.");
+  1576→            setDuressDialog(false);
+  1577→          } catch {
+  1578→            toast.error("Gagal meng-hash PIN duress.");
+  1579→          }
+  1580→        }}
+  1581→      />
+  1582→    </SectionCard>
+  1583→  );
+  1584→}
+  1585→
+  1586→// ============================================================
+  1587→// F. Session
+  1588→// ============================================================
+  1589→
+  1590→function SessionSection({
+  1591→  config,
+  1592→  updateConfig,
+  1593→}: {
+  1594→  config: SecurityConfig;
+  1595→  updateConfig: (p: Partial<SecurityConfig>) => void;
+  1596→}) {
+  1597→  return (
+  1598→    <SectionCard
+  1599→      icon={<Timer className="h-4 w-4" />}
+  1600→      title="Session"
+  1601→      description="Pengaturan sesi login dan perangkat terpercaya."
+  1602→    >
+  1603→      <SettingRow
+  1604→        title="Kedaluwarsa Sesi"
+  1605→        description="Berapa lama sesi tetap aktif sebelum minta re-login."
+  1606→      >
+  1607→        <Select
+  1608→          value={String(config.sessionExpiryMinutes)}
+  1609→          onValueChange={(v) =>
+  1610→            updateConfig({ sessionExpiryMinutes: Number(v) })
+  1611→          }
+  1612→        >
+  1613→          <SelectTrigger size="sm" className="w-32" aria-label="Kedaluwarsa sesi">
+  1614→            <SelectValue />
+  1615→          </SelectTrigger>
+  1616→          <SelectContent>
+  1617→            <SelectItem value="0">Tidak Pernah</SelectItem>
+  1618→            <SelectItem value="15">15 menit</SelectItem>
+  1619→            <SelectItem value="30">30 menit</SelectItem>
+  1620→            <SelectItem value="60">1 jam</SelectItem>
+  1621→            <SelectItem value="120">2 jam</SelectItem>
+  1622→          </SelectContent>
+  1623→        </Select>
+  1624→      </SettingRow>
+  1625→
+  1626→      <SettingRow
+  1627→        title="Single Device Session"
+  1628→        description="Hanya satu perangkat boleh login pada satu waktu."
+  1629→      >
+  1630→        <Switch
+  1631→          checked={config.singleDeviceSession}
+  1632→          onCheckedChange={(v) => updateConfig({ singleDeviceSession: v })}
+  1633→          aria-label="Single device session"
+  1634→        />
+  1635→      </SettingRow>
+  1636→
+  1637→      <SettingRow
+  1638→        title="Ingat Perangkat"
+  1639→        description="Bypass re-auth di perangkat yang dipercaya."
+  1640→      >
+  1641→        <Select
+  1642→          value={String(config.rememberDeviceDays)}
+  1643→          onValueChange={(v) =>
+  1644→            updateConfig({ rememberDeviceDays: Number(v) })
+  1645→          }
+  1646→        >
+  1647→          <SelectTrigger size="sm" className="w-32" aria-label="Ingat perangkat">
+  1648→            <SelectValue />
+  1649→          </SelectTrigger>
+  1650→          <SelectContent>
+  1651→            <SelectItem value="0">Nonaktif</SelectItem>
+  1652→            <SelectItem value="7">7 hari</SelectItem>
+  1653→            <SelectItem value="30">30 hari</SelectItem>
+  1654→            <SelectItem value="90">90 hari</SelectItem>
+  1655→          </SelectContent>
+  1656→        </Select>
+  1657→      </SettingRow>
+  1658→    </SectionCard>
+  1659→  );
+  1660→}
+  1661→
+  1662→// ============================================================
+  1663→// G. Trusted Devices
+  1664→// ============================================================
+  1665→
+  1666→function TrustedDevicesSection() {
+  1667→  const trustedDevices = useTrustedDevices();
+  1668→  const revokeMut = useRevokeTrustedDevice();
+  1669→
+  1670→  const items = trustedDevices.data ?? [];
+  1671→
+  1672→  function handleRevoke(id: string, name: string) {
+  1673→    revokeMut.mutate(id, {
+  1674→      onSuccess: () => {
+  1675→        auditLog(
+  1676→          AUDIT_ACTIONS.TRUSTED_DEVICE_ADD,
+  1677→          `Mencabut perangkat: ${name}`,
+  1678→          true,
+  1679→        );
+  1680→        toast.success("Perangkat dicabut.");
+  1681→      },
+  1682→      onError: () => toast.error("Gagal mencabut perangkat."),
+  1683→    });
+  1684→  }
+  1685→
+  1686→  async function handleRevokeAll() {
+  1687→    if (items.length === 0) return;
+  1688→    for (const d of items) {
+  1689→      try {
+  1690→        await revokeMut.mutateAsync(d.id);
+  1691→      } catch {
+  1692→        // continue
+  1693→      }
+  1694→    }
+  1695→    toast.success(`Semua ${items.length} perangkat dicabut.`);
+  1696→  }
+  1697→
+  1698→  return (
+  1699→    <SectionCard
+  1700→      icon={<Smartphone className="h-4 w-4" />}
+  1701→      title="Perangkat Terpercaya"
+  1702→      description="Perangkat yang dapat membuka kunci tanpa re-auth."
+  1703→    >
+  1704→      {items.length === 0 ? (
+  1705→        <div className="py-3">
+  1706→          <p className="rounded-md bg-muted/60 px-3 py-3 text-center text-xs text-muted-foreground">
+  1707→            Belum ada perangkat terpercaya.
+  1708→          </p>
+  1709→        </div>
+  1710→      ) : (
+  1711→        <>
+  1712→          <div className="flex items-center justify-between py-2">
+  1713→            <p className="text-xs font-medium text-muted-foreground">
+  1714→              {items.length} perangkat terdaftar
+  1715→            </p>
+  1716→            <AlertDialog>
+  1717→              <AlertDialogTrigger asChild>
+  1718→                <Button
+  1719→                  size="sm"
+  1720→                  variant="ghost"
+  1721→                  className="gap-1.5 text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
+  1722→                  disabled={revokeMut.isPending}
+  1723→                >
+  1724→                  <Trash2 className="h-3.5 w-3.5" />
+  1725→                  Cabut Semua
+  1726→                </Button>
+  1727→              </AlertDialogTrigger>
+  1728→              <AlertDialogContent>
+  1729→                <AlertDialogHeader>
+  1730→                  <AlertDialogTitle>Cabut semua perangkat?</AlertDialogTitle>
+  1731→                  <AlertDialogDescription>
+  1732→                    Anda akan keluar dari semua perangkat dan perlu re-auth di
+  1733→                    setiap perangkat berikutnya. Tindakan ini tidak bisa
+  1734→                    dibatalkan.
+  1735→                  </AlertDialogDescription>
+  1736→                </AlertDialogHeader>
+  1737→                <AlertDialogFooter>
+  1738→                  <AlertDialogCancel>Batal</AlertDialogCancel>
+  1739→                  <AlertDialogAction
+  1740→                    onClick={handleRevokeAll}
+  1741→                    className="bg-rose-500 hover:bg-rose-600"
+  1742→                  >
+  1743→                    Cabut Semua
+  1744→                  </AlertDialogAction>
+  1745→                </AlertDialogFooter>
+  1746→              </AlertDialogContent>
+  1747→            </AlertDialog>
+  1748→          </div>
+  1749→
+  1750→          <div className="max-h-72 space-y-1.5 overflow-y-auto custom-scrollbar py-2 pr-1">
+  1751→            {items.map((d) => {
+  1752→              const expired = new Date(d.trustedUntil).getTime() < Date.now();
+  1753→              return (
+  1754→                <div
+  1755→                  key={d.id}
+  1756→                  className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2"
+  1757→                >
+  1758→                  <div className="flex min-w-0 items-start gap-2">
+  1759→                    <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+  1760→                    <div className="min-w-0">
+  1761→                      <p className="truncate text-xs font-medium">{d.name}</p>
+  1762→                      <p className="text-[11px] text-muted-foreground">
+  1763→                        Aktif terakhir: {formatTimeAgo(d.lastSeen)}
+  1764→                      </p>
+  1765→                      <p className="text-[11px] text-muted-foreground">
+  1766→                        {expired ? "Kedaluwarsa" : "Berlaku sampai"}:{" "}
+  1767→                        {formatDateLong(d.trustedUntil)}
+  1768→                      </p>
+  1769→                    </div>
+  1770→                  </div>
+  1771→                  <div className="flex shrink-0 flex-col items-end gap-1">
+  1772→                    {expired ? (
+  1773→                      <Badge variant="outline" className="text-rose-500">
+  1774→                        Kedaluwarsa
+  1775→                      </Badge>
+  1776→                    ) : (
+  1777→                      <Badge variant="secondary">Aktif</Badge>
+  1778→                    )}
+  1779→                    <Button
+  1780→                      size="sm"
+  1781→                      variant="ghost"
+  1782→                      className="h-7 w-7 p-0 text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
+  1783→                      onClick={() => handleRevoke(d.id, d.name)}
+  1784→                      disabled={revokeMut.isPending}
+  1785→                      aria-label={`Cabut ${d.name}`}
+  1786→                    >
+  1787→                      <Trash2 className="h-3.5 w-3.5" />
+  1788→                    </Button>
+  1789→                  </div>
+  1790→                </div>
+  1791→              );
+  1792→            })}
+  1793→          </div>
+  1794→        </>
+  1795→      )}
+  1796→    </SectionCard>
+  1797→  );
+  1798→}
+  1799→
+  1800→// ============================================================
+  1801→// H. Network Security
+  1802→// ============================================================
+  1803→
+  1804→function NetworkSection({
+  1805→  config,
+  1806→  updateConfig,
+  1807→}: {
+  1808→  config: SecurityConfig;
+  1809→  updateConfig: (p: Partial<SecurityConfig>) => void;
+  1810→}) {
+  1811→  return (
+  1812→    <SectionCard
+  1813→      icon={<Network className="h-4 w-4" />}
+  1814→      title="Keamanan Jaringan"
+  1815→      description="Pengaturan jaringan diterapkan via env / middleware."
+  1816→    >
+  1817→      <SettingRow
+  1818→        icon={<Server className="h-4 w-4" />}
+  1819→        title="Local-Only Mode"
+  1820→        description="Hanya izinkan akses dari localhost (127.0.0.1)."
+  1821→      >
+  1822→        <Switch
+  1823→          checked={config.localOnlyMode}
+  1824→          onCheckedChange={(v) => updateConfig({ localOnlyMode: v })}
+  1825→          aria-label="Local-only mode"
+  1826→        />
+  1827→      </SettingRow>
+  1828→
+  1829→      <SettingRow
+  1830→        title="IP Whitelist"
+  1831→        description="Daftar IP/CIDR yang diizinkan, dipisah koma."
+  1832→      >
+  1833→        <Input
+  1834→          value={config.ipWhitelist}
+  1835→          onChange={(e) => updateConfig({ ipWhitelist: e.target.value })}
+  1836→          placeholder="192.168.1.0/24, 10.0.0.5"
+  1837→          className="h-8 w-56"
+  1838→        />
+  1839→      </SettingRow>
+  1840→
+  1841→      <SettingRow
+  1842→        title="Block Tor"
+  1843→        description="Blokir akses dari jaringan Tor exit nodes."
+  1844→      >
+  1845→        <Switch
+  1846→          checked={config.blockTor}
+  1847→          onCheckedChange={(v) => updateConfig({ blockTor: v })}
+  1848→          aria-label="Block Tor"
+  1849→        />
+  1850→      </SettingRow>
+  1851→
+  1852→      <InfoNote>
+  1853→        Pengaturan jaringan diterapkan via environment variables / middleware.
+  1854→        Perubahan disimpan untuk konfigurasi, namun penerapan efektif
+  1855→        memerlukan restart server atau variabel lingkungan yang sesuai.
+  1856→      </InfoNote>
+  1857→    </SectionCard>
+  1858→  );
+  1859→}
+  1860→
+  1861→// ============================================================
+  1862→// I. Encryption
+  1863→// ============================================================
+  1864→
+  1865→function EncryptionSection({
+  1866→  config,
+  1867→  updateConfig,
+  1868→}: {
+  1869→  config: SecurityConfig;
+  1870→  updateConfig: (p: Partial<SecurityConfig>) => void;
+  1871→}) {
+  1872→  return (
+  1873→    <SectionCard
+  1874→      icon={<FileLock2 className="h-4 w-4" />}
+  1875→      title="Enkripsi"
+  1876→      description="Lindungi data saat disimpan dan diekspor."
+  1877→    >
+  1878→      <SettingRow
+  1879→        title="Enkripsi Database"
+  1880→        description="Enkripsi database dengan SQLCipher (Coming soon)."
+  1881→      >
+  1882→        <Switch
+  1883→          checked={config.encryptDatabase}
+  1884→          onCheckedChange={(v) => updateConfig({ encryptDatabase: v })}
+  1885→          aria-label="Enkripsi database"
+  1886→          disabled
+  1887→        />
+  1888→      </SettingRow>
+  1889→      {config.encryptDatabase && (
+  1890→        <InfoNote>
+  1891→          Enkripsi database memerlukan SQLCipher pada level server. Fitur ini
+  1892→          akan segera tersedia (Coming soon).
+  1893→        </InfoNote>
+  1894→      )}
+  1895→
+  1896→      <SettingRow
+  1897→        title="Enkripsi Backup"
+  1898→        description="Backup otomatis dienkripsi dengan AES-256."
+  1899→      >
+  1900→        <Switch
+  1901→          checked={config.encryptBackups}
+  1902→          onCheckedChange={(v) => updateConfig({ encryptBackups: v })}
+  1903→          aria-label="Enkripsi backup"
+  1904→        />
+  1905→      </SettingRow>
+  1906→
+  1907→      <SettingRow
+  1908→        title="Enkripsi Ekspor"
+  1909→        description="File ekspor dienkripsi dengan password."
+  1910→      >
+  1911→        <Switch
+  1912→          checked={config.encryptExports}
+  1913→          onCheckedChange={(v) => updateConfig({ encryptExports: v })}
+  1914→          aria-label="Enkripsi ekspor"
+  1915→        />
+  1916→      </SettingRow>
+  1917→    </SectionCard>
+  1918→  );
+  1919→}
+  1920→
+  1921→// ============================================================
+  1922→// J. Backup & Recovery
+  1923→// ============================================================
+  1924→
+  1925→function BackupSection({
+  1926→  config,
+  1927→  updateConfig,
+  1928→}: {
+  1929→  config: SecurityConfig;
+  1930→  updateConfig: (p: Partial<SecurityConfig>) => void;
+  1931→}) {
+  1932→  const [recoveryDialog, setRecoveryDialog] = React.useState(false);
+  1933→  const [generatedPhrase, setGeneratedPhrase] = React.useState("");
+  1934→  const [confirmCopied, setConfirmCopied] = React.useState(false);
+  1935→  const [copied, setCopied] = React.useState(false);
+  1936→
+  1937→  React.useEffect(() => {
+  1938→    if (!recoveryDialog) {
+  1939→      setGeneratedPhrase("");
+  1940→      setConfirmCopied(false);
+  1941→      setCopied(false);
+  1942→    }
+  1943→  }, [recoveryDialog]);
+  1944→
+  1945→  function handleToggleRecovery(v: boolean) {
+  1946→    if (v) {
+  1947→      const phrase = generateRecoveryPhrase();
+  1948→      setGeneratedPhrase(phrase);
+  1949→      setRecoveryDialog(true);
+  1950→    } else {
+  1951→      updateConfig({ recoveryPhraseEnabled: false });
+  1952→      toast.success("Recovery phrase dinonaktifkan.");
+  1953→    }
+  1954→  }
+  1955→
+  1956→  async function handleConfirmRecovery() {
+  1957→    if (!validateRecoveryPhrase(generatedPhrase)) {
+  1958→      toast.error("Frase pemulihan tidak valid.");
+  1959→      return;
+  1960→    }
+  1961→    try {
+  1962→      const hash = await hashSecret(generatedPhrase);
+  1963→      updateConfig({ recoveryPhraseEnabled: true });
+  1964→      auditLog(
+  1965→        AUDIT_ACTIONS.PIN_CHANGE,
+  1966→        `Recovery phrase dibuat (hash: ${hash.slice(0, 8)}…)`,
+  1967→        true,
+  1968→      );
+  1969→      toast.success("Recovery phrase diaktifkan.");
+  1970→      setRecoveryDialog(false);
+  1971→    } catch {
+  1972→      toast.error("Gagal menyimpan recovery phrase.");
+  1973→    }
+  1974→  }
+  1975→
+  1976→  async function copyPhrase() {
+  1977→    try {
+  1978→      await navigator.clipboard.writeText(generatedPhrase);
+  1979→      setCopied(true);
+  1980→      setTimeout(() => setCopied(false), 1500);
+  1981→      toast.success("Frase disalin ke clipboard.");
+  1982→    } catch {
+  1983→      toast.error("Gagal menyalin.");
+  1984→    }
+  1985→  }
+  1986→
+  1987→  return (
+  1988→    <SectionCard
+  1989→      icon={<DatabaseBackup className="h-4 w-4" />}
+  1990→      title="Backup & Recovery"
+  1991→      description="Cadangan otomatis dan pemulihan darurat."
+  1992→    >
+  1993→      <SettingRow
+  1994→        title="Auto-Backup"
+  1995→        description="Buat backup otomatis secara berkala."
+  1996→      >
+  1997→        <Switch
+  1998→          checked={config.autoBackupEnabled}
+  1999→          onCheckedChange={(v) => updateConfig({ autoBackupEnabled: v })}
+  2000→          aria-label="Auto-backup"
+
+[showing lines 1-2000 of 2486; use offset=2001 with limit to continue reading]

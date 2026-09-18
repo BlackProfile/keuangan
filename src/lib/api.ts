@@ -18,6 +18,8 @@ import type {
   InstallmentInput,
   RecurringInput,
   RecurringTransaction,
+  ShareLink,
+  ShareLinkInput,
   Tag,
   Transaction,
   TransactionGroup,
@@ -363,4 +365,27 @@ export const api = {
     request(`/api/trusted-devices/${id}`, { method: "DELETE" }),
   // Panic wipe
   panicWipe: () => request<{ message: string; wipedAt: string }>("/api/panic-wipe", { method: "POST" }),
+
+  // Share Links
+  listShares: () => request<ShareLink[]>("/api/shares"),
+  createShare: (data: ShareLinkInput) =>
+    request<ShareLink>("/api/shares", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateShare: (id: string, data: Partial<ShareLinkInput>) =>
+    request<ShareLink>(`/api/shares/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteShare: (id: string) =>
+    request<void>(`/api/shares/${id}`, { method: "DELETE" }),
+  revokeShare: (token: string) =>
+    request<{ message: string }>(`/api/shares/${token}/revoke`, {
+      method: "POST",
+    }),
+  cloneShare: (token: string) =>
+    request<ShareLink>(`/api/shares/${token}/clone`, {
+      method: "POST",
+    }),
 };

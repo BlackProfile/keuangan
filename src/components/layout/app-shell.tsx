@@ -22,6 +22,7 @@ import {
   Zap,
   ShieldCheck,
   Activity,
+  Share2,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ export type SectionId =
   | "analytics"
   | "ai"
   | "categories"
+  | "shares"
   | "security"
   | "audit"
   | "settings";
@@ -93,6 +95,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Lainnya",
     items: [
       { id: "categories", label: "Kategori", icon: <Tags className="h-4 w-4" /> },
+      { id: "shares", label: "Link Berbagi", icon: <Share2 className="h-4 w-4" /> },
       { id: "security", label: "Keamanan", icon: <ShieldCheck className="h-4 w-4" /> },
       { id: "audit", label: "Audit Log", icon: <Activity className="h-4 w-4" /> },
       { id: "settings", label: "Pengaturan", icon: <Settings className="h-4 w-4" /> },

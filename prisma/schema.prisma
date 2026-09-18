@@ -337,3 +337,69 @@ model BiometricCredential {
   counter     Int      @default(0)
   createdAt   DateTime @default(now())
 }
+
+model ShareLink {
+  id              String   @id @default(cuid())
+  token           String   @unique @default(cuid())
+  title           String
+  message         String?
+  // Access level
+  accessLevel     String   @default("VIEW") // "VIEW" | "COMMENT" | "WRITE" | "ADMIN"
+  // Scope
+  scopeType       String   @default("ALL") // "ALL" | "ACCOUNT" | "CATEGORY" | "GROUP" | "TAG" | "DATE_RANGE" | "CUSTOM"
+  scopeData       String?  // JSON string with scope filter (accountId, categoryId, groupId, tag, from, to, txIds[])
+  // Expiry
+  expiresAt       DateTime?
+  maxViews        Int?     // null = unlimited
+  viewCount       Int      @default(0)
+  hoursActive     Int?     // alternative: active for N hours from createdAt
+  oneTime         Boolean  @default(false)
+  maxConcurrent   Int?     // null = unlimited
+  // Security
+  passwordHash    String?
+  requireEmail    String?  // email that must verify
+  ipWhitelist     String?  // comma-separated
+  hiddenAmounts   Boolean  @default(false)
+  maskedDesc      Boolean  @default(false)
+  // Branding
+  customTheme     String?
+  hideBranding    Boolean  @default(false)
+  language        String   @default("id")
+  // Status
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  views           ShareView[]
+  comments        ShareComment[]
+
+  @@index([token])
+  @@index([active])
+  @@index([expiresAt])
+}
+
+model ShareView {
+  id          String   @id @default(cuid())
+  shareLinkId String
+  ipAddress   String?
+  userAgent   String?
+  location    String?  // city/country from IP
+  viewedAt    DateTime @default(now())
+  shareLink   ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+
+  @@index([shareLinkId])
+  @@index([viewedAt])
+}
+
+model ShareComment {
+  id          String   @id @default(cuid())
+  shareLinkId String
+  transactionId String?
+  author      String
+  content     String
+  isPinned    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  shareLink   ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+
+  @@index([shareLinkId])
+  @@index([transactionId])
+}

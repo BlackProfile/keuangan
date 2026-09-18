@@ -459,3 +459,97 @@ export interface AppSettings {
   reminderHour: number;
   theme: "light" | "dark" | "system";
 }
+
+// ============ SHARE LINK TYPES ============
+export type ShareAccessLevel = "VIEW" | "COMMENT" | "WRITE" | "ADMIN";
+export type ShareScopeType =
+  | "ALL"
+  | "ACCOUNT"
+  | "CATEGORY"
+  | "GROUP"
+  | "TAG"
+  | "DATE_RANGE"
+  | "CUSTOM";
+
+export interface ShareLink {
+  id: string;
+  token: string;
+  title: string;
+  message: string | null;
+  accessLevel: ShareAccessLevel;
+  scopeType: ShareScopeType;
+  scopeData: string | null;
+  expiresAt: string | null;
+  maxViews: number | null;
+  viewCount: number;
+  hoursActive: number | null;
+  oneTime: boolean;
+  maxConcurrent: number | null;
+  passwordHash: string | null;
+  requireEmail: string | null;
+  ipWhitelist: string | null;
+  hiddenAmounts: boolean;
+  maskedDesc: boolean;
+  customTheme: string | null;
+  hideBranding: boolean;
+  language: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { views: number; comments: number };
+}
+
+export interface ShareLinkInput {
+  title: string;
+  message?: string;
+  accessLevel?: ShareAccessLevel;
+  scopeType?: ShareScopeType;
+  scopeData?: Record<string, unknown>;
+  expiresAt?: string;
+  maxViews?: number;
+  hoursActive?: number;
+  oneTime?: boolean;
+  maxConcurrent?: number;
+  password?: string;
+  requireEmail?: string;
+  ipWhitelist?: string;
+  hiddenAmounts?: boolean;
+  maskedDesc?: boolean;
+  customTheme?: string;
+  hideBranding?: boolean;
+  language?: string;
+}
+
+export interface ShareView {
+  id: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  location: string | null;
+  viewedAt: string;
+}
+
+export interface ShareComment {
+  id: string;
+  transactionId: string | null;
+  author: string;
+  content: string;
+  isPinned: boolean;
+  createdAt: string;
+}
+
+export interface SharePageData {
+  link: ShareLink;
+  transactions: Transaction[];
+  summary: {
+    totalIncome: number;
+    totalExpense: number;
+    balance: number;
+    count: number;
+  };
+  categoryBreakdown: CategoryBreakdown[];
+  comments: ShareComment[];
+  requirePassword: boolean;
+  requireEmailVerification: boolean;
+  expired: boolean;
+  viewsRemaining: number | null;
+}

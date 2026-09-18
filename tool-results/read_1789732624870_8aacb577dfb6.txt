@@ -1,0 +1,901 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import * as React from "react";
+     4→     4→import { toast } from "sonner";
+     5→     5→import {
+     6→     6→  CalendarIcon,
+     7→     7→  Check,
+     8→     8→  Loader2,
+     9→     9→  Pencil,
+    10→    10→  Plus,
+    11→    11→  Target,
+    12→    12→  Trash2,
+    13→    13→  X,
+    14→    14→} from "lucide-react";
+    15→    15→
+    16→    16→import { Button } from "@/components/ui/button";
+    17→    17→import { Card } from "@/components/ui/card";
+    18→    18→import { Badge } from "@/components/ui/badge";
+    19→    19→import { Skeleton } from "@/components/ui/skeleton";
+    20→    20→import {
+    21→    21→  Dialog,
+    22→    22→  DialogClose,
+    23→    23→  DialogContent,
+    24→    24→  DialogDescription,
+    25→    25→  DialogFooter,
+    26→    26→  DialogHeader,
+    27→    27→  DialogTitle,
+    28→    28→} from "@/components/ui/dialog";
+    29→    29→import {
+    30→    30→  AlertDialog,
+    31→    31→  AlertDialogAction,
+    32→    32→  AlertDialogCancel,
+    33→    33→  AlertDialogContent,
+    34→    34→  AlertDialogDescription,
+    35→    35→  AlertDialogFooter,
+    36→    36→  AlertDialogHeader,
+    37→    37→  AlertDialogTitle,
+    38→    38→  AlertDialogTrigger,
+    39→    39→} from "@/components/ui/alert-dialog";
+    40→    40→import { Input } from "@/components/ui/input";
+    41→    41→import { Label } from "@/components/ui/label";
+    42→    42→import {
+    43→    43→  Popover,
+    44→    44→  PopoverContent,
+    45→    45→  PopoverTrigger,
+    46→    46→} from "@/components/ui/popover";
+    47→    47→import { Calendar } from "@/components/ui/calendar";
+    48→    48→import { LucideIcon } from "@/components/lucide-icon";
+    49→    49→import { cn } from "@/lib/utils";
+    50→    50→import {
+    51→    51→  formatCurrency,
+    52→    52→  formatCurrencyCompact,
+    53→    53→  formatDate,
+    54→    54→  formatDateInput,
+    55→    55→  parseDateLocal,
+    56→    56→} from "@/lib/format";
+    57→    57→import { GOAL_COLORS, GOAL_ICONS } from "@/lib/constants";
+    58→    58→import {
+    59→    59→  useCreateGoal,
+    60→    60→  useDeleteGoal,
+    61→    61→  useGoals,
+    62→    62→  useUpdateGoal,
+    63→    63→} from "@/lib/hooks";
+    64→    64→import type { Goal, GoalInput } from "@/lib/types";
+    65→    65→
+    66→    66→export function GoalsSection() {
+    67→    67→  const { data: goals, isLoading } = useGoals();
+    68→    68→  const [dialogOpen, setDialogOpen] = React.useState(false);
+    69→    69→  const [editGoal, setEditGoal] = React.useState<Goal | null>(null);
+    70→    70→  const [contributionGoal, setContributionGoal] =
+    71→    71→    React.useState<Goal | null>(null);
+    72→    72→
+    73→    73→  function openCreate() {
+    74→    74→    setEditGoal(null);
+    75→    75→    setDialogOpen(true);
+    76→    76→  }
+    77→    77→
+    78→    78→  function openEdit(g: Goal) {
+    79→    79→    setEditGoal(g);
+    80→    80→    setDialogOpen(true);
+    81→    81→  }
+    82→    82→
+    83→    83→  function openContribution(g: Goal) {
+    84→    84→    setContributionGoal(g);
+    85→    85→  }
+    86→    86→
+    87→    87→  return (
+    88→    88→    <div className="space-y-6">
+    89→    89→      {/* Header */}
+    90→    90→      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    91→    91→        <div>
+    92→    92→          <h2 className="text-xl font-semibold tracking-tight">
+    93→    93→            Target Tabungan
+    94→    94→          </h2>
+    95→    95→          <p className="mt-0.5 text-sm text-muted-foreground">
+    96→    96→            Tetapkan tujuan finansial & lacak progresnya.
+    97→    97→          </p>
+    98→    98→        </div>
+    99→    99→        <Button onClick={openCreate} className="gap-1">
+   100→   100→          <Plus className="h-4 w-4" />
+   101→   101→          Tambah Target
+   102→   102→        </Button>
+   103→   103→      </div>
+   104→   104→
+   105→   105→      {/* Grid */}
+   106→   106→      {isLoading ? (
+   107→   107→        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+   108→   108→          {Array.from({ length: 3 }).map((_, i) => (
+   109→   109→            <Skeleton key={i} className="h-56 rounded-2xl" />
+   110→   110→          ))}
+   111→   111→        </div>
+   112→   112→      ) : (goals ?? []).length === 0 ? (
+   113→   113→        <EmptyState onCreate={openCreate} />
+   114→   114→      ) : (
+   115→   115→        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+   116→   116→          {(goals ?? []).map((g) => (
+   117→   117→            <GoalCard
+   118→   118→              key={g.id}
+   119→   119→              goal={g}
+   120→   120→              onEdit={() => openEdit(g)}
+   121→   121→              onContribute={() => openContribution(g)}
+   122→   122→            />
+   123→   123→          ))}
+   124→   124→        </div>
+   125→   125→      )}
+   126→   126→
+   127→   127→      <GoalFormDialog
+   128→   128→        open={dialogOpen}
+   129→   129→        onOpenChange={setDialogOpen}
+   130→   130→        editGoal={editGoal}
+   131→   131→      />
+   132→   132→
+   133→   133→      <ContributionDialog
+   134→   134→        goal={contributionGoal}
+   135→   135→        onOpenChange={(o) => !o && setContributionGoal(null)}
+   136→   136→      />
+   137→   137→    </div>
+   138→   138→  );
+   139→   139→}
+   140→   140→
+   141→   141→function ProgressRing({
+   142→   142→  percentage,
+   143→   143→  color,
+   144→   144→  size = 64,
+   145→   145→}: {
+   146→   146→  percentage: number;
+   147→   147→  color: string;
+   148→   148→  size?: number;
+   149→   149→}) {
+   150→   150→  const strokeWidth = 6;
+   151→   151→  const r = (size - strokeWidth * 2) / 2;
+   152→   152→  const c = 2 * Math.PI * r;
+   153→   153→  const clamped = Math.min(Math.max(percentage, 0), 100);
+   154→   154→  const offset = c - (clamped / 100) * c;
+   155→   155→  return (
+   156→   156→    <div
+   157→   157→      className="relative inline-flex shrink-0"
+   158→   158→      style={{ width: size, height: size }}
+   159→   159→    >
+   160→   160→      <svg
+   161→   161→        width={size}
+   162→   162→        height={size}
+   163→   163→        className="-rotate-90"
+   164→   164→        aria-hidden="true"
+   165→   165→      >
+   166→   166→        <circle
+   167→   167→          cx={size / 2}
+   168→   168→          cy={size / 2}
+   169→   169→          r={r}
+   170→   170→          fill="none"
+   171→   171→          stroke="var(--muted)"
+   172→   172→          strokeWidth={strokeWidth}
+   173→   173→        />
+   174→   174→        <circle
+   175→   175→          cx={size / 2}
+   176→   176→          cy={size / 2}
+   177→   177→          r={r}
+   178→   178→          fill="none"
+   179→   179→          stroke={color}
+   180→   180→          strokeWidth={strokeWidth}
+   181→   181→          strokeDasharray={c}
+   182→   182→          strokeDashoffset={offset}
+   183→   183→          strokeLinecap="round"
+   184→   184→          className="transition-all duration-500"
+   185→   185→        />
+   186→   186→      </svg>
+   187→   187→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   188→   188→        <span className="text-sm font-bold tabular-nums text-foreground">
+   189→   189→          {Math.round(clamped)}%
+   190→   190→        </span>
+   191→   191→      </div>
+   192→   192→    </div>
+   193→   193→  );
+   194→   194→}
+   195→   195→
+   196→   196→function GoalCard({
+   197→   197→  goal,
+   198→   198→  onEdit,
+   199→   199→  onContribute,
+   200→   200→}: {
+   201→   201→  goal: Goal;
+   202→   202→  onEdit: () => void;
+   203→   203→  onContribute: () => void;
+   204→   204→}) {
+   205→   205→  const deleteMut = useDeleteGoal();
+   206→   206→  const percentage =
+   207→   207→    goal.targetAmount > 0
+   208→   208→      ? (goal.currentAmount / goal.targetAmount) * 100
+   209→   209→      : 0;
+   210→   210→  const remaining = Math.max(goal.targetAmount - goal.currentAmount, 0);
+   211→   211→
+   212→   212→  function handleDelete() {
+   213→   213→    deleteMut.mutate(goal.id, {
+   214→   214→      onSuccess: () =>
+   215→   215→        toast.success(`Target "${goal.name}" dihapus.`),
+   216→   216→      onError: (err) =>
+   217→   217→        toast.error(err.message || "Gagal menghapus target."),
+   218→   218→    });
+   219→   219→  }
+   220→   220→
+   221→   221→  return (
+   222→   222→    <Card className="group relative p-4 transition-shadow hover:shadow-md">
+   223→   223→      {/* Top row */}
+   224→   224→      <div className="flex items-start justify-between gap-3">
+   225→   225→        <div className="flex min-w-0 items-center gap-3">
+   226→   226→          <ProgressRing percentage={percentage} color={goal.color} />
+   227→   227→          <div className="min-w-0">
+   228→   228→            <div className="flex items-center gap-1.5">
+   229→   229→              <span
+   230→   230→                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+   231→   231→                style={{ backgroundColor: `${goal.color}1a` }}
+   232→   232→              >
+   233→   233→                <LucideIcon
+   234→   234→                  name={goal.icon}
+   235→   235→                  className="h-4 w-4"
+   236→   236→                  style={{ color: goal.color }}
+   237→   237→                />
+   238→   238→              </span>
+   239→   239→              <p className="truncate text-sm font-semibold text-foreground">
+   240→   240→                {goal.name}
+   241→   241→              </p>
+   242→   242→            </div>
+   243→   243→            <p className="mt-1 text-xs text-muted-foreground">
+   244→   244→              {goal.targetDate
+   245→   245→                ? `Target: ${formatDate(goal.targetDate)}`
+   246→   246→                : "Tanpa tanggal target"}
+   247→   247→            </p>
+   248→   248→          </div>
+   249→   249→        </div>
+   250→   250→
+   251→   251→        {goal.completed && (
+   252→   252→          <Badge className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+   253→   253→            <Check className="h-3 w-3" />
+   254→   254→            Selesai
+   255→   255→          </Badge>
+   256→   256→        )}
+   257→   257→      </div>
+   258→   258→
+   259→   259→      {/* Amounts */}
+   260→   260→      <div className="mt-4 space-y-2">
+   261→   261→        <div className="flex items-end justify-between gap-2">
+   262→   262→          <div>
+   263→   263→            <p className="text-[11px] text-muted-foreground">
+   264→   264→              Terkumpul
+   265→   265→            </p>
+   266→   266→            <p className="text-sm font-semibold tabular-nums text-income">
+   267→   267→              {formatCurrency(goal.currentAmount)}
+   268→   268→            </p>
+   269→   269→          </div>
+   270→   270→          <div className="text-right">
+   271→   271→            <p className="text-[11px] text-muted-foreground">Target</p>
+   272→   272→            <p className="text-sm font-semibold tabular-nums text-foreground">
+   273→   273→              {formatCurrency(goal.targetAmount)}
+   274→   274→            </p>
+   275→   275→          </div>
+   276→   276→        </div>
+   277→   277→
+   278→   278→        {/* Linear progress bar (in addition to ring) */}
+   279→   279→        <div
+   280→   280→          className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+   281→   281→          role="progressbar"
+   282→   282→          aria-valuemin={0}
+   283→   283→          aria-valuemax={100}
+   284→   284→          aria-valuenow={Math.round(percentage)}
+   285→   285→        >
+   286→   286→          <div
+   287→   287→            className="h-full rounded-full transition-all duration-500"
+   288→   288→            style={{
+   289→   289→              width: `${Math.min(percentage, 100)}%`,
+   290→   290→              backgroundColor: goal.color,
+   291→   291→            }}
+   292→   292→          />
+   293→   293→        </div>
+   294→   294→
+   295→   295→        <p className="text-[11px] text-muted-foreground">
+   296→   296→          {goal.completed
+   297→   297→            ? "Target tercapai. Kerja bagus!"
+   298→   298→            : `Sisa ${formatCurrencyCompact(remaining)} lagi`}
+   299→   299→        </p>
+   300→   300→      </div>
+   301→   301→
+   302→   302→      {/* Contribute button */}
+   303→   303→      {!goal.completed && (
+   304→   304→        <Button
+   305→   305→          variant="outline"
+   306→   306→          size="sm"
+   307→   307→          onClick={onContribute}
+   308→   308→          className="mt-3 w-full gap-1"
+   309→   309→        >
+   310→   310→          <Plus className="h-4 w-4" />
+   311→   311→          Tambah Setoran
+   312→   312→        </Button>
+   313→   313→      )}
+   314→   314→
+   315→   315→      {/* Hover actions */}
+   316→   316→      <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+   317→   317→        <Button
+   318→   318→          variant="ghost"
+   319→   319→          size="icon"
+   320→   320→          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+   321→   321→          onClick={onEdit}
+   322→   322→          aria-label="Ubah target"
+   323→   323→        >
+   324→   324→          <Pencil className="h-3.5 w-3.5" />
+   325→   325→        </Button>
+   326→   326→        <AlertDialog>
+   327→   327→          <AlertDialogTrigger asChild>
+   328→   328→            <Button
+   329→   329→              variant="ghost"
+   330→   330→              size="icon"
+   331→   331→              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+   332→   332→              disabled={deleteMut.isPending}
+   333→   333→              aria-label="Hapus target"
+   334→   334→            >
+   335→   335→              <Trash2 className="h-3.5 w-3.5" />
+   336→   336→            </Button>
+   337→   337→          </AlertDialogTrigger>
+   338→   338→          <AlertDialogContent>
+   339→   339→            <AlertDialogHeader>
+   340→   340→              <AlertDialogTitle>Hapus target ini?</AlertDialogTitle>
+   341→   341→              <AlertDialogDescription>
+   342→   342→                Target <strong>{goal.name}</strong> akan dihapus. Tindakan
+   343→   343→                ini tidak dapat dibatalkan.
+   344→   344→              </AlertDialogDescription>
+   345→   345→            </AlertDialogHeader>
+   346→   346→            <AlertDialogFooter>
+   347→   347→              <AlertDialogCancel>Batal</AlertDialogCancel>
+   348→   348→              <AlertDialogAction
+   349→   349→                onClick={handleDelete}
+   350→   350→                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+   351→   351→              >
+   352→   352→                {deleteMut.isPending && (
+   353→   353→                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+   354→   354→                )}
+   355→   355→                Hapus
+   356→   356→              </AlertDialogAction>
+   357→   357→            </AlertDialogFooter>
+   358→   358→          </AlertDialogContent>
+   359→   359→        </AlertDialog>
+   360→   360→      </div>
+   361→   361→    </Card>
+   362→   362→  );
+   363→   363→}
+   364→   364→
+   365→   365→function EmptyState({ onCreate }: { onCreate: () => void }) {
+   366→   366→  return (
+   367→   367→    <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+   368→   368→      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+   369→   369→        <Target className="h-7 w-7 text-muted-foreground" />
+   370→   370→      </span>
+   371→   371→      <div>
+   372→   372→        <p className="text-sm font-medium text-foreground">
+   373→   373→          Belum ada target tabungan
+   374→   374→        </p>
+   375→   375→        <p className="mt-0.5 text-xs text-muted-foreground">
+   376→   376→          Tetapkan target finansial pertamamu & mulai menabung.
+   377→   377→        </p>
+   378→   378→      </div>
+   379→   379→      <Button onClick={onCreate} className="gap-1">
+   380→   380→        <Plus className="h-4 w-4" />
+   381→   381→        Buat Target Pertama
+   382→   382→      </Button>
+   383→   383→    </Card>
+   384→   384→  );
+   385→   385→}
+   386→   386→
+   387→   387→function GoalFormDialog({
+   388→   388→  open,
+   389→   389→  onOpenChange,
+   390→   390→  editGoal,
+   391→   391→}: {
+   392→   392→  open: boolean;
+   393→   393→  onOpenChange: (open: boolean) => void;
+   394→   394→  editGoal: Goal | null;
+   395→   395→}) {
+   396→   396→  const isEdit = !!editGoal;
+   397→   397→  const createMut = useCreateGoal();
+   398→   398→  const updateMut = useUpdateGoal();
+   399→   399→
+   400→   400→  const [name, setName] = React.useState("");
+   401→   401→  const [targetAmount, setTargetAmount] = React.useState("");
+   402→   402→  const [currentAmount, setCurrentAmount] = React.useState("");
+   403→   403→  const [targetDate, setTargetDate] = React.useState<Date | undefined>(
+   404→   404→    undefined
+   405→   405→  );
+   406→   406→  const [icon, setIcon] = React.useState(GOAL_ICONS[0]);
+   407→   407→  const [color, setColor] = React.useState(GOAL_COLORS[0]);
+   408→   408→  const [error, setError] = React.useState<string | null>(null);
+   409→   409→
+   410→   410→  React.useEffect(() => {
+   411→   411→    if (open) {
+   412→   412→      if (editGoal) {
+   413→   413→        setName(editGoal.name);
+   414→   414→        setTargetAmount(String(editGoal.targetAmount));
+   415→   415→        setCurrentAmount(String(editGoal.currentAmount));
+   416→   416→        setTargetDate(
+   417→   417→          editGoal.targetDate ? parseDateLocal(editGoal.targetDate) : undefined
+   418→   418→        );
+   419→   419→        setIcon(editGoal.icon);
+   420→   420→        setColor(editGoal.color);
+   421→   421→      } else {
+   422→   422→        setName("");
+   423→   423→        setTargetAmount("");
+   424→   424→        setCurrentAmount("");
+   425→   425→        setTargetDate(undefined);
+   426→   426→        setIcon(GOAL_ICONS[0]);
+   427→   427→        setColor(GOAL_COLORS[0]);
+   428→   428→      }
+   429→   429→      setError(null);
+   430→   430→    }
+   431→   431→  }, [open, editGoal]);
+   432→   432→
+   433→   433→  function handleSubmit(e: React.FormEvent) {
+   434→   434→    e.preventDefault();
+   435→   435→    setError(null);
+   436→   436→    if (!name.trim()) {
+   437→   437→      setError("Nama target wajib diisi.");
+   438→   438→      return;
+   439→   439→    }
+   440→   440→    const target = Number(targetAmount);
+   441→   441→    if (!Number.isFinite(target) || target <= 0) {
+   442→   442→      setError("Target jumlah harus lebih dari 0.");
+   443→   443→      return;
+   444→   444→    }
+   445→   445→    const current = Number(currentAmount || 0);
+   446→   446→    if (!Number.isFinite(current) || current < 0) {
+   447→   447→      setError("Jumlah saat ini tidak valid.");
+   448→   448→      return;
+   449→   449→    }
+   450→   450→
+   451→   451→    const payload: GoalInput = {
+   452→   452→      name: name.trim(),
+   453→   453→      targetAmount: Math.round(target),
+   454→   454→      currentAmount: Math.round(current),
+   455→   455→      targetDate: targetDate ? formatDateInput(targetDate) : undefined,
+   456→   456→      icon,
+   457→   457→      color,
+   458→   458→    };
+   459→   459→
+   460→   460→    if (isEdit && editGoal) {
+   461→   461→      updateMut.mutate(
+   462→   462→        { id: editGoal.id, data: payload },
+   463→   463→        {
+   464→   464→          onSuccess: () => {
+   465→   465→            toast.success("Target diperbarui.");
+   466→   466→            onOpenChange(false);
+   467→   467→          },
+   468→   468→          onError: (err) =>
+   469→   469→            setError(err.message || "Gagal memperbarui target."),
+   470→   470→        }
+   471→   471→      );
+   472→   472→    } else {
+   473→   473→      createMut.mutate(payload, {
+   474→   474→        onSuccess: () => {
+   475→   475→          toast.success("Target ditambahkan.");
+   476→   476→          onOpenChange(false);
+   477→   477→        },
+   478→   478→        onError: (err) =>
+   479→   479→          setError(err.message || "Gagal menambahkan target."),
+   480→   480→      });
+   481→   481→    }
+   482→   482→  }
+   483→   483→
+   484→   484→  const pending = createMut.isPending || updateMut.isPending;
+   485→   485→
+   486→   486→  return (
+   487→   487→    <Dialog open={open} onOpenChange={onOpenChange}>
+   488→   488→      <DialogContent
+   489→   489→        showCloseButton={false}
+   490→   490→        className="max-h-[90vh] max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl"
+   491→   491→      >
+   492→   492→        <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+   493→   493→          <div className="flex items-center justify-between">
+   494→   494→            <div>
+   495→   495→              <DialogTitle className="text-base">
+   496→   496→                {isEdit ? "Ubah Target" : "Target Baru"}
+   497→   497→              </DialogTitle>
+   498→   498→              <DialogDescription className="text-xs">
+   499→   499→                {isEdit
+   500→   500→                  ? "Perbarui detail target tabungan ini."
+   501→   501→                  : "Tetapkan target finansial baru untuk ditgejar."}
+   502→   502→              </DialogDescription>
+   503→   503→            </div>
+   504→   504→            <DialogClose asChild>
+   505→   505→              <Button
+   506→   506→                variant="ghost"
+   507→   507→                size="icon"
+   508→   508→                className="h-8 w-8 shrink-0"
+   509→   509→              >
+   510→   510→                <X className="h-4 w-4" />
+   511→   511→              </Button>
+   512→   512→            </DialogClose>
+   513→   513→          </div>
+   514→   514→        </DialogHeader>
+   515→   515→
+   516→   516→        <form onSubmit={handleSubmit} className="flex flex-col">
+   517→   517→          <div className="max-h-[65vh] space-y-4 overflow-y-auto custom-scrollbar p-5">
+   518→   518→            {/* Name */}
+   519→   519→            <div className="space-y-1.5">
+   520→   520→              <Label htmlFor="goal-name">Nama Target</Label>
+   521→   521→              <Input
+   522→   522→                id="goal-name"
+   523→   523→                placeholder="cth. Liburan Bali, DP Rumah"
+   524→   524→                value={name}
+   525→   525→                onChange={(e) => setName(e.target.value)}
+   526→   526→                maxLength={40}
+   527→   527→                autoFocus
+   528→   528→              />
+   529→   529→            </div>
+   530→   530→
+   531→   531→            {/* Target + current amounts */}
+   532→   532→            <div className="grid grid-cols-2 gap-3">
+   533→   533→              <div className="space-y-1.5">
+   534→   534→                <Label htmlFor="goal-target">Target (Rp)</Label>
+   535→   535→                <Input
+   536→   536→                  id="goal-target"
+   537→   537→                  type="number"
+   538→   538→                  inputMode="numeric"
+   539→   539→                  min={0}
+   540→   540→                  step={1000}
+   541→   541→                  placeholder="10000000"
+   542→   542→                  value={targetAmount}
+   543→   543→                  onChange={(e) => setTargetAmount(e.target.value)}
+   544→   544→                />
+   545→   545→                {targetAmount && Number(targetAmount) > 0 && (
+   546→   546→                  <p className="text-xs text-muted-foreground">
+   547→   547→                    {formatCurrency(Number(targetAmount))}
+   548→   548→                  </p>
+   549→   549→                )}
+   550→   550→              </div>
+   551→   551→              <div className="space-y-1.5">
+   552→   552→                <Label htmlFor="goal-current">Terkumpul (Rp)</Label>
+   553→   553→                <Input
+   554→   554→                  id="goal-current"
+   555→   555→                  type="number"
+   556→   556→                  inputMode="numeric"
+   557→   557→                  min={0}
+   558→   558→                  step={1000}
+   559→   559→                  placeholder="0"
+   560→   560→                  value={currentAmount}
+   561→   561→                  onChange={(e) => setCurrentAmount(e.target.value)}
+   562→   562→                />
+   563→   563→                {currentAmount && Number(currentAmount) > 0 && (
+   564→   564→                  <p className="text-xs text-muted-foreground">
+   565→   565→                    {formatCurrency(Number(currentAmount))}
+   566→   566→                  </p>
+   567→   567→                )}
+   568→   568→              </div>
+   569→   569→            </div>
+   570→   570→
+   571→   571→            {/* Target date */}
+   572→   572→            <div className="space-y-1.5">
+   573→   573→              <Label>Tanggal Target</Label>
+   574→   574→              <Popover>
+   575→   575→                <PopoverTrigger asChild>
+   576→   576→                  <Button
+   577→   577→                    type="button"
+   578→   578→                    variant="outline"
+   579→   579→                    className="w-full justify-start text-left font-normal"
+   580→   580→                  >
+   581→   581→                    <CalendarIcon className="h-4 w-4" />
+   582→   582→                    {targetDate
+   583→   583→                      ? formatDate(targetDate)
+   584→   584→                      : "Pilih tanggal target"}
+   585→   585→                  </Button>
+   586→   586→                </PopoverTrigger>
+   587→   587→                <PopoverContent
+   588→   588→                  className="w-auto p-0"
+   589→   589→                  align="start"
+   590→   590→                >
+   591→   591→                  <Calendar
+   592→   592→                    mode="single"
+   593→   593→                    selected={targetDate}
+   594→   594→                    onSelect={setTargetDate}
+   595→   595→                    disabled={(d) =>
+   596→   596→                      d < new Date(new Date().setHours(0, 0, 0, 0))
+   597→   597→                    }
+   598→   598→                    initialFocus
+   599→   599→                  />
+   600→   600→                </PopoverContent>
+   601→   601→              </Popover>
+   602→   602→              {targetDate && (
+   603→   603→                <Button
+   604→   604→                  type="button"
+   605→   605→                  variant="ghost"
+   606→   606→                  size="sm"
+   607→   607→                  className="h-6 w-fit px-2 text-xs text-muted-foreground"
+   608→   608→                  onClick={() => setTargetDate(undefined)}
+   609→   609→                >
+   610→   610→                  Hapus tanggal
+   611→   611→                </Button>
+   612→   612→              )}
+   613→   613→            </div>
+   614→   614→
+   615→   615→            {/* Icon picker */}
+   616→   616→            <div className="space-y-1.5">
+   617→   617→              <Label>Ikon</Label>
+   618→   618→              <div className="grid max-h-32 grid-cols-7 gap-1.5 overflow-y-auto rounded-lg border border-border p-2 custom-scrollbar">
+   619→   619→                {GOAL_ICONS.map((ic) => (
+   620→   620→                  <button
+   621→   621→                    key={ic}
+   622→   622→                    type="button"
+   623→   623→                    onClick={() => setIcon(ic)}
+   624→   624→                    className={cn(
+   625→   625→                      "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+   626→   626→                      icon === ic
+   627→   627→                        ? "bg-primary text-primary-foreground"
+   628→   628→                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+   629→   629→                    )}
+   630→   630→                    aria-label={ic}
+   631→   631→                  >
+   632→   632→                    <LucideIcon name={ic} className="h-4 w-4" />
+   633→   633→                  </button>
+   634→   634→                ))}
+   635→   635→              </div>
+   636→   636→            </div>
+   637→   637→
+   638→   638→            {/* Color picker */}
+   639→   639→            <div className="space-y-1.5">
+   640→   640→              <Label>Warna</Label>
+   641→   641→              <div className="flex flex-wrap gap-2">
+   642→   642→                {GOAL_COLORS.map((cl) => (
+   643→   643→                  <button
+   644→   644→                    key={cl}
+   645→   645→                    type="button"
+   646→   646→                    onClick={() => setColor(cl)}
+   647→   647→                    className={cn(
+   648→   648→                      "flex h-8 w-8 items-center justify-center rounded-full transition-transform",
+   649→   649→                      color === cl &&
+   650→   650→                        "ring-2 ring-ring ring-offset-2 ring-offset-background"
+   651→   651→                    )}
+   652→   652→                    style={{ backgroundColor: cl }}
+   653→   653→                    aria-label={`Warna ${cl}`}
+   654→   654→                  >
+   655→   655→                    {color === cl && (
+   656→   656→                      <Check className="h-4 w-4 text-white" />
+   657→   657→                    )}
+   658→   658→                  </button>
+   659→   659→                ))}
+   660→   660→              </div>
+   661→   661→            </div>
+   662→   662→
+   663→   663→            {/* Preview */}
+   664→   664→            <div className="space-y-1.5">
+   665→   665→              <Label>Pratinjau</Label>
+   666→   666→              <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
+   667→   667→                <ProgressRing
+   668→   668→                  percentage={
+   669→   669→                    Number(targetAmount) > 0
+   670→   670→                      ? Math.min(
+   671→   671→                          (Number(currentAmount || 0) /
+   672→   672→                            Number(targetAmount)) *
+   673→   673→                            100,
+   674→   674→                          100
+   675→   675→                        )
+   676→   676→                      : 0
+   677→   677→                  }
+   678→   678→                  color={color}
+   679→   679→                />
+   680→   680→                <div className="min-w-0">
+   681→   681→                  <div className="flex items-center gap-1.5">
+   682→   682→                    <span
+   683→   683→                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+   684→   684→                      style={{ backgroundColor: `${color}1a` }}
+   685→   685→                    >
+   686→   686→                      <LucideIcon
+   687→   687→                        name={icon}
+   688→   688→                        className="h-3.5 w-3.5"
+   689→   689→                        style={{ color }}
+   690→   690→                      />
+   691→   691→                    </span>
+   692→   692→                    <p className="truncate text-sm font-medium text-foreground">
+   693→   693→                      {name || "Nama target"}
+   694→   694→                    </p>
+   695→   695→                  </div>
+   696→   696→                  <p className="mt-0.5 text-xs text-muted-foreground">
+   697→   697→                    {formatCurrency(Number(currentAmount || 0))} /{" "}
+   698→   698→                    {formatCurrency(Number(targetAmount || 0))}
+   699→   699→                  </p>
+   700→   700→                </div>
+   701→   701→              </div>
+   702→   702→            </div>
+   703→   703→
+   704→   704→            {error && (
+   705→   705→              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+   706→   706→                {error}
+   707→   707→              </div>
+   708→   708→            )}
+   709→   709→          </div>
+   710→   710→
+   711→   711→          <DialogFooter className="border-t border-border bg-muted/30 p-4">
+   712→   712→            <DialogClose asChild>
+   713→   713→              <Button
+   714→   714→                type="button"
+   715→   715→                variant="outline"
+   716→   716→                disabled={pending}
+   717→   717→              >
+   718→   718→                Batal
+   719→   719→              </Button>
+   720→   720→            </DialogClose>
+   721→   721→            <Button type="submit" disabled={pending} className="gap-1">
+   722→   722→              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+   723→   723→              {isEdit ? "Simpan Perubahan" : "Simpan Target"}
+   724→   724→            </Button>
+   725→   725→          </DialogFooter>
+   726→   726→        </form>
+   727→   727→      </DialogContent>
+   728→   728→    </Dialog>
+   729→   729→  );
+   730→   730→}
+   731→   731→
+   732→   732→function ContributionDialog({
+   733→   733→  goal,
+   734→   734→  onOpenChange,
+   735→   735→}: {
+   736→   736→  goal: Goal | null;
+   737→   737→  onOpenChange: (open: boolean) => void;
+   738→   738→}) {
+   739→   739→  const updateMut = useUpdateGoal();
+   740→   740→  const [amount, setAmount] = React.useState("");
+   741→   741→  const [error, setError] = React.useState<string | null>(null);
+   742→   742→
+   743→   743→  React.useEffect(() => {
+   744→   744→    if (goal) {
+   745→   745→      setAmount("");
+   746→   746→      setError(null);
+   747→   747→    }
+   748→   748→  }, [goal]);
+   749→   749→
+   750→   750→  function handleSubmit(e: React.FormEvent) {
+   751→   751→    e.preventDefault();
+   752→   752→    if (!goal) return;
+   753→   753→    setError(null);
+   754→   754→    const amt = Number(amount);
+   755→   755→    if (!Number.isFinite(amt) || amt <= 0) {
+   756→   756→      setError("Jumlah setoran harus lebih dari 0.");
+   757→   757→      return;
+   758→   758→    }
+   759→   759→    const newCurrent = goal.currentAmount + Math.round(amt);
+   760→   760→    updateMut.mutate(
+   761→   761→      {
+   762→   762→        id: goal.id,
+   763→   763→        data: { currentAmount: newCurrent },
+   764→   764→      },
+   765→   765→      {
+   766→   766→        onSuccess: (updated) => {
+   767→   767→          toast.success(
+   768→   768→            `Setoran ${formatCurrency(amt)} ditambahkan ke "${goal.name}".`
+   769→   769→          );
+   770→   770→          if (updated && updated.completed) {
+   771→   771→            toast.success(`Target "${goal.name}" tercapai! 🎉`);
+   772→   772→          }
+   773→   773→          onOpenChange(false);
+   774→   774→        },
+   775→   775→        onError: (err) =>
+   776→   776→          setError(err.message || "Gagal menambah setoran."),
+   777→   777→      }
+   778→   778→    );
+   779→   779→  }
+   780→   780→
+   781→   781→  const remaining =
+   782→   782→    goal && goal.targetAmount > goal.currentAmount
+   783→   783→      ? goal.targetAmount - goal.currentAmount
+   784→   784→      : 0;
+   785→   785→
+   786→   786→  return (
+   787→   787→    <Dialog open={!!goal} onOpenChange={onOpenChange}>
+   788→   788→      <DialogContent
+   789→   789→        showCloseButton={false}
+   790→   790→        className="max-w-sm gap-0 overflow-hidden p-0 sm:rounded-2xl"
+   791→   791→      >
+   792→   792→        <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+   793→   793→          <div className="flex items-center justify-between">
+   794→   794→            <div>
+   795→   795→              <DialogTitle className="text-base">
+   796→   796→                Tambah Setoran
+   797→   797→              </DialogTitle>
+   798→   798→              <DialogDescription className="text-xs">
+   799→   799→                {goal
+   800→   800→                  ? `Tambah setoran ke "${goal.name}"`
+   801→   801→                  : "Tambah setoran"}
+   802→   802→              </DialogDescription>
+   803→   803→            </div>
+   804→   804→            <DialogClose asChild>
+   805→   805→              <Button
+   806→   806→                variant="ghost"
+   807→   807→                size="icon"
+   808→   808→                className="h-8 w-8 shrink-0"
+   809→   809→              >
+   810→   810→                <X className="h-4 w-4" />
+   811→   811→              </Button>
+   812→   812→            </DialogClose>
+   813→   813→          </div>
+   814→   814→        </DialogHeader>
+   815→   815→
+   816→   816→        <form onSubmit={handleSubmit} className="flex flex-col">
+   817→   817→          <div className="space-y-4 p-5">
+   818→   818→            {goal && (
+   819→   819→              <div className="rounded-xl border border-border bg-muted/30 p-3">
+   820→   820→                <div className="flex items-center justify-between text-xs">
+   821→   821→                  <span className="text-muted-foreground">Terkumpul</span>
+   822→   822→                  <span className="font-medium tabular-nums text-income">
+   823→   823→                    {formatCurrency(goal.currentAmount)}
+   824→   824→                  </span>
+   825→   825→                </div>
+   826→   826→                <div className="mt-1 flex items-center justify-between text-xs">
+   827→   827→                  <span className="text-muted-foreground">Sisa</span>
+   828→   828→                  <span className="font-medium tabular-nums">
+   829→   829→                    {formatCurrency(remaining)}
+   830→   830→                  </span>
+   831→   831→                </div>
+   832→   832→              </div>
+   833→   833→            )}
+   834→   834→
+   835→   835→            <div className="space-y-1.5">
+   836→   836→              <Label htmlFor="contrib-amount">Jumlah Setoran (Rp)</Label>
+   837→   837→              <Input
+   838→   838→                id="contrib-amount"
+   839→   839→                type="number"
+   840→   840→                inputMode="numeric"
+   841→   841→                min={0}
+   842→   842→                step={1000}
+   843→   843→                placeholder="cth. 500000"
+   844→   844→                value={amount}
+   845→   845→                onChange={(e) => setAmount(e.target.value)}
+   846→   846→                autoFocus
+   847→   847→              />
+   848→   848→              {amount && Number(amount) > 0 && (
+   849→   849→                <p className="text-xs text-muted-foreground">
+   850→   850→                  {formatCurrency(Number(amount))}
+   851→   851→                </p>
+   852→   852→              )}
+   853→   853→              {/* Quick chips */}
+   854→   854→              <div className="flex flex-wrap gap-1.5 pt-1">
+   855→   855→                {[50000, 100000, 250000, 500000].map((v) => (
+   856→   856→                  <button
+   857→   857→                    key={v}
+   858→   858→                    type="button"
+   859→   859→                    onClick={() => setAmount(String(v))}
+   860→   860→                    className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted/70"
+   861→   861→                  >
+   862→   862→                    +{formatCurrencyCompact(v)}
+   863→   863→                  </button>
+   864→   864→                ))}
+   865→   865→              </div>
+   866→   866→            </div>
+   867→   867→
+   868→   868→            {error && (
+   869→   869→              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+   870→   870→                {error}
+   871→   871→              </div>
+   872→   872→            )}
+   873→   873→          </div>
+   874→   874→
+   875→   875→          <DialogFooter className="border-t border-border bg-muted/30 p-4">
+   876→   876→            <DialogClose asChild>
+   877→   877→              <Button
+   878→   878→                type="button"
+   879→   879→                variant="outline"
+   880→   880→                disabled={updateMut.isPending}
+   881→   881→              >
+   882→   882→                Batal
+   883→   883→              </Button>
+   884→   884→            </DialogClose>
+   885→   885→            <Button
+   886→   886→              type="submit"
+   887→   887→              disabled={updateMut.isPending}
+   888→   888→              className="gap-1"
+   889→   889→            >
+   890→   890→              {updateMut.isPending && (
+   891→   891→                <Loader2 className="h-4 w-4 animate-spin" />
+   892→   892→              )}
+   893→   893→              Tambah Setoran
+   894→   894→            </Button>
+   895→   895→          </DialogFooter>
+   896→   896→        </form>
+   897→   897→      </DialogContent>
+   898→   898→    </Dialog>
+   899→   899→  );
+   900→   900→}
+   901→   901→

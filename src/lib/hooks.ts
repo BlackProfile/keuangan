@@ -14,6 +14,7 @@ import type {
   GoalInput,
   InstallmentInput,
   RecurringInput,
+  ShareLinkInput,
   TransactionGroupInput,
   TransactionInput,
   TransactionTemplateInput,
@@ -37,6 +38,7 @@ export const queryKeys = {
   analytics: ["analytics"] as const,
   analyticsMonth: (month: string) => ["analytics", month] as const,
   settings: ["settings"] as const,
+  shares: ["shares"] as const,
 };
 
 // ---------- Transactions ----------
@@ -672,5 +674,54 @@ export function usePanicWipe() {
   return useMutation({
     mutationFn: () => api.panicWipe(),
     onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+// ---------- Share Links ----------
+export function useShareLinks() {
+  return useQuery({
+    queryKey: queryKeys.shares,
+    queryFn: () => api.listShares(),
+  });
+}
+
+export function useCreateShareLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ShareLinkInput) => api.createShare(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+  });
+}
+
+export function useUpdateShareLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ShareLinkInput> }) =>
+      api.updateShare(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+  });
+}
+
+export function useDeleteShareLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteShare(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+  });
+}
+
+export function useRevokeShareLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (token: string) => api.revokeShare(token),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+  });
+}
+
+export function useCloneShareLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (token: string) => api.cloneShare(token),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
   });
 }
