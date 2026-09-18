@@ -10,13 +10,21 @@ import type {
   CategoryInput,
   ChatMessage,
   DashboardData,
+  Debt,
+  DebtInput,
   Goal,
   GoalInput,
+  Installment,
+  InstallmentInput,
   RecurringInput,
   RecurringTransaction,
   Tag,
   Transaction,
+  TransactionGroup,
+  TransactionGroupInput,
   TransactionInput,
+  TransactionTemplate,
+  TransactionTemplateInput,
   TransferInput,
 } from "@/lib/types";
 
@@ -167,6 +175,61 @@ export const api = {
 
   // Tags
   listTags: () => request<Tag[]>("/api/tags"),
+
+  // Debts
+  listDebts: () => request<Debt[]>("/api/debts"),
+  createDebt: (data: DebtInput) =>
+    request<Debt>("/api/debts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateDebt: (id: string, data: Partial<DebtInput>) =>
+    request<Debt>(`/api/debts/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteDebt: (id: string) =>
+    request<void>(`/api/debts/${id}`, { method: "DELETE" }),
+  settleDebt: (id: string) =>
+    request<Debt>(`/api/debts/${id}/settle`, { method: "POST" }),
+
+  // Installments
+  listInstallments: () => request<Installment[]>("/api/installments"),
+  createInstallment: (data: InstallmentInput) =>
+    request<Installment>("/api/installments", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteInstallment: (id: string) =>
+    request<void>(`/api/installments/${id}`, { method: "DELETE" }),
+
+  // Transaction Templates
+  listTemplates: () => request<TransactionTemplate[]>("/api/templates"),
+  createTemplate: (data: TransactionTemplateInput) =>
+    request<TransactionTemplate>("/api/templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteTemplate: (id: string) =>
+    request<void>(`/api/templates/${id}`, { method: "DELETE" }),
+
+  // Transaction Groups (events)
+  listGroups: () => request<TransactionGroup[]>("/api/transaction-groups"),
+  createGroup: (data: TransactionGroupInput) =>
+    request<TransactionGroup>("/api/transaction-groups", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteGroup: (id: string) =>
+    request<void>(`/api/transaction-groups/${id}`, { method: "DELETE" }),
+
+  // Transaction actions
+  duplicateTransaction: (id: string) =>
+    request<Transaction>(`/api/transactions/${id}/duplicate`, {
+      method: "POST",
+    }),
+  togglePin: (id: string) =>
+    request<Transaction>(`/api/transactions/${id}/pin`, { method: "POST" }),
 
   // Dashboard
   getDashboard: (month?: string) => {

@@ -41,8 +41,14 @@ export async function GET(req: Request) {
 
     const transactions = await db.transaction.findMany({
       where,
-      include: { category: true, account: true },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      include: {
+        category: true,
+        account: true,
+        splits: { include: { category: true } },
+        receiptItems: true,
+        group: true,
+      },
+      orderBy: [{ isPinned: "desc" }, { date: "desc" }, { createdAt: "desc" }],
       ...(limit ? { take: limit } : {}),
     });
 
@@ -133,9 +139,66 @@ export async function POST(req: Request) {
         note: note?.trim() || null,
         tags: tags?.trim() || null,
         merchant: merchant?.trim() || null,
+        time: body.time || null,
+        photoUrl: body.photoUrl || null,
+        mood: body.mood || null,
+        priority: body.priority || null,
+        paymentStatus: body.paymentStatus || "PAID",
+        paymentMethod: body.paymentMethod || null,
+        recipient: body.recipient || null,
+        currency: body.currency || "IDR",
+        originalAmount: body.originalAmount || null,
+        exchangeRate: body.exchangeRate || null,
+        parentTransactionId: body.parentTransactionId || null,
+        groupId: body.groupId || null,
+        installmentId: body.installmentId || null,
+        isSplit: !!body.isSplit,
+        isDebt: !!body.isDebt,
+        isReimbursable: !!body.isReimbursable,
+        reimbursed: !!body.reimbursed,
+        isSubscription: !!body.isSubscription,
+        isTaxDeductible: !!body.isTaxDeductible,
+        isBusinessExpense: !!body.isBusinessExpense,
+        excludeFromBudget: !!body.excludeFromBudget,
+        excludeFromStats: !!body.excludeFromStats,
+        isPinned: !!body.isPinned,
+        cashbackAmount: body.cashbackAmount || null,
+        originalPrice: body.originalPrice || null,
+        discountAmount: body.discountAmount || null,
+        debtDueDate: body.debtDueDate ? parseDateLocal(body.debtDueDate) : null,
+        creditor: body.creditor || null,
+        goalId: body.goalId || null,
+        assignedTo: body.assignedTo || null,
+        status: body.status || "CONFIRMED",
+        linkUrl: body.linkUrl || null,
       },
-      include: { category: true, account: true },
+      include: { category: true, account: true, splits: true, receiptItems: true, group: true },
     });
+
+    // Create splits if provided
+    if (Array.isArray(body.splits) && body.splits.length > 0) {
+      await db.transactionSplit.createMany({
+        data: body.splits.map((s: { amount: number; categoryId: string; note?: string }) => ({
+          parentTransactionId: transaction.id,
+          amount: s.amount,
+          categoryId: s.categoryId,
+          note: s.note || null,
+        })),
+      });
+    }
+
+    // Create receipt items if provided
+    if (Array.isArray(body.receiptItems) && body.receiptItems.length > 0) {
+      await db.receiptItem.createMany({
+        data: body.receiptItems.map((it: { name: string; qty: number; price: number; total: number }) => ({
+          transactionId: transaction.id,
+          name: it.name,
+          qty: it.qty,
+          price: it.price,
+          total: it.total,
+        })),
+      });
+    }
 
     // Update account balance
     if (accountId) {

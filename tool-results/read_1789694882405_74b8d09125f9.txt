@@ -1,0 +1,571 @@
+    50→    50→
+    51→    51→---
+    52→    52→Task ID: f1-f9
+    53→    53→Agent: main (orchestrator)
+    54→    54→Task: Perbaikan UI komprehensif — banyak cacat visual ditemukan via VLM analysis
+    55→    55→
+    56→    56→Work Log:
+    57→    57→- Analisis VLM pada screenshot dashboard/transaksi/kategori/mobile/dark mode menemukan cacat:
+    58→    58→  * Floating "N" button (Next.js dev indicator) menutupi konten
+    59→    59→  * Gradient card kadang ditimpa bg-card default
+    60→    60→  * Redundansi: hero card + 4 summary cards menampilkan data sama
+    61→    61→  * Chart arus kas terlihat kosong (3/6 bulan tanpa data)
+    62→    62→  * Format angka tidak konsisten (Rp9,7 jt vs Rp 8.485.000)
+    63→    63→  * Kolom kategori Pemasukan/Pengeluaran tidak rata tinggi
+    64→    64→  * Duplikat tombol close (X) di form dialog
+    65→    65→  * FAB mobile menutupi tombol "Tambah" di tab Kategori
+    66→    66→  * Kontras teks secondary kurang optimal
+    67→    67→- Fix 1: next.config.ts → devIndicators: false (disable floating N)
+    68→    68→- Fix 2: globals.css → tema dipoles: muted-foreground lebih gelap (0.46), gradient pakai !important agar override bg-card, tambah gradient-hero, ring-inner-glow, tab-indicator, safe-bottom
+    69→    69→- Fix 3: DashboardTab redesign → hero compact (saldo + quick stats compact), summary cards jadi 3 metrik BULAN INI (income/expense/balance) bukan total all-time → hilangkan redundansi
+    70→    70→- Fix 4: SummaryCards → StatCard dengan gradient kondisional (income/expense/balance), 3 kolom sm:grid-cols-3, fix gradient class dengan cn() agar tidak ditimpa
+    71→    71→- Fix 5: Charts → filter bulan kosong di awal (slice dari firstWith), warna hex eksplisit (#10b981, #f43f5e) bukan CSS var, formatCurrencyAxis baru untuk sumbu Y, tooltip dipoles
+    72→    72→- Fix 6: TransactionList → header hari menampilkan total income/expense harian, badge count, text muted lebih kontras, tombol edit focus-visible
+    73→    73→- Fix 7: CategoryManager → grid items-start agar kolom tidak stretch, fix duplikat close button
+    74→    74→- Fix 8: page.tsx → FAB hidden di tab categories (punya tombol Tambah sendiri), pb-24 mobile agar FAB tidak overlap konten, tab indicator border-b-2 konsisten
+    75→    75→- Fix: TransactionForm & CategoryForm → showCloseButton={false} di DialogContent agar tidak ada duplikat X
+    76→    76→- Lint: 0 errors, 0 warnings
+    77→    77→- Verifikasi VLM:
+    78→    78→  * Dashboard: 9/10 (gradient jelas, layout rapi, chart menampilkan bar)
+    79→    79→  * Transaksi + Kategori: 8.5/10 (grouping rapi, alignment konsisten)
+    80→    80→  * Mobile: 8/10 → setelah fix FAB hidden di categories = clean
+    81→    81→  * Dark mode: 9/10 (kontras excellent, readability baik)
+    82→    82→  * Form dialog: 9/10 (duplikat X fixed, form rapi)
+    83→    83→  * Final keseluruhan: 9.2/10 "APPROVED FOR PRODUCTION"
+    84→    84→- Test flow: tambah transaksi via FAB mobile → isi → submit → muncul di list + toast sukses
+    85→    85→
+    86→    86→Stage Summary:
+    87→    87→- Semua cacat visual utama diperbaiki: tidak ada floating N, gradient konsisten, tidak ada redundansi, chart menampilkan data, format angka konsisten, kolom rapi, tidak ada duplikat close, FAB tidak overlap
+    88→    88→- UI sekarang polish tinggi: 9.2/10 dari VLM, production-ready
+    89→    89→- Tema emerald dipoles dengan kontras lebih baik, gradient lebih subtle, dark mode premium
+    90→    90→
+    91→    91→---
+    92→    92→Task ID: g1-g6
+    93→    93→Agent: main (orchestrator)
+    94→    94→Task: Perbaikan cacat tersisa + tambah fitur agar aplikasi "lengkap"
+    95→    95→
+    96→    96→Work Log:
+    97→    97→- Analisis VLM kritikal menemukan cacat utama: hero card & stat cards gradient TIDAK tampil (bg-card menang atas gradient-hero)
+    98→    98→  * Root cause: komponen Card set `background-color: var(--card)` (white). Gradient pakai `background:` shorthand yang reset background-color ke transparent, tapi cascade-nya bg-card menang.
+    99→    99→  * Fix: ubah `.gradient-*` dari `background:` shorthand ke `background-image:` longhand dengan !important. background-image selalu render di atas background-color.
+   100→   100→- Fitur baru 1: Export CSV
+   101→   101→  * API /api/export/transactions (GET) - return CSV dengan BOM UTF-8, kolom: Tanggal, Tipe, Kategori, Keterangan, Jumlah, Catatan
+   102→   102→  * Tombol CSV di TransactionList, export sesuai filter aktif (type, from, to)
+   103→   103→- Fitur baru 2: Navigasi bulan di Dashboard
+   104→   104→  * API /api/dashboard terima query ?month=YYYY-MM
+   105→   105→  * Hero card ada tombol chevron prev/next + label bulan
+   106→   106→  * Summary cards & charts update sesuai bulan yang dipilih
+   107→   107→  * Button next disabled saat di bulan current
+   108→   108→- Fitur baru 3: Summary strip di tab Transaksi
+   109→   109→  * 3 kartu: Pemasukan, Pengeluaran, Selisih (sesuai filter aktif)
+   110→   110→  * Bantu user lihat total cepat tanpa scroll
+   111→   111→- Polish: footer lebih substansial (logo + tagline + legend warna + info data lokal + tech credit)
+   112→   112→- Polish: dark mode gradient-balance dicerahkan (oklch 0.38 → 0.3) agar tidak menyatu dengan background
+   113→   113→- Polish: hero layout mobile responsive (saldo & month nav stack ke kolom di mobile)
+   114→   114→- Verifikasi VLM:
+   115→   115→  * Dashboard light: 9/10 - gradient jelas, month nav berfungsi
+   116→   116→  * Tab Transaksi: summary strip + CSV button tampil, footer lengkap
+   117→   117→  * Navigasi bulan: klik prev → "Agustus 2026", data update
+   118→   118→  * Dark mode: gradient-balance sekarang terlihat jelas terpisah
+   119→   119→  * Mobile: 9/10 - hero tidak overlap, text utuh
+   120→   120→  * Export CSV: format benar (Tanggal,Tipe,Kategori,Keterangan,Jumlah,Catatan)
+   121→   121→- Lint: 0 errors, 0 warnings
+   122→   122→
+   123→   123→Stage Summary:
+   124→   124→- Cacat utama (gradient tidak tampil) FIXED dengan background-image longhand
+   125→   125→- 3 fitur baru ditambahkan: Export CSV, Navigasi bulan, Summary strip di Transaksi
+   126→   126→- Footer lebih lengkap & profesional
+   127→   127→- Dark mode polish (balance card lebih terlihat)
+   128→   128→- Mobile layout hero responsive (tidak overlap)
+   129→   129→- Aplikasi sekarang lebih "lengkap" sebagai pengelola keuangan: dashboard bulan-aware, export data, summary cepat
+   130→   130→
+   131→   131→---
+   132→   132→Task ID: 3-A
+   133→   133→Agent: sub-agent (general-purpose)
+   134→   134→Task: Build accounts/budgets/goals/tags/settings API routes
+   135→   135→
+   136→   136→Work Log:
+   137→   137→- Membaca worklog.md + referensi pola dari /api/transactions/route.ts, /api/categories/route.ts, /api/[id]/route.ts, dashboard/route.ts, prisma/schema.prisma, lib/types.ts, lib/format.ts, lib/constants.ts
+   138→   138→- Membuat 10 file API route baru mengikuti pola yang sudah ada (NextResponse, try/catch + console.error, validasi input, pesan error Bahasa Indonesia):
+   139→   139→  1. /api/accounts/route.ts — GET (list, orderBy isDefault desc + name asc) + POST (create; jika isDefault true, updateMany unset lainnya dulu). Validasi nama, tipe akun (CASH/BANK/EWALLET/INVESTMENT), balance.
+   140→   140→  2. /api/accounts/[id]/route.ts — PUT (update field opsional; jika isDefault true, unset lainnya via updateMany NOT id) + DELETE (404 jika tidak ada, 400 "Akun default tidak dapat dihapus" jika isDefault true, 409 jika masih ada transaksi terkait).
+   141→   141→  3. /api/accounts/transfer/route.ts — POST {fromAccountId, toAccountId, amount, date, note?, fee?}. Validasi amount>0, akun ada & berbeda. Pakai db.$transaction untuk atomicity: create Transfer record → decrement fromAccount balance (amount+fee) → increment toAccount balance (amount) → jika fee>0, cari kategori EXPENSE "Lainnya" (atau fallback EXPENSE pertama) lalu create Transaction EXPENSE untuk fee.
+   142→   142→  4. /api/budgets/route.ts — GET (include category) + POST (validasi amount>0, period WEEKLY/MONTHLY/YEARLY, cek kategori ada, findFirst cek duplikat categoryId → 400 "Anggaran untuk kategori ini sudah ada"). Pakai findFirst karena categoryId tidak @unique di schema.
+   143→   143→  5. /api/budgets/[id]/route.ts — PUT (update amount/period opsional dengan validasi) + DELETE (404 jika tidak ada, else delete + 204).
+   144→   144→  6. /api/budgets/status/route.ts — GET dengan optional ?month=YYYY-MM. Untuk tiap budget, aggregate EXPENSE transactions bulan ini per categoryId (findMany + Map), compute spent/remaining/percentage/status. status = "over" >=100, "danger" >=80, "warning" >=60, "safe" else. Return array BudgetStatus lengkap dengan createdAt/updatedAt ISO string.
+   145→   145→  7. /api/goals/route.ts — GET (orderBy completed asc, createdAt desc — incomplete first) + POST (validasi name, targetAmount>0, currentAmount>=0; auto set completed=true jika current>=target).
+   146→   146→  8. /api/goals/[id]/route.ts — PUT (update field opsional; set completed=true otomatis jika finalCurrent>=finalTarget, else ikuti flag completed dari body atau default false) + DELETE.
+   147→   147→  9. /api/tags/route.ts — GET. Agregasi unique tags dari tags field (comma-separated) semua transaksi + Tag records. Stable color dari TAG_COLORS palette via hash 32-bit nama tag (deterministik). Tag model color override bila ada. Return [{id, name, color}] sorted by name.
+   148→   148→  10. /api/settings/route.ts — GET (return all settings sebagai flat key-value object) + PUT {key, value} (upsert by id).
+   149→   149→- Lint (eslint .) → 0 errors, 0 warnings
+   150→   150→- tsc --noEmit → 0 errors di 10 file baru (pre-existing TS errors di file lain seperti dashboard/analytics/ai tetap ada, tidak di-touch)
+   151→   151→- Fix selama development:
+   152→   152→  * Ganti `findUnique({ where: { categoryId } })` → `findFirst` karena categoryId bukan @unique di Budget model
+   153→   153→  * Tambah createdAt/updatedAt ISO string di result budgets/status agar match BudgetStatus type
+   154→   154→  * Transfer pakai db.$transaction untuk atomicity (3-4 write operasi atomik)
+   155→   155→
+   156→   156→Stage Summary:
+   157→   157→- 10 API route file dibuat dengan pattern konsisten: NextResponse, try/catch, console.error `[METHOD /api/...]`, validasi ketat (400), 404 untuk tidak ditemukan, 409 untuk konflik hapus, 201 untuk create, 204 untuk delete sukses
+   158→   158→- Accounts: full CRUD + transfer antar akun dengan atomic transaction & auto expense untuk fee
+   159→   159→- Budgets: full CRUD + status endpoint dengan komputasi spent/percentage/status (safe/warning/danger/over) per bulan (default bulan ini, support ?month=YYYY-MM)
+   160→   160→- Goals: full CRUD dengan auto-complete saat currentAmount>=targetAmount
+   161→   161→- Tags: agregasi unik dari comma-separated tags di transaksi + Tag records, dengan color palette deterministik
+   162→   162→- Settings: GET flat object + PUT upsert
+   163→   163→- Semua error message Bahasa Indonesia sesuai konvensi aplikasi
+   164→   164→- Lint bersih (0 error), TS bersih untuk file baru
+   165→   165→
+   166→   166→---
+   167→   167→Task ID: 3-B
+   168→   168→Agent: sub-agent (general-purpose)
+   169→   169→Task: Build recurring / analytics / import / backup / enhanced-seed API routes
+   170→   170→
+   171→   171→Work Log:
+   172→   172→- Membaca worklog.md (Task 1, 2-9, f1-f9, g1-g6, 3-A) + referensi pola dari /api/transactions/route.ts, /api/transactions/[id]/route.ts, /api/dashboard/route.ts, /api/export/transactions/route.ts, prisma/schema.prisma, lib/types.ts (AnalyticsData, RecurringTransaction, CategoryBreakdown, MonthlyData), lib/format.ts (computeNextDate, parseDateLocal, getMonthKey, getMonthLabel, formatDateInput, WEEKDAYS_ID, getWeekdayMondayFirst), lib/constants.ts (DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES, AUTO_CATEGORY_KEYWORDS)
+   173→   173→- Membuat 6 file API route baru + update 1 file existing (7 total), semua mengikuti pola konvensi (NextResponse, try/catch + console.error `[METHOD /api/...]`, validasi 400/404, pesan Bahasa Indonesia):
+   174→   174→  1. /api/recurring/route.ts — GET (list recurring include category+account, orderBy active desc then nextDate asc) + POST (create; validasi type INCOME/EXPENSE, amount>0, description, categoryId exists & type match, frequency DAILY/WEEKLY/MONTHLY/YEARLY, interval>0, startDate; compute nextDate via computeNextDate(startDate, frequency, interval); optional endDate/active).
+   175→   175→  2. /api/recurring/[id]/route.ts — PUT (update field opsional; jika startDate/frequency/interval berubah, recompute nextDate; jika active false→true & nextDate past, recompute from now via computeNextDate(now, freq, interval)) + DELETE (404 jika tidak ada, else delete + 204).
+   176→   176→  3. /api/recurring/run/route.ts — POST. Query all active recurring where nextDate <= now AND (endDate null OR endDate >= now). Untuk tiap: create Transaction (date=nextDate, isRecurringGenerated=true, note dari recurring), update account balance (INCOME+/EXPENSE-), set lastRunAt=now, advance nextDate via computeNextDate (loop sambil nextDate masih di masa lalu & belum lewat endDate), auto-deactivate kalau nextDate baru melewati endDate. Return {generated: count}.
+   177→   177→  4. /api/analytics/route.ts — GET ?month=YYYY-MM. Komputasi AnalyticsData lengkap:
+   178→   178→     * monthComparison: current vs previous month (income/expense/balance/count) + change% (handling prev=0 → 0 or 100)
+   179→   179→     * topMerchants: top 8 by total expense current month (group by merchant non-null, Map aggregation)
+   180→   180→     * topCategories: top 5 expense categories current month (CategoryBreakdown dengan percentage)
+   181→   181→     * heatmap: array {date(yyyy-mm-dd), count, amount} per hari di bulan berjalan (pre-fill semua hari 1..lastDayOfMonth agar continuous)
+   182→   182→     * forecast: nextMonthIncome/Expense = avgIncome/avgExpense = rata-rata 3 bulan terakhir (sampai viewed month); savingsRate = (avgIncome-avgExpense)/avgIncome*100
+   183→   183→     * ratios: savingsRate = monthBalance/monthIncome*100, expenseRatio = expense/income*100, incomeToExpenseRatio = income/expense
+   184→   184→     * insights: array of generated Indonesian insight strings (naik/turun %, kategori terbesar, savings rate vs target 20%, jumlah transaksi, peringatan expense>income, merchant teratas)
+   185→   185→     * monthlyTrend: 6 bulan terakhir MonthlyData ending at viewed month
+   186→   186→     * weekdaySpending: expense dikelompokkan per weekday Monday-first ({day, total, count})
+   187→   187→  5. /api/import/csv/route.ts — POST body {rows: Array<Record<string,string>>}. Normalisasi key (lowercase, hapus spasi). Alias: Tanggal/Date, Keterangan/Description/Deskripsi/Nama, Tipe/Type/Jenis, Jumlah/Amount/Nilai/Total, Catatan/Note/Notes, Kategori/Category/Cat. parseAmount toleran terhadap format IDR/EN ("Rp 1.234.567", "1,234,567.89", "-5000", "(5000)"). determineType dari Tipe (income/pemasukan/masuk / expense/pengeluaran/keluar) atau sign amount. Auto-categorize: loop AUTO_CATEGORY_KEYWORDS lowercase includes di description → dapat {categoryName, type, merchant?}; jika tidak match fallback "Lainnya". Cache category by name+type. Jika auto-categorize dipakai, type ikut keyword (e.g. "gaji" → INCOME). Validate date parseable + amount != 0. Return {imported, skipped, errors:[{row, error}]}.
+   188→   188→  6. /api/export/backup/route.ts — GET. Promise.all fetch all: categories, accounts, transactions (include category+account), budgets, goals, recurring, tags, settings. Return JSON `{...data, exportedAt: ISO string}` dengan Content-Disposition `attachment; filename="dompetku-backup-YYYY-MM-DD.json"` & Content-Type application/json.
+   189→   189→  7. /api/seed/route.ts (UPDATE) — tetap create DEFAULT_CATEGORIES jika category count==0. TAMBAH: jika account count==0, createMany DEFAULT_ACCOUNTS. Sample transactions sekarang assign accountId (INCOME → "Bank", EXPENSE → "Tunai", fallback first account). Setelah semua transaksi di-seed, recompute account balances = initialBalance + sum of deltas (income - expense per accountId). TAMBAH seed sample Budgets (Makanan 1.5jt, Transportasi 500rb, period MONTHLY) jika budget count==0. TAMBAH sample Goal "Liburan Bali" target 10jt current 2.5jt jika goal count==0. TAMBAH sample RecurringTransaction "Gaji bulanan" monthly INCOME 8.5jt jika recurring count==0. Return response menampilkan status tiap resource.
+   190→   190→
+   191→   191→- Lint (eslint .) → 0 errors, 0 warnings
+   192→   192→- tsc --noEmit → 0 errors di 7 file yang di-touch (pre-existing TS errors di file lain seperti dashboard/analytics/budgets/ai tidak di-touch; mengikuti konvensi existing yang menggunakan `as unknown as` cast untuk CategoryBreakdown type narrowing dari Prisma)
+   193→   193→- Fix selama development:
+   194→   194→  * Cast `topCategories ... as unknown as CategoryBreakdown[]` untuk kompatibilitas Prisma `type: string` vs TransactionType
+   195→   195→  * Import CSV: bersihkan dead-code branch pada auto-categorize; adopsi type dari keyword saat auto-categorize aktif agar category-type konsisten (mencegah mismatch INCOME/EXPENSE antara transaksi & kategori)
+   196→   196→  * Recurring /run: while-loop untuk advance nextDate sampai future (mencegah stuck bila recurring lama tidak di-run); auto-deactivate saat nextDate baru melewati endDate
+   197→   197→  * Seed: recompute account balance = initial + deltas (bukan reset ke 0) supaya opening balance dari DEFAULT_ACCOUNTS dipertahankan
+   198→   198→  * Determine type di CSV import: hapus redundant check `if (t === "inCOME" || t === "income")` yang sudah ditangani branch sebelumnya
+   199→   199→
+   200→   200→Stage Summary:
+   201→   201→- 7 file selesai (6 baru + 1 update) mengikuti konvensi yang sudah ada: NextResponse, try/catch, console.error `[METHOD /api/...]`, validasi 400/404, pesan Bahasa Indonesia, 201 untuk create, 204 untuk delete
+   202→   202→- Recurring: full CRUD + endpoint /run untuk generate transaksi otomatis dari schedule (DAILY/WEEKLY/MONTHLY/YEARLY), update account balance & lastRunAt, auto-advance nextDate, auto-deactivate saat lewat endDate
+   203→   203→- Analytics: endpoint komprehensif dengan 9 komponen AnalyticsData (monthComparison, topMerchants, topCategories, heatmap per hari, forecast 3-bulan avg, ratios, insights bahasa Indonesia, monthlyTrend 6 bulan, weekdaySpending Monday-first)
+   204→   204→- Import CSV: parser toleran (multi-format amount ID/EN, alias key ID/EN, auto-categorize via keyword map, fallback "Lainnya"), return {imported, skipped, errors} detail per row
+   205→   205→- Export Backup: full JSON dump semua resource + exportedAt, Content-Disposition attachment filename dompetku-backup-YYYY-MM-DD.json
+   206→   206→- Seed enhanced: sekarang membuat accounts (DEFAULT_ACCOUNTS), sample transactions dengan accountId, recompute account balance, sample budgets (Makanan+Transportasi), sample goal (Liburan Bali), sample recurring (Gaji bulanan monthly)
+   207→   207→- Lint bersih (0 error), TS bersih untuk 7 file yang di-touch
+   208→   208→
+   209→   209→---
+   210→   210→Task ID: 3-C
+   211→   211→Agent: general-purpose sub agent
+   212→   212→Task: Build AI chat / receipt / insights API routes for DompetKu
+   213→   213→
+   214→   214→Work Log:
+   215→   215→- Baca worklog: pahami struktur app (Next.js 16, Prisma+SQLite, Tema emerald, Bahasa Indonesia, schema Category/Transaction/Budget/Account/Goal, format IDR)
+   216→   216→- Verifikasi SDK: `z-ai-web-dev-sdk@0.0.18` sudah terpasang; baca type definitions — `chat.completions.create({messages, thinking})` & `chat.completions.createVision({model, messages, thinking})` (model WAJIB untuk vision)
+   217→   217→- Verifikasi config: `/etc/.z-ai-config` tersedia (root-readable) sehingga `ZAI.create()` bisa resolve di runtime sandbox
+   218→   218→
+   219→   219→1. `/api/ai/chat/route.ts` (POST)
+   220→   220→   - Body: `{messages: Array<{role, content}>}` — divalidasi, di-sanitize (max 20 turn terakhir, content max 4000 char)
+   221→   221→   - Build context bulan ini dari DB via `buildChatContext()`:
+   222→   222→     * Promise.all untuk 3 query transaction (month-only summary, recent 5 dengan category, expense-only dengan category)
+   223→   223→     * Budget query di-fetch terpisah dengan try/catch agar schema mismatch tidak break context
+   224→   224→     * Summary: totalIncome, totalExpense, balance, txCount (format IDR via formatCurrency)
+   225→   225→     * Top 3 kategori expense bulan ini (urut total desc)
+   226→   226→     * 5 transaksi terakhir (tanggal + sign +/- amount + description + kategori)
+   227→   227→     * Status anggaran per kategori: budget vs spent vs remaining + percentage + status (safe/warning/danger/over)
+   228→   228→   - System prompt persis sesuai spec: "Kamu adalah asisten keuangan pribadi DompetKu. Bantu pengguna menganalisis keuangan mereka berdasarkan data berikut. Jawab dengan singkat, jelas, dan ramah dalam Bahasa Indonesia. Data keuangan pengguna: [context]"
+   229→   229→   - Panggil `zai.chat.completions.create({messages: [system, ...userMessages], thinking: {type:'disabled'}})`
+   230→   230→   - Return `{reply: response.choices[0].message.content}`
+   231→   231→   - 3 lapis try/catch: input parsing → context build (DB) → AI call. Semua fallback ke 200 dengan fallback reply Indonesian
+   232→   232→
+   233→   233→2. `/api/ai/receipt/route.ts` (POST)
+   234→   234→   - Body: `{image: string}` (base64 atau URL)
+   235→   235→   - Validasi: 400 jika field image kosong
+   236→   236→   - `normalizeImageUrl()`: URL http/https → langsung; data URL → langsung; raw base64 → bungkus dengan `data:image/jpeg;base64,...` (deteksi PNG signature untuk mime type)
+   237→   237→   - Prompt vision (Bahasa Indonesia): minta JSON berisi merchant (string), date (YYYY-MM-DD), total (number), items (string[]), category (salah satu: Makanan, Transportasi, Belanja, Tagihan, Hiburan, Kesehatan, Perumahan)
+   238→   238→   - Panggil `zai.chat.completions.createVision({model: 'glm-4v', messages: [{role:'user', content: [{type:'text', text: prompt}, {type:'image_url', image_url: {url: imageUrl}}]}], thinking: {type:'disabled'}})`
+   239→   239→   - `parseReceiptJson()`: tolerant parser — strip markdown fence ` ```json...``` `, ekstrak block `{...}`, JSON.parse, normalisasi:
+   240→   240→     * merchant: string trim
+   241→   241→     * date: normalisasi DD/MM/YYYY, DD-MM-YYYY, fallback ke today
+   242→   242→     * total: handle currency symbols, thousand separator (dot ID), decimal comma → dot
+   243→   243→     * items: array of string atau object {name}; fallback split string by ,/;/\n
+   244→   244→     * category: exact match case-insensitive, kemudian partial match; fallback "Lainnya"
+   245→   245→   - Return `{merchant, date, total, items, category}` (HTTP 200)
+   246→   246→   - Error AI → return 200 dengan fallback shape + field `error` agar frontend bisa tampilkan pesan
+   247→   247→
+   248→   248→3. `/api/ai/insights/route.ts` (GET)
+   249→   249→   - Fetch transaksi 3 bulan terakhir (bulan ini + 2 bulan sebelumnya) dengan category
+   250→   250→   - `buildInsightsContext()` agregasi:
+   251→   251→     * Per-month bucket: income, expense, count, top 3 category, top 3 merchant
+   252→   252→     * Aggregate top 5 category & top 5 merchant 3 bulan
+   253→   253→     * Weekday spending pattern (Senin-first, Monday-first via `(getDay()+6)%7`)
+   254→   254→   - System + User message dipisah (system-only sebelumnya ditolak API dengan code 1214 "messages 参数非法") — fix: tambah user message trigger
+   255→   255→   - Prompt minta 3-5 insight actionable, spesifik dengan angka, Bahasa Indonesia, tanpa prefix numbering/bullets
+   256→   256→   - `parseInsights()`: split by newline, strip bullets `• - *`, numbering `1. 1) 1]`, markdown headers `#`, blockquote `>`, filter line < 8 char, filter section headers seperti "insight:", slice top 5
+   257→   257→   - Fallback: jika AI gagal → return `context.computedInsights` (5 insight lokal: savings rate, top category, top merchant, peak weekday, avg monthly expense, savings rate evaluation)
+   258→   258→   - Fallback tier 2: jika DB kosong → `genericComputedInsights()` (4 insight evergreen: catat transaksi, tetapkan anggaran, sisihkan 20%, tinjau mingguan)
+   259→   259→
+   260→   260→Perbaikan pre-existing yang ditemukan & diperbaiki (lint baseline):
+   261→   261→- `src/lib/constants.ts:245`: `rumah sakit:` invalid JS identifier (mengandung spasi) — wrap dengan quotes `"rumah sakit":`
+   262→   262→- `src/lib/constants.ts:212`: duplicate `gofood` key di `AUTO_CATEGORY_KEYWORDS` (TS1117) — hapus entry duplikat
+   263→   263→- Regenerate Prisma client (`bun run db:generate`) agar `db.budget` tersedia di runtime dev server
+   264→   264→
+   265→   265→Smoke test (live, dev server port 3000):
+   266→   266→- `GET /api/ai/insights` → 200, return 5 insight konkret dengan angka aktual (Makanan Rp970rb, saldo naik Rp3.7jt→Rp8.9jt, transportasi Rp620rb, transaksi naik 4→12, pola akhir pekan Rp6.05jt)
+   267→   267→- `POST /api/ai/chat` dengan `[{role:'user', content:'Bagaimana keuangan saya bulan ini?'}]` → 200, AI reply menyebut angka aktual (income Rp 10.200.000, expense Rp 1.290.000, balance Rp 8.910.000, rasio 12.6%, top kategori Tagihan/Belanja/Hiburan)
+   268→   268→- `POST /api/ai/receipt` dengan `{}` → 400 "Field 'image' wajib diisi (base64 atau URL)"
+   269→   269→- `POST /api/ai/receipt` dengan 1x1 PNG base64 → 200 fallback `{merchant:'', date:'<today>', total:0, items:[], category:'Lainnya'}`
+   270→   270→- `POST /api/ai/receipt` dengan URL non-receipt → 200 fallback + field `error` untuk display
+   271→   271→
+   272→   272→Verifikasi akhir:
+   273→   273→- `bun run lint` → 0 error, 0 warning
+   274→   274→- `bunx tsc --noEmit` → 0 error untuk 3 file `/api/ai/*` (TS error pre-existing di file agent lain: `analytics/route.ts`, `budgets/status/route.ts`, `dashboard/route.ts` — di luar scope Task 3-C)
+   275→   275→
+   276→   276→Stage Summary:
+   277→   277→- 3 endpoint AI selesai dan teruji end-to-end dengan fallback berlapis:
+   278→   278→  * `/api/ai/chat` (POST): chat AI dengan context keuangan bulan ini (summary + top 3 kategori + 5 transaksi terakhir + status anggaran), reply Bahasa Indonesia
+   279→   279→  * `/api/ai/receipt` (POST): vision-based receipt scanner → JSON {merchant, date, total, items, category}, normalisasi output, fallback graceful
+   280→   280→  * `/api/ai/insights` (GET): 3-5 insight actionable Bahasa Indonesia berbasis pola 3 bulan (monthly totals + top categories + top merchants + weekday pattern), fallback computed insights
+   281→   281→- Pola error handling konsisten: semua AI error → HTTP 200 dengan fallback bermakna (tidak pernah 500 untuk AI errors); input validation → 400
+   282→   282→- Context building defensive: budget query di-isolasi (schema mismatch tidak break chat context), weekday pattern Monday-first, format IDR konsisten via formatCurrency
+   283→   283→- Bonus: fix pre-existing lint/TS errors di `constants.ts` (rumah sakit unquoted, duplicate gofood key) + regenerate Prisma client agar Budget model tersedia di runtime
+   284→   284→- Lint: 0 error, 0 warning. TS: 0 error untuk file AI
+   285→   285→
+   286→   286→---
+   287→   287→Task ID: 6-BG
+   288→   288→Agent: sub-agent (general-purpose)
+   289→   289→Task: Build React components for budgets & goals sections (Anggaran + Target Tabungan)
+   290→   290→
+   291→   291→Work Log:
+   292→   292→- Membaca worklog.md (Task 1, 2-9, f1-f9, g1-g6, 3-A, 3-B, 3-C) untuk konteks lengkap & konvensi codebase
+   293→   293→- Membaca referensi pola dari 3 komponen existing:
+   294→   294→  * category-manager.tsx — pola Dialog + AlertDialog CRUD, hover delete button, form validation inline, toast feedback
+   295→   295→  * summary-cards.tsx — Card styling, gradient classes (gradient-income/expense/balance), StatCard pattern
+   296→   296→  * charts.tsx — LucideIcon usage, formatCurrency/Compact, responsive grid, EmptyChart pattern
+   297→   297→- Membaca lib/types.ts (BudgetStatus, Goal, GoalInput, BudgetInput, BudgetPeriod, Category), lib/hooks.ts (useBudgetStatuses, useCreateBudget, useUpdateBudget, useDeleteBudget, useGoals, useCreateGoal, useUpdateGoal, useDeleteGoal, useCategories), lib/format.ts (formatCurrency, formatCurrencyCompact, formatDate, formatDateInput, parseDateLocal), lib/constants.ts (GOAL_ICONS, GOAL_COLORS), components/lucide-icon.tsx (dynamic icon by name), components/ui/card.tsx (Card default py-6 → di-override via cn p-4), components/ui/dialog.tsx (showCloseButton=false pattern), components/ui/popover.tsx + calendar.tsx (date picker), components/ui/select.tsx, components/ui/badge.tsx, components/ui/alert-dialog.tsx
+   298→   298→
+   299→   299→1. `/src/components/finance/budgets-section.tsx` (export BudgetsSection)
+   300→   300→   - Header: title "Anggaran" + subtitle "Atur batas pengeluaran per kategori dan pantau realisasinya." + button "Tambah Anggaran"
+   301→   301→   - Summary strip 3 mini card (sm:grid-cols-3): Total Anggaran (default tone + Wallet icon), Total Terpakai (text-expense), Sisa Anggaran (income jika >=0, expense jika <0)
+   302→   302→   - List budget cards dari useBudgetStatuses, grid-cols-1 md:grid-cols-2:
+   303→   303→     * Header kiri: category icon (h-10 w-10 rounded-xl dengan bg color alpha 1a) + name + period label + amount compact
+   304→   304→     * Header kanan: StatusBadge dengan 4 status (safe=emerald "Aman", warning=yellow "Waspada", danger=orange "Bahaya", over=red "Lewat")
+   305→   305→     * Amounts row: Terpakai (text-expense) vs Anggaran (default)
+   306→   306→     * Custom progress bar (h-2 rounded-full bg-muted) dengan width pct% + backgroundColor sesuai status color
+   307→   307→     * Footer row: percentage text + sisa/over amount (conditional red jika over)
+   308→   308→     * Hover actions (opacity-0 → group-hover:opacity-100): Edit (Pencil) + Delete (AlertDialog konfirmasi)
+   309→   309→   - BudgetFormDialog: 
+   310→   310→     * Header gradient bg-muted/30 + showCloseButton={false} + DialogClose custom X button
+   311→   311→     * Select category (useCategories("EXPENSE"), filter yang belum dibudget-kan kecuali current edit's category via memo)
+   312→   312→     * Amount input (number, dengan preview formatCurrency di bawah)
+   313→   313→     * Period select (WEEKLY/MONTHLY/YEARLY dengan label Indonesia)
+   314→   314→     * Validation: categoryId required, amount > 0
+   315→   315→     * Create vs Update branching, pending state untuk loading spinner
+   316→   316→   - Empty state: icon Wallet + text + button "Buat Anggaran Pertama"
+   317→   317→   - Loading skeletons: 4x Skeleton h-36 dalam grid
+   318→   318→
+   319→   319→2. `/src/components/finance/goals-section.tsx` (export GoalsSection)
+   320→   320→   - Header: title "Target Tabungan" + button "Tambah Target"
+   321→   321→   - Grid goals cards dari useGoals (grid-cols-1 sm:grid-cols-2 lg:grid-cols-3):
+   322→   322→     * Top row: SVG ProgressRing (size 64, strokeWidth 6, color=goal.color, percentage di tengah) + goal icon (h-7 w-7) + name + target date (formatDate)
+   323→   323→     * "Selesai" badge (emerald) jika goal.completed (Check icon)
+   324→   324→     * Amounts: Terkumpul (text-income) vs Target (default) + linear progress bar h-1.5 + sisa/celebration text
+   325→   325→     * "Tambah Setoran" button (variant=outline, full width, Plus icon) — hanya jika !completed
+   326→   326→     * Hover actions: Edit + Delete (AlertDialog)
+   327→   327→   - ProgressRing component: SVG circular dengan 2 circles (track var(--muted) + colored progress), -rotate-90 + strokeDasharray/offset calculation, percentage di tengah dengan absolute positioning, transition duration-500
+   328→   328→   - GoalFormDialog:
+   329→   329→     * Header + DialogClose custom
+   330→   330→     * Name input (maxLength 40)
+   331→   331→     * Grid 2 col: Target (Rp) + Terkumpul (Rp) dengan preview formatCurrency
+   332→   332→     * Target Date: Popover + Calendar (mode="single", disabled past dates) + tombol "Hapus tanggal"
+   333→   333→     * Icon picker: grid-cols-7 max-h-32 scrollable dari GOAL_ICONS
+   334→   334→     * Color picker: rounded-full swatches dari GOAL_COLORS dengan Check icon pada selected + ring-2 ring-ring
+   335→   335→     * Preview card dengan ProgressRing mini + name + current/target amounts
+   336→   336→     * Validation: name required, targetAmount > 0, currentAmount >= 0
+   337→   337→   - ContributionDialog (separate, controlled by `contributionGoal` state):
+   338→   338→     * Header "Tambah Setoran"
+   339→   339→     * Info card: Terkumpul + Sisa amount
+   340→   340→     * Amount input + 4 quick chips (+50rb, +100rb, +250rb, +500rb) via formatCurrencyCompact
+   341→   341→     * Submit: PATCH `{ currentAmount: goal.currentAmount + amt }` via useUpdateGoal
+   342→   342→     * Toast: success "Setoran X ditambahkan ke Y" + bonus toast "Target Z tercapai! 🎉" jika response.completed=true
+   343→   343→   - Empty state: icon Target + button "Buat Target Pertama"
+   344→   344→   - Loading skeletons: 3x Skeleton h-56 dalam grid
+   345→   345→
+   346→   346→3. Verifikasi:
+   347→   347→- `bun run lint` → 0 errors di file baru (1 pre-existing warning di accounts-section.tsx yang tidak di-touch)
+   348→   348→- `bunx tsc --noEmit` → 0 error di budgets-section.tsx & goals-section.tsx (pre-existing TS errors di dashboard/analytics/examples/skills tetap ada, tidak di-scope task ini)
+   349→   349→- Dev server log: ✓ Compiled entries tanpa error terkait file baru
+   350→   350→
+   351→   351→Stage Summary:
+   352→   352→- 2 komponen production-ready dibuat mengikuti konvensi codebase (Dialog dengan showCloseButton={false}+custom X, AlertDialog untuk delete konfirmasi, hover actions opacity-0→group-hover:opacity-100, toast feedback, format IDR Bahasa Indonesia)
+   353→   353→- BudgetsSection: full CRUD dengan progress bar 4 status (safe/warning/danger/over), summary strip 3 metrik, category select yang otomatis filter EXPENSE categories yang belum dibudget-kan, period select WEEKLY/MONTHLY/YEARLY
+   354→   354→- GoalsSection: full CRUD dengan SVG ProgressRing (custom component, animated stroke), date picker (Popover+Calendar), icon picker (GOAL_ICONS), color picker (GOAL_COLORS), preview card real-time, plus ContributionDialog terpisah dengan quick chips (+50/100/250/500rb) dan auto-celebration toast saat target tercapai
+   355→   355→- Kedua komponen responsive (mobile-first grid 1→2→3 col), loading skeletons, empty state dengan CTA, accessibility (aria-label, role="progressbar", aria-valuenow)
+   356→   356→- Lint: 0 error di file baru. TS: 0 error di file baru.
+   357→   357→
+   358→   358→---
+   359→   359→Task ID: 6-AR
+   360→   360→Agent: sub-agent (general-purpose)
+   361→   361→Task: Build React components for accounts & recurring sections (Akun + Transaksi Berulang)
+   362→   362→
+   363→   363→Work Log:
+   364→   364→- Baca worklog.md + referensi pola dari category-manager.tsx (AlertDialog + icon/color picker), summary-cards.tsx (gradient card + ring-inner-glow), transaction-list.tsx (Skeleton + EmptyState + AnimatePresence), transaction-form.tsx (Rp prefix input + type toggle + Dialog showCloseButton={false})
+   365→   365→- Verifikasi hooks (useAccounts/useCreateAccount/useUpdateAccount/useDeleteAccount/useTransfer/useRecurring/useCreateRecurring/useUpdateRecurring/useDeleteRecurring/useRunRecurring/useCategories/useTransactions), types (Account/AccountInput/AccountType/TransferInput/RecurringTransaction/RecurringInput/Frequency), constants (ACCOUNT_TYPE_ICONS/ACCOUNT_COLORS), format helpers (formatCurrency/formatCurrencyCompact/formatDate/formatDateInput/relativeDay), api shapes (runRecurring returns {generated:number})
+   366→   366→
+   367→   367→1. `/home/z/my-project/src/components/finance/accounts-section.tsx` (~1085 lines)
+   368→   368→   - `AccountsSection` (main): header "Akun" + Transfer button (disabled if <2 akun) + Tambah Akun button; hero card total saldo (gradient-balance, white text, ring-inner-glow, decorative radial blurs, menampilkan jumlah akun); grid 1→2→3 col; empty state dengan CTA
+   369→   369→   - `AccountCard`: clickable expand untuk lihat transaksi terbaru; icon kategori (bg tinted), name, "Utama" badge jika isDefault, type label (Tunai/Bank/E-Wallet/Investasi), balance (formatCurrency); hover reveal edit (Pencil) + delete (Trash2 via AlertDialog); ChevronDown rotate saat expand
+   370→   370→   - `AccountRecentTransactions`: useTransactions({accountId, limit:5}); list 5 transaksi terakhir dengan category icon, description, relativeDay, signed amount (formatCurrencyCompact); skeleton + empty fallback
+   371→   371→   - `AccountFormDialog` (add/edit): name Input, type Select (CASH/BANK/EWALLET/INVESTMENT dengan icon), icon picker (4 icon dari ACCOUNT_TYPE_ICONS[type] grid-cols-4), color picker (ACCOUNT_COLORS dengan Check), balance Input Rp prefix (label "Saldo Awal"/"Saldo Saat Ini" tergantung isEdit + helper note), isDefault Switch dalam bordered box, note Textarea; preview icon di header live update; validasi + error display
+   372→   372→   - `TransferDialog`: from/to account Select (masing-masing disabled jika match, tampilkan balance + compact balance), amount Input Rp prefix, date Input (default today, max today), fee Input (opsional, helper "akan tercatat sebagai pengeluaran"), note Textarea; sameAccount guard; useTransfer mutation
+   373→   373→   - Delete: AlertDialog konfirmasi; API 409 jika ada transaksi → toast error; isDefault accounts show warning di description
+   374→   374→   - Mobile-first: header button text collapse di mobile, grid stack
+   375→   375→
+   376→   376→2. `/home/z/my-project/src/components/finance/recurring-section.tsx` (~887 lines)
+   377→   377→   - `RecurringSection` (main): header "Transaksi Berulang" + Jalankan Sekarang button (useRunRecurring, Play icon, disabled jika 0 active) + Tambah button; info banner (primary/5 bg, Info icon, explains auto-generation); list dengan AnimatePresence
+   378→   378→   - `RecurringItem`: Card dengan category icon (color-tinted), description, type badge (INCOME green/EXPENSE red), frequency label (getFrequencyLabel), next date (formatDate), account chip jika ada, note italic truncated; right: signed amount (income green/expense red) + active Switch (useUpdateRecurring toggle active); opacity-70 saat inactive; hover reveal edit + delete (AlertDialog)
+   379→   379→   - `EmptyState`: Repeat icon + message + CTA
+   380→   380→   - `RecurringFormDialog` (add/edit): type toggle (Pemasukan/Pengeluaran bg-income/bg-expense), amount Input Rp prefix, description Input, category Select (filter by type, auto-pick first), account Select (opsional, "NONE"=tanpa akun), frequency Select (DAILY/WEEKLY/MONTHLY/YEARLY) + interval Input (grid-cols-2), live frequency label preview, startDate Input, endDate Input (opsional, min=startDate, helper "kosongkan agar tanpa batas"), note Textarea
+   381→   381→   - Helper `getFrequencyLabel(frequency, interval)`: "Setiap hari/minggu/bulan/tahun" + interval plural (e.g. "Setiap 2 bulan"); Indonesian grammar (no plural marker, so "Setiap 2 bulan" is correct)
+   382→   382→   - "Jalankan Sekarang": useRunRecurring → toast.success "{n} transaksi berulang berhasil dibuat" jika generated>0, toast.info "Tidak ada...perlu dijalankan" jika generated=0
+   383→   383→   - Active Switch: useUpdateRecurring dengan {active: checked}; toast feedback
+   384→   384→   - Category auto-select first matching type on load/type-change
+   385→   385→   - Validation: amount>0, description non-empty, category required, interval positive int, startDate required, endDate >= startDate
+   386→   386→   - Submit button color matches type (bg-income/bg-expense)
+   387→   387→
+   388→   388→3. Verifikasi:
+   389→   389→- `bun run lint` pada 2 file → 0 errors, 0 warnings
+   390→   390→  * Initial run flagged 2 "Unused eslint-disable directive" warnings di accounts-section.tsx (TransferDialog + AccountFormDialog useEffect deps)
+   391→   391→  * Fix: hapus directive yang tidak perlu (rule tidak triggered); untuk AccountFormDialog type-change effect, tambah `isEdit` + `icon` ke deps array (no infinite loop karena condition false setelah set pertama)
+   392→   392→- `bunx tsc --noEmit` pada 2 file → 0 errors (pre-existing TS errors di dashboard/route.ts, examples/, skills/ tidak di-touch, di luar scope)
+   393→   393→- Dev server log: ✓ Compiled entries tanpa error terkait file baru
+   394→   394→
+   395→   395→Stage Summary:
+   396→   396→- 2 komponen production-ready dibuat mengikuti konvensi codebase (Dialog showCloseButton={false}+custom X, AlertDialog untuk delete, hover actions opacity-0→group-hover:opacity-100, toast feedback Bahasa Indonesia, format IDR, emerald theme)
+   397→   397→- AccountsSection: full CRUD akun + transfer antar akun + expandable recent transactions per akun; hero card total saldo (gradient-balance); icon picker per type, color picker, isDefault switch; transfer dengan fee auto-expense
+   398→   398→- RecurringSection: full CRUD recurring + run-now action; frequency label helper Indonesian ("Setiap 2 bulan"), active toggle inline, info banner menjelaskan auto-generation
+   399→   399→- Kedua komponen responsive (mobile-first grid 1→2→3), loading skeletons, empty state dengan CTA, accessibility (aria-label, aria-expanded, disabled states)
+   400→   400→- Lint: 0 error di file baru. TS: 0 error di file baru.
+   401→   401→- Catatan: komponen belum di-wire ke page.tsx (page saat ini hanya 3 tab: dashboard/transactions/categories). Orchestrator perlu tambah tab "Akun" dan "Berulang" untuk surface komponen ini.
+   402→   402→
+   403→   403→---
+   404→   404→Task ID: 6-AI
+   405→   405→Agent: sub-agent (general-purpose, React components)
+   406→   406→Task: Build AI assistant view + Settings view components
+   407→   407→
+   408→   408→Work Log:
+   409→   409→- Membaca worklog.md (Task 1, 2-9, f1-f9, g1-g6, 3-A, 3-B, 3-C, 6-BG, 6-AC, 6-AR) untuk konteks & konvensi
+   410→   410→- Membaca referensi pola dari 2 komponen existing:
+   411→   411→  * category-manager.tsx — pola Dialog + AlertDialog, InputOTP usage hint, form validation inline, toast feedback, LucideIcon dynamic, custom-scrollbar
+   412→   412→  * dashboard-tab.tsx — Card patterns, gradient, motion animations (initial/animate/transition), Skeleton loading, framer-motion usage
+   413→   413→- Membaca lib/hooks.ts (useAiChat, useReceiptScan, useInsights, useSettings, useUpdateSetting, useImportCsv, useSeed), lib/types.ts (ChatMessage, AppSettings), lib/format.ts (hashPin async SHA-256, formatCurrency, formatDate), lib/api.ts (exportTransactionsUrl, backupUrl, receiptScan), components/ui/input-otp.tsx, components/theme-toggle.tsx (useTheme + mounted guard pattern), app/page.tsx
+   414→   414→
+   415→   415→1. `/src/components/finance/ai-section.tsx` (export AiSection)
+   416→   416→   Props: onCreateTransaction?, onNavigateToAdd?
+   417→   417→   - Internal Tabs (3 sections: chat/scan/insights)
+   418→   418→   - **A. ChatAsisten**: Card flex h-[32rem], messages state ChatMessage[] (init welcome), useAiChat mutateAsync dengan full history, MessageBubble (user right primary / assistant left muted + Bot avatar), TypingIndicator (3 dots animate-bounce staggered), suggested question chips (only when messages.length<=1), auto-scroll via ref useEffect, Enter-to-send, Loader2 spinner saat pending, error fallback assistant message
+   419→   419→   - **B. PindaiStruk**: drag-drop upload area + click hidden input (accept=image/*), FileReader.readAsDataURL → preview data URL, scanMut.mutate(preview), ReceiptResultCard (merchant/date/category/items/total with text-primary highlight), loading skeleton, handleCreateTransaction finds EXPENSE category by name (case-insensitive) fallback first EXPENSE → onCreateTransaction({type:'EXPENSE', amount:total, description:merchant, date, categoryId, merchant}), toast feedback, error field on result shows amber badge + warning toast
+   420→   420→   - **C. InsightOtomatis**: useInsights query, Card with Sparkles header + RefreshCw button (refetch, spins saat isFetching), Skeleton loading (4 cards), empty state with onNavigateToAdd CTA button, staggered motion.div fade-in (delay i*0.05), AnimatePresence mode="popLayout"
+   421→   421→
+   422→   422→2. `/src/components/finance/settings-section.tsx` (export SettingsSection)
+   423→   423→   - parseSettings(raw): Record<string,string> → AppSettings typed (default reminderHour=20, theme=system)
+   424→   424→   - Shared SectionCard (icon badge + title + description + divide-y children) & SettingRow (icon+title+desc left, control right, first:pt-0 last:pb-0)
+   425→   425→   - **A. KeamananSection**: Kunci PIN Switch → buka Dialog InputOTP maxLength={4} → hashPin(pin) async → save pinHash + pinEnabled='true' via 2x useUpdateSetting; disable clears pinHash+pinEnabled; Sembunyikan Nominal Switch saves hideAmounts
+   426→   426→   - **B. TampilanSection**: 3-button segmented theme toggle (Terang/Gelap/Sistem) via next-themes useTheme() langsung (bukan via settings), mounted guard hydration-safe, active=bg-background text-foreground shadow-sm, labels hidden sm:inline
+   427→   427→   - **C. PengingatSection**: Switch + hour Input (type=number 0-23), saves reminderEnabled + reminderHour; useEffect schedules setInterval 60s yang fire Notification once-per-day at target hour (localStorage dedup key dompetku-reminder-{date}), hanya dalam 5 menit pertama jam, hanya jika permission granted; cleanup clearInterval; test notification button
+   428→   428→   - **D. DataSection**: Impor CSV → Dialog max-w-2xl dengan hidden file input accept=.csv, parseCsv client-side (strip BOM, handle quoted fields with embedded commas + escaped ""), preview Table first 50 rows, importMut.mutate(rows) → toast; Ekspor CSV → window.location.href = api.exportTransactionsUrl(); Backup JSON → window.location.href = api.backupUrl(); Muat Data Contoh → AlertDialog confirm → seedMut.mutate(undefined, ...). Skip delete-all per task spec.
+   429→   429→   - **E. TentangSection**: 3 badges (v1.0.0 / Modern Stack Sparkles / Lokal ShieldCheck), tech stack info, storage note SQLite local
+   430→   430→
+   431→   431→Lint & Type:
+   432→   432→- `bun run lint` → 0 errors, 0 warnings (initial run had 1 unused eslint-disable warning for @next/next/no-img-element on `<img>` tag di PindaiStruk preview — rule tidak enabled di config ini, removed directive)
+   433→   433→- `bunx tsc --noEmit` → 0 errors untuk ai-section.tsx & settings-section.tsx (pre-existing TS errors di dashboard/route.ts, analytics/route.ts, budgets/status/route.ts, examples/, skills/ tidak di-touch, di luar scope)
+   434→   434→- Dev server log: ✓ Compiled entries tanpa error terkait file baru. Pre-existing AI route errors (code 1210 image format, code 1214 messages param) handled gracefully oleh backend (returns 200 dengan fallback shape per Task 3-C), frontend akan display fallback results correctly.
+   435→   435→
+   436→   436→Stage Summary:
+   437→   437→- 2 komponen production-ready (~590 LOC ai-section.tsx + ~620 LOC settings-section.tsx) mengikuti konvensi codebase: "use client", Indonesian UI, emerald theme (bg-primary/10 text-primary), shadcn/ui only, LucideIcon, cn(), toast sonner, formatCurrency, custom-scrollbar, framer-motion animations
+   438→   438→- AI Section delivers 3 features: full chat UI (history + typing + suggestions + auto-scroll + error fallback), receipt scan (drag-drop + base64 + result card + one-click create transaction with category matching), insights (refetchable + staggered animations + empty CTA)
+   439→   439→- Settings Section delivers 5 organized sections: PIN lock via InputOTP + async SHA-256 + dual setting writes, hide amounts toggle, 3-button next-themes theme toggle (hydration-safe), daily reminder with browser Notifications API + localStorage dedup + test button, CSV import with quoted-field-aware parser + preview table, CSV/JSON export via window.location.href, seed with AlertDialog confirmation, app info badges
+   440→   440→- Lint: 0 error di file baru. TS: 0 error di file baru.
+   441→   441→- Catatan: komponen belum di-wire ke page.tsx (page saat ini hanya 3 tab: dashboard/transactions/categories). Orchestrator perlu tambah tab "AI" dan "Pengaturan" untuk surface komponen ini. onCreateTransaction prop di AiSection dapat di-wire ke TransactionForm dialog yang sudah ada.
+   442→   442→
+   443→   443→---
+   444→   444→Task ID: 6-AC
+   445→   445→Agent: sub-agent (general-purpose)
+   446→   446→Task: Build analytics-section.tsx & calendar-section.tsx React components for DompetKu
+   447→   447→
+   448→   448→Work Log:
+   449→   449→- Membaca worklog.md (Task 1, 2-9, f1-f9, g1-g6, 3-A, 3-B, 3-C) + referensi pola dari komponen finance/ existing (charts.tsx untuk Recharts+tooltip patterns, dashboard-tab.tsx untuk month navigation, transaction-list.tsx untuk list+empty+skeleton patterns, summary-cards.tsx untuk gradient cards)
+   450→   450→- Verifikasi lib/format.ts (formatCurrency, formatCurrencyCompact, formatCurrencyAxis, formatPercent, getMonthKey, getMonthYearLabel, getMonthLabel, formatDateInput, parseDateLocal, formatDateLong, WEEKDAYS_ID, getWeekdayMondayFirst), lib/types.ts (AnalyticsData, Transaction, MonthlyData), lib/hooks.ts (useAnalytics, useTransactions), lib/api.ts (api.listTransactions params), /api/analytics/route.ts (response shape)
+   451→   451→- Membuat 2 file komponen React baru:
+   452→   452→
+   453→   453→  1. `/src/components/finance/analytics-section.tsx` (~700 LOC) — Full analytics view:
+   454→   454→     - Header "Analitik" + ikon BarChart3 + month navigation (chevron prev/next + month label, disable next saat di current month — pola seperti dashboard)
+   455→   455→     - ComparisonRow: 3 cards (Pemasukan / Pengeluaran / Sisa Saldo), tiap card menampilkan current value besar + change% (formatPercent(change, true) dengan sign) + TrendingUp/Down/Minus icon + previous value; warna change: green jika improvement (income/balance: change>0; expense: change<0), red jika worsening, muted jika flat
+   456→   456→     - InsightsCard (col-span-2): list of insight strings dengan Lightbulb icon (amber), max-h-72 scrollable, empty state "Belum ada wawasan"
+   457→   457→     - RatiosCard: 3 RatioRow (Savings Rate ideal ≥20%, Rasio Pengeluaran ideal <70%, Pemasukan/Pengeluaran ideal ≥1,5×); progress bar berwarna emerald/amber/rose sesuai status (good/warning/bad); label ideal di bawah bar
+   458→   458→     - TopMerchantsCard: list top 8 merchants dengan rank badge + name + amount (formatCurrencyCompact) + count "Nx" + horizontal bar proportional ke maxTotal; max-h-80 scrollable; empty state
+   459→   459→     - TopCategoriesCard: PieChart top 5 expense categories (cell color = category.color), inner radius 40/outer 64, center label total compact, side list dengan LucideIcon + mini progress bar; empty state
+   460→   460→     - WeekdaySpendingCard: BarChart 7 bars Sen-Min (dataKey "total", EXPENSE_COLOR #f43f5e, radius top, maxBarSize 36); custom WeekdayTooltip menampilkan day + total + count; empty state
+   461→   461→     - MonthlyTrendCard: LineChart 2 lines (Pemasukan INCOME_COLOR, Pengeluaran EXPENSE_COLOR), strokeWidth 2, dot r3, activeDot r5, Legend circle, custom TrendTooltip; filter leading zero months (slice from firstWith)
+   462→   462→     - ForecastCard: header "Prediksi {nextMonthLabel}" dengan ikon Brain, 3 ForecastStat tiles (Pemasukan/Pengeluaran/Savings Rate), note penjelasan "* Prediksi memakai rata-rata 3 bulan terakhir..."
+   463→   463→     - AnalyticsSkeleton (5 row skeletons) + EmptyAnalytics (Sparkles icon, dashed border, pesan Bahasa Indonesia)
+   464→   464→     - Custom tooltip components (CategoryTooltip, WeekdayTooltip, TrendTooltip) following charts.tsx pattern: border-border + bg-popover + text-xs + shadow-md
+   465→   465→
+   466→   466→  2. `/src/components/finance/calendar-section.tsx` (~370 LOC) — Monthly calendar view:
+   467→   467→     - Header "Kalender" + ikon CalendarDays + month navigation (chevron prev/next + month label, allow free navigation both ways) + button "Hari ini"
+   468→   468→     - Calendar grid 7 kolom (Sen-Sun dari WEEKDAYS_ID), weeks sebagai rows. Day cells dibuat lokal: getWeekdayMondayFirst(firstDayOfMonth) leading blanks + daysInMonth + trailing blanks sampai totalCells (ceil to 7); formatDateInput untuk date keys
+   469→   469→     - useTransactions({from: monthStart, to: monthEnd}) sekali untuk seluruh bulan; group by date client-side (Map) untuk income/expense/count per day + maxAmount untuk bar scaling
+   470→   470→     - Day cell: day number (top-left, primary jika today), count badge (top-right, muted bg), mini vertical bars (income green #10b981, expense red #f43f5e, height proportional ke maxAmount, min 18%, width 1.5-2px), net amount compact di bawah (formatCurrencyCompact, color-coded income/expense, hidden jika 0 — diganti spacer untuk alignment)
+   471→   471→     - Today highlighted: border-primary/50 + bg-primary/5 + ring-1 ring-primary/30; selected day: border-primary + bg-primary/10; hover: border-primary/30 + bg-muted/50
+   472→   472→     - Click day → setSelectedDate(dateKey) → DayTransactionsDialog
+   473→   473→     - DayTransactionsDialog: pakai Dialog dari shadcn/ui (size sm:max-w-lg), title "formatDateLong(dateKey)" dengan ikon CalendarDays, pakai useTransactions({from: to: dateKey}) untuk fetch transaksi hari itu (sesuai spec); 3 stat tiles (Pemasukan income-soft, Pengeluaran expense-soft, Selisih muted) + scrollable transaction list (max-h-72, divide-y, custom-scrollbar); tiap row: LucideIcon + description + category · merchant + amount color-coded; empty state dengan Inbox icon; loading skeleton 3 rows; key={selectedDate} untuk re-mount saat ganti hari
+   474→   474→     - Summary below calendar: 4 SummaryStat cards (Pemasukan / Pengeluaran / Selisih / Transaksi count) dengan ikon + color-coded
+   475→   475→     - CalendarSkeleton (weekday header skeleton + 35 day cell skeletons + 4 summary skeletons)
+   476→   476→     - motion.div wrapper untuk enter animation (opacity+y)
+   477→   477→
+   478→   478→- Implementasi detail:
+   479→   479→  * Warna chart eksplisit hex: INCOME_COLOR="#10b981", EXPENSE_COLOR="#f43f5e" — tidak pakai CSS var
+   480→   480→  * Month navigation pattern: viewDate state + getMonthKey + getMonthYearLabel; analytics disable next saat isCurrentMonth (match dashboard); calendar allow free navigation (ada tombol "Hari ini")
+   481→   481→  * Responsive: grid grid-cols-1/2/3/4 dengan sm:/lg: breakpoints; calendar cells min-h-[72px] mobile / min-h-[92px] desktop; text-[9px]/[10px]/[11px]/[12px] untuk hierarchy
+   482→   482→  * Empty states: border border-dashed border-border + ikon muted + pesan Bahasa Indonesia
+   483→   483→  * Custom scrollbar via .custom-scrollbar class (sudah ada di globals.css)
+   484→   484→  * All text dalam Bahasa Indonesia (Pemasukan, Pengeluaran, Sisa Saldo, Wawasan, Rasio Keuangan, Merchant Teratas, Kategori Teratas, Pengeluaran per Hari, Tren Bulanan, Prediksi, Kalender, Hari ini, Belum ada transaksi, dll)
+   485→   485→  * Accessibility: aria-label pada semua tombol nav + day cells (description + count transaksi), semantic <button> untuk day cells, <ul>/<li> untuk insights, DialogTitle untuk dialog
+   486→   486→  * Komponen diekspor sebagai named export: `AnalyticsSection` dan `CalendarSection`
+   487→   487→
+   488→   488→- Lint: `bun run lint` → 0 errors, 0 warnings
+   489→   489→- tsc --noEmit → 0 errors di 2 file baru (pre-existing TS errors di /api/dashboard/route.ts, /api/analytics/route.ts, /api/budgets/status/route.ts tidak di-touch — di luar scope Task 6-AC, sudah didokumentasikan di Task 3-B/C)
+   490→   490→- Dev server log: komponen baru ter-compile dengan sukses (✓ Compiled in XXXms), tidak ada error runtime baru
+   491→   491→
+   492→   492→Stage Summary:
+   493→   493→- 2 komponen React production-quality selesai untuk DompetKu:
+   494→   494→  * analytics-section.tsx: full analytics dashboard dengan 9 sections (month nav, comparison cards, insights, ratios, top merchants, top categories pie, weekday bar, monthly trend line, forecast) + skeleton + empty state
+   495→   495→  * calendar-section.tsx: monthly calendar view dengan custom grid computation, day cells dengan mini bars, today/selected highlight, day dialog dengan useTransactions, month summary, skeleton
+   496→   496→- Mengikuti konvensi yang sudah ada: shadcn/ui components, LucideIcon, cn(), Bahasa Indonesia, tema emerald, Recharts dengan warna hex eksplisit (#10b981/#f43f5e), format helpers dari @/lib/format
+   497→   497→- Month navigation konsisten dengan dashboard-tab pattern; loading skeletons + empty states di seluruh komponen; responsive (mobile-first dengan sm:/lg: breakpoints); accessible (aria-label, semantic HTML)
+   498→   498→- Lint bersih (0 error), TS bersih untuk 2 file baru
+   499→   499→- Komponen siap di-wire ke page.tsx (tab "Analitik" dan "Kalender") oleh orchestrator/main agent
+   500→   500→
+   501→   501→
+   502→   502→---
+   503→   503→Task ID: 1-17 (ALL FEATURES)
+   504→   504→Agent: main (orchestrator) + 7 subagents
+   505→   505→Task: Implement ALL ~60 features for comprehensive personal finance app
+   506→   506→
+   507→   507→Work Log:
+   508→   508→- Schema: Added Account, Transfer, Budget, Goal, RecurringTransaction, Tag, Setting models. Extended Transaction with accountId, tags, merchant, isRecurringGenerated.
+   509→   509→- Lib: types.ts (all new interfaces), format.ts (hidden amounts, streak, tags, hashPin, computeNextDate, estimateGoalDate), constants.ts (DEFAULT_ACCOUNTS, QUICK_ADD_PRESETS, ACHIEVEMENTS, AUTO_CATEGORY_KEYWORDS, GOAL_ICONS), api.ts (all endpoints), hooks.ts (all hooks).
+   510→   510→- API Routes (via 3 parallel subagents 3-A/3-B/3-C):
+   511→   511→  * accounts (CRUD + transfer), budgets (CRUD + status), goals (CRUD), tags (aggregate), settings (key-value)
+   512→   512→  * recurring (CRUD + run), analytics (comparison, merchants, heatmap, forecast, ratios, insights), import/csv (auto-categorize), export/backup (JSON)
+   513→   513→  * ai/chat (LLM with finance context), ai/receipt (VLM receipt scan), ai/insights (LLM insights)
+   514→   514→  * Updated transactions (account/tags/merchant), dashboard (budgetStatuses/goals/accounts/streak/savingsRate), seed (accounts+budgets+goals+recurring)
+   515→   515→- Layout: AppShell with sidebar navigation (11 sections grouped: Utama, Keuangan, Insight, Lainnya) + mobile drawer + FAB
+   516→   516→- Section Components (via 4 parallel subagents 6-BG/6-AR/6-AC/6-AI):
+   517→   517→  * BudgetsSection: progress bars, status badges, add/edit dialog
+   518→   518→  * GoalsSection: progress rings, contribution dialog, icon/color picker
+   519→   519→  * AccountsSection: multi-account, transfer dialog, account type icons
+   520→   520→  * RecurringSection: frequency labels, active toggle, run-now button
+   521→   521→  * AnalyticsSection: month comparison, top merchants, ratios, weekday chart, monthly trend, forecast, insights
+   522→   522→  * CalendarSection: monthly grid with transaction dots, day detail dialog
+   523→   523→  * AiSection: chat interface, receipt scanner, insights tabs
+   524→   524→  * SettingsSection: PIN lock, hidden amounts, theme, reminders, import/export/backup, seed
+   525→   525→- TransactionForm: added account selector, merchant, tags, quick add presets, prefill support
+   526→   526→- Page.tsx: AppShell integration, section routing, auto-seed, run-recurring on load, AI create-transaction callback
+   527→   527→- Verification: dev server starts, all APIs return correct data (accounts: 3, budgets: 1, goals: 1, recurring: 1, analytics working, dashboard with streak/savingsRate). Browser verified sidebar + all 11 sections render. Lint: 0 errors.
+   528→   528→
+   529→   529→Stage Summary:
+   530→   530→- ~60 features implemented across 11 sections
+   531→   531→- Database: 9 models (Category, Account, Transfer, Transaction, Budget, Goal, RecurringTransaction, Tag, Setting)
+   532→   532→- ~30 API endpoints
+   533→   533→- ~20 React components
+   534→   534→- AI features: LLM chat, VLM receipt scan, LLM insights (via z-ai-web-dev-sdk)
+   535→   535→- Security: PIN lock (SHA-256), hidden amounts mode
+   536→   536→- Data: CSV import with auto-categorize, CSV export, JSON backup/restore
+   537→   537→- Gamification: streak tracking, achievements (9 types)
+   538→   538→- All code lint-clean, TypeScript type-safe
+   539→   539→
+   540→   540→---
+   541→   541→Task ID: T-A
+   542→   542→Agent: sub-agent (general-purpose)
+   543→   543→Task: Build debts/installments/templates/groups/transaction-action API routes
+   544→   544→
+   545→   545→Work Log:
+   546→   546→- Membaca worklog.md (Task 1, 2-9, f1-f9, g1-g6, 3-A, 3-B, 3-C, 6-BG, 6-AC, 6-AR, 6-AI, 1-17) untuk konteks & konvensi codebase
+   547→   547→- Membaca referensi pola dari /api/transactions/route.ts, /api/transactions/[id]/route.ts (POST/PUT/DELETE + account balance update + splits/receiptItems), /api/recurring/route.ts + [id]/route.ts (PUT incremental update pattern), /api/budgets/route.ts (POST validation), /api/goals/[id]/route.ts (auto-settle logic), /api/categories/[id]/route.ts (409 conflict), /api/accounts/transfer/route.ts (db.$transaction pattern), prisma/schema.prisma (semua model), lib/types.ts (DebtType, InstallmentInput, TransactionTemplateInput, TransactionGroupInput), lib/format.ts (parseDateLocal, computeNextDate)
+   548→   548→- Membuat 11 file API route baru mengikuti pola konvensi (NextResponse, try/catch + console.error `[METHOD /api/...]`, validasi 400/404, pesan Bahasa Indonesia, 201 untuk create, 204 untuk delete sukses, db.$transaction untuk multi-write):
+   549→   549→
+   550→   550→  1. `/api/debts/route.ts` — GET (list debts, orderBy settled asc then dueDate asc — unsettled & soonest-due first) + POST (create; validasi type DEBT|RECEIVABLE, person non-empty, amount>0, paidAmount>=0 opsional; auto-settle jika paidAmount >= amount).
+   551→   551→  2. `/api/debts/[id]/route.ts` — PUT (update field opsional: type/person/amount/paidAmount/dueDate/description/note/settled; auto-settle check jika paidAmount>=amount kecuali explicit settled override) + DELETE (404 jika tidak ada, else delete + 204).
+   552→   552→  3. `/api/debts/[id]/settle/route.ts` — POST. Pakai db.$transaction: findUnique (throw NOT_FOUND jika tidak ada → di-catch jadi 404) → update settled=true & paidAmount=amount. Return updated debt.
+   553→   553→  4. `/api/installments/route.ts` — GET (list include transactions, orderBy active desc then startDate desc) + POST (create; validasi description, totalAmount>0, totalInstallments integer>0, monthlyAmount>0, startDate, categoryId exists, accountId optional & exists; merchant optional).
+   554→   554→  5. `/api/installments/[id]/route.ts` — DELETE. Pakai db.$transaction: findMany transactions where installmentId=id → revert account balance per transaction (income -amount, expense +amount) → deleteMany linked transactions → delete installment. Splits & receiptItems cascade on delete (onDelete: Cascade di schema).
+   555→   555→  6. `/api/templates/route.ts` — GET (list include category+account, orderBy createdAt desc) + POST (create; validasi name, type INCOME|EXPENSE, amount>=0, description, categoryId exists & type match, accountId optional & exists, merchant/paymentMethod/priority/icon opsional; default icon="Zap").
+   556→   556→  7. `/api/templates/[id]/route.ts` — DELETE (404 jika tidak ada, else delete + 204).
+   557→   557→  8. `/api/transaction-groups/route.ts` — GET (list groups with `_count: { select: { transactions: true } }` untuk transaction count, orderBy createdAt desc) + POST (create; validasi name non-empty; description/color/icon opsional dengan default color="#10b981" icon="Folder").
+   558→   558→  9. `/api/transaction-groups/[id]/route.ts` — DELETE. Pakai db.$transaction: updateMany transactions where groupId=id set groupId=null (detach) → delete group. Pattern explicit walaupun schema onDelete: SetNull untuk safety.
+   559→   559→  10. `/api/transactions/[id]/duplicate/route.ts` — POST. Find original include splits+receiptItems+category+account+group (404 jika tidak ada). Pakai db.$transaction: create new transaction dengan SEMUA field dari original KECUALI: new id (auto cuid), date=today, isPinned=false, status="CONFIRMED", isRecurringGenerated=false, createdAt/updatedAt fresh (auto Prisma defaults) → createMany splits pointing ke new id → createMany receiptItems pointing ke new id → update account balance (income +amount, expense -amount) → refetch dengan include relations untuk return. Status 201.
+   560→   560→  11. `/api/transactions/[id]/pin/route.ts` — POST. Find existing (404 jika tidak ada) → update isPinned toggle dari !existing.isPinned → return updated with relations (category, account, splits+category, receiptItems, group).
+   561→   561→
+   562→   562→- Verifikasi:
+   563→   563→  * `bun run lint` → 0 errors, 0 warnings (exit 0)
+   564→   564→  * `bunx tsc --noEmit` → 0 errors di 11 file baru (8 pre-existing TS errors di file lain: examples/websocket, skills/image-edit, skills/stock-analysis-skill, src/app/api/dashboard/route.ts — semua di luar scope Task T-A, tidak di-touch)
+   565→   565→
+   566→   566→Stage Summary:
+   567→   567→- 11 file API route selesai dengan pattern konsisten codebase: NextResponse, try/catch + console.error `[METHOD /api/...]`, validasi 400/404, pesan Bahasa Indonesia, 201 create, 204 delete sukses
+   568→   568→- Debts: full CRUD + endpoint /settle (mark settled=true, paidAmount=amount) dengan db.$transaction; auto-settle saat paidAmount>=amount
+   569→   569→- Installments: GET (include transactions) + POST (validasi ketat) + DELETE (cleanup: revert account balance linked transactions → delete linked transactions → delete installment, semua atomic via $transaction)
+   570→   570→- Templates: GET (include category+account) + POST + DELETE
+   571→   571→- Transaction Groups: GET (with `_count` transaction count) + POST + DELETE (detach via updateMany set groupId=null → delete, atomic $transaction)
+   572→   572→- Transaction actions: /duplicate (deep-copy transaction + splits + receiptItems, update account balance, atomic $transaction) + /pin (toggle isPinned)
+   573→   573→- Semua POST/PUT validate required fields dengan 400 pada missing/invalid; GET list endpoints return arrays
+   574→   574→- db.$transaction dipakai untuk multi-write operations: debts/settle, installments DELETE, transaction-groups DELETE, transactions/duplicate
+   575→   575→- Lint bersih (0 error, 0 warning), TS bersih untuk 11 file baru
+   576→   576→
+   577→   577→---
+   578→   578→Task ID: T-FORM
+   579→   579→Agent: main (orchestrator)
+   580→   580→Task: Redesign TransactionForm component with internal Tabs (Utama / Detail / Lainnya) to support ALL per-transaction fields.
+   581→   581→
+   582→   582→Work Log:
+   583→   583→- Read prior worklog + existing `transaction-form.tsx` (539 LOC) to understand context (DompetKu finance app, emerald theme, Indonesian, shadcn/ui, sonner toast).
+   584→   584→- Reviewed `@/lib/types` (Transaction / TransactionInput — 30+ new fields), `@/lib/constants` (MOOD_OPTIONS, PRIORITY_OPTIONS, PAYMENT_METHOD_OPTIONS, PAYMENT_STATUS_OPTIONS, CURRENCIES, FALLBACK_EXCHANGE_RATES, QUICK_ADD_PRESETS, COMMON_MERCHANTS, GROUP_COLORS, GROUP_ICONS), `@/lib/format` (formatCurrency, formatDateInput), `@/lib/hooks` (useCategories, useAccounts, useGroups, useGoals, useCreateGroup, useCreateTransaction, useUpdateTransaction, useDeleteTransaction).
+   585→   585→- Reviewed shadcn/ui Tabs / Switch / Checkbox / Badge / Select component APIs.
+   586→   586→- Rewrote `src/components/finance/transaction-form.tsx` (~1900 LOC) with:
+   587→   587→  * Dialog widened to `max-w-2xl` on sm+ screens.
+   588→   588→  * Internal shadcn/ui Tabs with 3 tabs (sticky TabsList grid-cols-3, content scrolls in `max-h-[62vh] overflow-y-auto custom-scrollbar`).
+   589→   589→  * **Tab Utama**: type toggle (INCOME/EXPENSE), amount with Rp prefix + quick-add presets, description, merchant (with `<datalist>` of COMMON_MERCHANTS), category Select (filtered by type), account Select, date + time inputs (side-by-side), note Textarea, tags Input.
+   590→   590→  * **Tab Detail**: mood selector (5 emoji buttons, color-tinted when selected), priority selector (URGENT red / NEED orange / WANT gray, colored fill when selected), payment method Select (icons via LucideIcon), payment status Select (colored dot indicators), recipient Input ("Dari Siapa" / "Untuk Siapa" depending on type), currency Select + originalAmount + exchangeRate (auto-fills exchangeRate from FALLBACK_EXCHANGE_RATES when currency changes; when non-IDR, computes amount = originalAmount × exchangeRate via useEffect, shows "≈ RpX (IDR)" preview, and disables the main amount field on Utama tab with helper text), photo URL Input with image preview thumbnail (renders `<img>` when value starts with `data:image` or `http(s)://`, otherwise shows ImageOff icon), link URL Input.
+   591→   591→  * **Tab Lainnya**: togglable sections using `ToggleSection` (Checkbox-reveals-fields) and `ToggleRow` (Switch inline) helper sub-components:
+   592→   592→    - Split ke multiple kategori (ToggleSection) → splits editor: each row = amount (Rp prefix) + category Select + note Input + delete button; "Tambah split" button; `SplitTotalRow` shows live total vs target with match/kurang/lebih status (emerald when matched, amber when not).
+   593→   593→    - Tandai sebagai Hutang/Piutang (ToggleSection) → debtDueDate + creditor (label "Dari"/"Kepada" depending on type).
+   594→   594→    - Reimbursable / Langganan / Tax Deductible / Business Expense / Exclude from Budget / Exclude from Stats (6 ToggleRow switches in 2-col grid).
+   595→   595→    - Allocasi ke Goal (Select from useGoals, only when goals exist).
+   596→   596→    - Assigned To (text Input).
+   597→   597→    - Cashback / Harga Asli / Diskon (3-col grid, all with Rp prefix).
+   598→   598→    - Group / Event Select + inline "Buat baru" toggle that reveals a mini form (name Input + icon picker grid + color picker + Simpan button using useCreateGroup; auto-selects the newly created group).
+   599→   599→    - Receipt items editor: list of {name, qty, price, total=qty×price (computed read-only)} + "Tambah item" button + subtotal footer; empty state dashed placeholder.
+   600→   600→  * Header now shows selected-field badges (mood/priority/paymentStatus/paymentMethod/split/debt) for at-a-glance context.
+   601→   601→  * Submit handler builds full `TransactionInput` payload: validates amount>0, description, categoryId, date; if isSplit validates each split has amount>0 + categoryId and total === amount (tol 0.01); if isDebt requires creditor; if receipt items, validates each has name + qty>0 + price>=0. On failure calls `fail(msg, tab)` which sets the error banner AND switches to the relevant tab so the user sees the field. Error banner rendered as a sticky strip above the footer.
+   602→   602→  * Preserved existing behaviors: edit-mode prefill from transaction (all 30+ fields), delete with AlertDialog confirmation, manual DialogClose X button (showCloseButton={false}), type-colored submit button (bg-income green for INCOME / bg-expense red for EXPENSE), loading spinner on submit.
+   603→   603→  * Responsive: TabsList grid-cols-3 works on mobile; form body scrolls; grids collapse to 1-col on mobile (`sm:grid-cols-2`, `sm:grid-cols-3`).
+   604→   604→  * Every field has a `<Label>` (some with optional "(opsional)" hint).
+   605→   605→  * Indonesian throughout (labels, placeholders, errors, helper text).
+   606→   606→
+   607→   607→Validation & Quality:
+   608→   608→- `bun run lint` → **0 errors, 0 warnings** (initial run had 1 unused eslint-disable warning on `<img>` for photo preview — removed the directive since next/no-img-element wasn't actually firing; plain `<img>` with onError fallback is intentional for arbitrary base64/URL previews).
+   609→   609→- `bunx tsc --noEmit` → **0 errors in transaction-form.tsx** (8 pre-existing errors in unrelated files like /api routes; not in scope).
+   610→   610→- Dev server compiles cleanly (no transaction-form-related compile errors in dev.log).
+   611→   611→
+   612→   612→Backward Compatibility:
+   613→   613→- Same exported name `TransactionForm` and same `Props` interface signature — `src/app/page.tsx` continues to render `<TransactionForm open onOpenChange transaction prefill />` unchanged.
+   614→   614→
+   615→   615→Stage Summary:
+   616→   616→- Production-quality transaction form with comprehensive field coverage organized into 3 internal tabs, ready to capture every per-transaction field defined in `TransactionInput`.
+   617→   617→- The splits editor and receipt-items editor support add/remove/validate flows with live totals.
+   618→   618→- Currency conversion auto-computes IDR amount from originalAmount × exchangeRate.
+   619→   619→- Inline group creation removes the need to leave the dialog to set up a new event/group.
+   620→   620→

@@ -18,6 +18,8 @@ import {
   Moon,
   Sun,
   X,
+  HandCoins,
+  Zap,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -38,6 +40,8 @@ export type SectionId =
   | "goals"
   | "accounts"
   | "recurring"
+  | "debts"
+  | "templates"
   | "calendar"
   | "analytics"
   | "ai"
@@ -69,6 +73,8 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "goals", label: "Target", icon: <Target className="h-4 w-4" /> },
       { id: "accounts", label: "Akun", icon: <Landmark className="h-4 w-4" /> },
       { id: "recurring", label: "Berulang", icon: <RefreshCw className="h-4 w-4" /> },
+      { id: "debts", label: "Hutang & Piutang", icon: <HandCoins className="h-4 w-4" /> },
+      { id: "templates", label: "Template", icon: <Zap className="h-4 w-4" /> },
     ],
   },
   {

@@ -10,16 +10,21 @@ import type {
   AccountInput,
   BudgetInput,
   CategoryInput,
+  DebtInput,
   GoalInput,
+  InstallmentInput,
   RecurringInput,
+  TransactionGroupInput,
   TransactionInput,
+  TransactionTemplateInput,
   TransferInput,
 } from "@/lib/types";
 
 export const queryKeys = {
   transactions: ["transactions"] as const,
-  transactionsList: (params?: Record<string, string | number | undefined>) =>
-    ["transactions", "list", params] as const,
+  transactionsList: (
+    params?: Record<string, string | number | boolean | undefined>
+  ) => ["transactions", "list", params] as const,
   categories: (type?: string) => ["categories", type] as const,
   accounts: ["accounts"] as const,
   budgets: ["budgets"] as const,
@@ -36,6 +41,7 @@ export const queryKeys = {
 
 // ---------- Transactions ----------
 export function useTransactions(params?: {
+  // API-supported filters (sent to /api/transactions)
   type?: string;
   categoryId?: string;
   accountId?: string;
@@ -44,10 +50,28 @@ export function useTransactions(params?: {
   to?: string;
   tag?: string;
   limit?: number;
+  // Client-side filters (not sent to API — used for cache key + client filtering)
+  mood?: string;
+  priority?: string;
+  paymentMethod?: string;
+  pinned?: boolean;
+  reimbursable?: boolean;
+  debt?: boolean;
+  subscription?: boolean;
 }) {
   return useQuery({
     queryKey: queryKeys.transactionsList(params),
-    queryFn: () => api.listTransactions(params),
+    queryFn: () =>
+      api.listTransactions({
+        type: params?.type,
+        categoryId: params?.categoryId,
+        accountId: params?.accountId,
+        search: params?.search,
+        from: params?.from,
+        to: params?.to,
+        tag: params?.tag,
+        limit: params?.limit,
+      }),
   });
 }
 
@@ -401,6 +425,151 @@ export function useRunRecurring() {
       qc.invalidateQueries({ queryKey: queryKeys.transactions });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard });
       qc.invalidateQueries({ queryKey: queryKeys.accounts });
+    },
+  });
+}
+
+// ---------- Debts ----------
+export function useDebts() {
+  return useQuery({
+    queryKey: ["debts"] as const,
+    queryFn: () => api.listDebts(),
+  });
+}
+
+export function useCreateDebt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DebtInput) => api.createDebt(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+  });
+}
+
+export function useUpdateDebt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<DebtInput> }) =>
+      api.updateDebt(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+  });
+}
+
+export function useDeleteDebt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteDebt(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+  });
+}
+
+export function useSettleDebt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.settleDebt(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["debts"] });
+      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+    },
+  });
+}
+
+// ---------- Installments ----------
+export function useInstallments() {
+  return useQuery({
+    queryKey: ["installments"] as const,
+    queryFn: () => api.listInstallments(),
+  });
+}
+
+export function useCreateInstallment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: InstallmentInput) => api.createInstallment(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["installments"] });
+      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+    },
+  });
+}
+
+export function useDeleteInstallment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteInstallment(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["installments"] }),
+  });
+}
+
+// ---------- Transaction Templates ----------
+export function useTemplates() {
+  return useQuery({
+    queryKey: ["templates"] as const,
+    queryFn: () => api.listTemplates(),
+  });
+}
+
+export function useCreateTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: TransactionTemplateInput) => api.createTemplate(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+  });
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteTemplate(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+  });
+}
+
+// ---------- Transaction Groups ----------
+export function useGroups() {
+  return useQuery({
+    queryKey: ["transaction-groups"] as const,
+    queryFn: () => api.listGroups(),
+  });
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: TransactionGroupInput) => api.createGroup(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["transaction-groups"] }),
+  });
+}
+
+export function useDeleteGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteGroup(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transaction-groups"] });
+      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+    },
+  });
+}
+
+// ---------- Transaction actions ----------
+export function useDuplicateTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.duplicateTransaction(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+export function useTogglePin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.togglePin(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
     },
   });
 }

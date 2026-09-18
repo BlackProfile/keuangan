@@ -2,10 +2,17 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import {
+  Camera,
+  Copy,
   Download,
+  Eye,
   Inbox,
+  Loader2,
+  MoreVertical,
   Pencil,
+  Pin,
   Search,
   SlidersHorizontal,
   X,
@@ -26,6 +33,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LucideIcon } from "@/components/lucide-icon";
@@ -33,11 +47,22 @@ import { cn } from "@/lib/utils";
 import {
   formatCurrency,
   formatDateLong,
+  parseTags,
   relativeDay,
 } from "@/lib/format";
 import { api } from "@/lib/api";
-import { useCategories, useTransactions } from "@/lib/hooks";
+import {
+  useCategories,
+  useDuplicateTransaction,
+  useTogglePin,
+  useTransactions,
+} from "@/lib/hooks";
 import type { Transaction, TransactionType } from "@/lib/types";
+import {
+  MOOD_OPTIONS,
+  PAYMENT_METHOD_OPTIONS,
+  PRIORITY_OPTIONS,
+} from "@/lib/constants";
 
 interface Props {
   onEdit: (t: Transaction) => void;
@@ -56,11 +81,24 @@ export function TransactionList({
   emptyTitle = "Belum ada transaksi",
   emptyDescription = "Mulai catat pemasukan dan pengeluaran Anda.",
 }: Props) {
+  // Existing filters
   const [search, setSearch] = React.useState("");
   const [type, setType] = React.useState<TypeFilter>("ALL");
   const [categoryId, setCategoryId] = React.useState<string>("ALL");
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
+
+  // New filters
+  const [mood, setMood] = React.useState<string>("ALL");
+  const [priority, setPriority] = React.useState<string>("ALL");
+  const [paymentMethod, setPaymentMethod] = React.useState<string>("ALL");
+
+  // "Hanya" toggle chips
+  const [onlyLunasPending, setOnlyLunasPending] = React.useState(false);
+  const [onlyPinned, setOnlyPinned] = React.useState(false);
+  const [onlyReimbursable, setOnlyReimbursable] = React.useState(false);
+  const [onlyDebt, setOnlyDebt] = React.useState(false);
+  const [onlySubscription, setOnlySubscription] = React.useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
@@ -74,16 +112,61 @@ export function TransactionList({
       from: from || undefined,
       to: to || undefined,
       limit,
+      // Client-side filter params (used as cache key + filtered locally)
+      mood: mood === "ALL" ? undefined : mood,
+      priority: priority === "ALL" ? undefined : priority,
+      paymentMethod: paymentMethod === "ALL" ? undefined : paymentMethod,
+      pinned: onlyPinned || undefined,
+      reimbursable: onlyReimbursable || undefined,
+      debt: onlyDebt || undefined,
+      subscription: onlySubscription || undefined,
     }),
-    [type, categoryId, debouncedSearch, from, to, limit]
+    [
+      type,
+      categoryId,
+      debouncedSearch,
+      from,
+      to,
+      limit,
+      mood,
+      priority,
+      paymentMethod,
+      onlyPinned,
+      onlyReimbursable,
+      onlyDebt,
+      onlySubscription,
+    ]
   );
 
-  const { data: transactions, isLoading, isFetching } = useTransactions(params);
+  const { data: rawTransactions, isLoading, isFetching } =
+    useTransactions(params);
+
+  // Client-side filtering for new attributes
+  const transactions = React.useMemo(() => {
+    const list = rawTransactions ?? [];
+    if (!onlyLunasPending && mood === "ALL" && priority === "ALL" && paymentMethod === "ALL") {
+      return list;
+    }
+    return list.filter((t) => {
+      if (mood !== "ALL" && t.mood !== mood) return false;
+      if (priority !== "ALL" && t.priority !== priority) return false;
+      if (paymentMethod !== "ALL" && t.paymentMethod !== paymentMethod) return false;
+      if (onlyLunasPending) {
+        if (t.paymentStatus !== "PAID" && t.paymentStatus !== "PENDING") return false;
+      }
+      return true;
+    });
+  }, [
+    rawTransactions,
+    mood,
+    priority,
+    paymentMethod,
+    onlyLunasPending,
+  ]);
 
   const grouped = React.useMemo(() => {
-    const list = transactions ?? [];
     const map = new Map<string, Transaction[]>();
-    for (const t of list) {
+    for (const t of transactions) {
       const key = relativeDay(t.date);
       const arr = map.get(key) ?? [];
       arr.push(t);
@@ -92,17 +175,29 @@ export function TransactionList({
     return Array.from(map.entries());
   }, [transactions]);
 
-  const total = transactions?.length ?? 0;
-  const totalIncome = (transactions ?? [])
+  const total = transactions.length;
+  const totalIncome = transactions
     .filter((t) => t.type === "INCOME")
     .reduce((s, t) => s + t.amount, 0);
-  const totalExpense = (transactions ?? [])
+  const totalExpense = transactions
     .filter((t) => t.type === "EXPENSE")
     .reduce((s, t) => s + t.amount, 0);
   const totalBalance = totalIncome - totalExpense;
 
   const hasActiveFilters =
-    !!debouncedSearch || type !== "ALL" || categoryId !== "ALL" || from || to;
+    !!debouncedSearch ||
+    type !== "ALL" ||
+    categoryId !== "ALL" ||
+    !!from ||
+    !!to ||
+    mood !== "ALL" ||
+    priority !== "ALL" ||
+    paymentMethod !== "ALL" ||
+    onlyLunasPending ||
+    onlyPinned ||
+    onlyReimbursable ||
+    onlyDebt ||
+    onlySubscription;
 
   function clearFilters() {
     setSearch("");
@@ -110,6 +205,14 @@ export function TransactionList({
     setCategoryId("ALL");
     setFrom("");
     setTo("");
+    setMood("ALL");
+    setPriority("ALL");
+    setPaymentMethod("ALL");
+    setOnlyLunasPending(false);
+    setOnlyPinned(false);
+    setOnlyReimbursable(false);
+    setOnlyDebt(false);
+    setOnlySubscription(false);
   }
 
   function handleExport() {
@@ -118,7 +221,6 @@ export function TransactionList({
       from: from || undefined,
       to: to || undefined,
     });
-    // Trigger download
     const a = document.createElement("a");
     a.href = url;
     a.download = "";
@@ -129,9 +231,9 @@ export function TransactionList({
 
   return (
     <div className="space-y-4">
-      {/* Summary strip — total for current filter */}
+      {/* Summary strip — totals for current filter */}
       {showFilters && total > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <SummaryStat
             label="Pemasukan"
             value={totalIncome}
@@ -150,6 +252,7 @@ export function TransactionList({
             variant={totalBalance >= 0 ? "income" : "expense"}
             loading={isLoading}
           />
+          <SummaryCount label="Transaksi" value={total} loading={isLoading} />
         </div>
       )}
 
@@ -204,6 +307,64 @@ export function TransactionList({
                           style={{ color: c.color }}
                         />
                         {c.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={mood} onValueChange={setMood}>
+                <SelectTrigger className="h-9 w-[130px]">
+                  <SelectValue placeholder="Mood" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="ALL">Semua mood</SelectItem>
+                  {MOOD_OPTIONS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      <span className="flex items-center gap-2">
+                        <span aria-hidden>{m.emoji}</span>
+                        {m.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger className="h-9 w-[140px]">
+                  <SelectValue placeholder="Prioritas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Semua prioritas</SelectItem>
+                  {PRIORITY_OPTIONS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: p.color }}
+                          aria-hidden
+                        />
+                        {p.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger className="h-9 w-[140px]">
+                  <SelectValue placeholder="Pembayaran" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Semua pembayaran</SelectItem>
+                  {PAYMENT_METHOD_OPTIONS.map((pm) => (
+                    <SelectItem key={pm.value} value={pm.value}>
+                      <span className="flex items-center gap-2">
+                        <LucideIcon
+                          name={pm.icon}
+                          className="h-3.5 w-3.5 text-muted-foreground"
+                        />
+                        {pm.label}
                       </span>
                     </SelectItem>
                   ))}
@@ -289,6 +450,44 @@ export function TransactionList({
             </div>
           </div>
 
+          {/* "Hanya" toggle chips */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+            <span className="text-xs font-medium text-muted-foreground">
+              Hanya:
+            </span>
+            <ToggleChip
+              active={onlyLunasPending}
+              onClick={() => setOnlyLunasPending((v) => !v)}
+            >
+              Lunas/Pending
+            </ToggleChip>
+            <ToggleChip
+              active={onlyPinned}
+              onClick={() => setOnlyPinned((v) => !v)}
+            >
+              <Pin className="h-3 w-3" />
+              Disematkan
+            </ToggleChip>
+            <ToggleChip
+              active={onlyReimbursable}
+              onClick={() => setOnlyReimbursable((v) => !v)}
+            >
+              Reimbursable
+            </ToggleChip>
+            <ToggleChip
+              active={onlyDebt}
+              onClick={() => setOnlyDebt((v) => !v)}
+            >
+              Hutang
+            </ToggleChip>
+            <ToggleChip
+              active={onlySubscription}
+              onClick={() => setOnlySubscription((v) => !v)}
+            >
+              Langganan
+            </ToggleChip>
+          </div>
+
           {/* Result summary */}
           {total > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-3 text-xs">
@@ -320,6 +519,7 @@ export function TransactionList({
               const dayExpense = items
                 .filter((t) => t.type === "EXPENSE")
                 .reduce((s, t) => s + t.amount, 0);
+              const hasPinned = items.some((t) => t.isPinned);
               return (
                 <motion.div
                   key={day}
@@ -330,8 +530,11 @@ export function TransactionList({
                   className="space-y-2"
                 >
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {day}
+                      {hasPinned && (
+                        <Pin className="h-3 w-3 fill-primary text-primary" />
+                      )}
                     </span>
                     <div className="flex items-center gap-2 text-xs">
                       {dayIncome > 0 && (
@@ -344,7 +547,10 @@ export function TransactionList({
                           −{formatCurrency(dayExpense)}
                         </span>
                       )}
-                      <Badge variant="secondary" className="text-[10px] font-normal">
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] font-normal"
+                      >
                         {items.length}
                       </Badge>
                     </div>
@@ -367,6 +573,10 @@ export function TransactionList({
     </div>
   );
 }
+
+// ----------------------------------------------------------------------------
+// Sub-components
+// ----------------------------------------------------------------------------
 
 function SummaryStat({
   label,
@@ -403,6 +613,57 @@ function SummaryStat({
   );
 }
 
+function SummaryCount({
+  label,
+  value,
+  loading,
+}: {
+  label: string;
+  value: number;
+  loading?: boolean;
+}) {
+  return (
+    <Card className="p-3 sm:p-4">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+        {label}
+      </p>
+      {loading ? (
+        <Skeleton className="mt-1.5 h-5 w-12" />
+      ) : (
+        <p className="mt-1 text-sm font-bold tabular-nums text-foreground sm:text-base">
+          {value}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function ToggleChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={active ? "default" : "outline"}
+      size="sm"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "h-7 gap-1 rounded-full px-2.5 text-xs",
+        !active && "text-muted-foreground"
+      )}
+    >
+      {children}
+    </Button>
+  );
+}
+
 function TransactionRow({
   transaction,
   onEdit,
@@ -410,10 +671,61 @@ function TransactionRow({
   transaction: Transaction;
   onEdit: () => void;
 }) {
+  const duplicateMut = useDuplicateTransaction();
+  const pinMut = useTogglePin();
+
   const isIncome = transaction.type === "INCOME";
   const cat = transaction.category;
+
+  const moodOpt = transaction.mood
+    ? MOOD_OPTIONS.find((o) => o.value === transaction.mood)
+    : null;
+  const priorityOpt = transaction.priority
+    ? PRIORITY_OPTIONS.find((o) => o.value === transaction.priority)
+    : null;
+  const paymentOpt = transaction.paymentMethod
+    ? PAYMENT_METHOD_OPTIONS.find((o) => o.value === transaction.paymentMethod)
+    : null;
+
+  const tags = parseTags(transaction.tags);
+
+  const flags: Array<{ label: string; color: string }> = [];
+  if (transaction.isDebt) flags.push({ label: "Hutang", color: "#ef4444" });
+  if (transaction.isReimbursable)
+    flags.push({ label: "Reimbursable", color: "#0891b2" });
+  if (transaction.isSubscription)
+    flags.push({ label: "Langganan", color: "#a855f7" });
+  if (transaction.isBusinessExpense)
+    flags.push({ label: "Bisnis", color: "#f97316" });
+  if (transaction.isTaxDeductible)
+    flags.push({ label: "Pajak", color: "#6b7280" });
+  if (transaction.isSplit) flags.push({ label: "Split", color: "#14b8a6" });
+
+  const hasFlagsRow = flags.length > 0 || tags.length > 0 || !!transaction.photoUrl;
+
+  function handleDuplicate() {
+    duplicateMut.mutate(transaction.id, {
+      onSuccess: () => toast.success("Transaksi berhasil diduplikat."),
+      onError: (e) => toast.error(e.message ?? "Gagal menduplikat transaksi."),
+    });
+  }
+
+  function handleTogglePin() {
+    pinMut.mutate(transaction.id, {
+      onSuccess: (updated) =>
+        toast.success(
+          updated.isPinned
+            ? "Transaksi disematkan."
+            : "Sematan dilepas."
+        ),
+      onError: (e) =>
+        toast.error(e.message ?? "Gagal mengubah sematan transaksi."),
+    });
+  }
+
   return (
     <div className="group flex items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4">
+      {/* Category icon (with optional pinned ring) */}
       <span
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
         style={{ backgroundColor: cat ? `${cat.color}1a` : undefined }}
@@ -424,17 +736,101 @@ function TransactionRow({
           style={{ color: cat?.color }}
         />
       </span>
+
+      {/* Main content */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">
-          {transaction.description}
-        </p>
+        {/* Title row: description + mood emoji + priority dot + payment icon + pin */}
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-sm font-medium text-foreground">
+            {transaction.description}
+          </p>
+          {moodOpt && (
+            <span
+              className="shrink-0 text-xs"
+              title={`Mood: ${moodOpt.label}`}
+              aria-label={`Mood: ${moodOpt.label}`}
+            >
+              {moodOpt.emoji}
+            </span>
+          )}
+          {priorityOpt && (
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: priorityOpt.color }}
+              title={`Prioritas: ${priorityOpt.label}`}
+              aria-label={`Prioritas: ${priorityOpt.label}`}
+            />
+          )}
+          {paymentOpt && (
+            <LucideIcon
+              name={paymentOpt.icon}
+              className="h-3 w-3 shrink-0 text-muted-foreground"
+              aria-label={`Pembayaran: ${paymentOpt.label}`}
+            />
+          )}
+          {transaction.isPinned && (
+            <Pin
+              className="h-3 w-3 shrink-0 fill-primary text-primary"
+              aria-label="Disematkan"
+            />
+          )}
+        </div>
+
+        {/* Category + date row */}
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
           {cat?.name ?? "Tanpa kategori"}
           <span className="mx-1 text-border">·</span>
           {formatDateLong(transaction.date)}
+          {transaction.account && (
+            <>
+              <span className="mx-1 text-border">·</span>
+              <LucideIcon
+                name={transaction.account.icon}
+                className="-mt-0.5 mr-0.5 inline h-3 w-3"
+                style={{ color: transaction.account.color }}
+              />
+              {transaction.account.name}
+            </>
+          )}
         </p>
+
+        {/* Flags row */}
+        {hasFlagsRow && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {flags.map((f) => (
+              <span
+                key={f.label}
+                className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none"
+                style={{
+                  color: f.color,
+                  backgroundColor: `${f.color}1a`,
+                }}
+              >
+                {f.label}
+              </span>
+            ))}
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground"
+              >
+                #{tag}
+              </span>
+            ))}
+            {transaction.photoUrl && (
+              <span
+                className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground"
+                title="Memiliki foto"
+              >
+                <Camera className="h-3 w-3" />
+              </span>
+            )}
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-1.5">
+
+      {/* Right side: amount + actions */}
+      <div className="flex items-center gap-1">
         <div className="text-right">
           <div
             className={cn(
@@ -455,6 +851,47 @@ function TransactionRow({
         >
           <Pencil className="h-3.5 w-3.5" />
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Aksi cepat"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              onClick={handleDuplicate}
+              disabled={duplicateMut.isPending}
+            >
+              {duplicateMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+              Duplikat
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleTogglePin}
+              disabled={pinMut.isPending}
+            >
+              {pinMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Pin className="h-4 w-4" />
+              )}
+              {transaction.isPinned ? "Lepas Sematan" : "Sematkan"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => toast("Detail transaksi")}>
+              <Eye className="h-4 w-4" />
+              Lihat Detail
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
@@ -488,4 +925,3 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   }, [value, delay]);
   return debounced;
 }
-

@@ -16,11 +16,14 @@ model Category {
   type      String        // "INCOME" | "EXPENSE"
   icon      String
   color     String
+  defaultAmount Float?    
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   transactions   Transaction[]
   budgets        Budget[]
   recurring      RecurringTransaction[]
+  templates      TransactionTemplate[]
+  splits         TransactionSplit[]
 
   @@index([type])
 }
@@ -40,6 +43,7 @@ model Account {
   transfersOut       Transfer[] @relation("FromAccount")
   transfersIn        Transfer[] @relation("ToAccount")
   recurring          RecurringTransaction[]
+  templates          TransactionTemplate[]
 
   @@index([type])
 }
@@ -71,23 +75,173 @@ model Transaction {
   tags        String?  // comma-separated tag names
   merchant    String?
   isRecurringGenerated Boolean @default(false)
+
+  // Per-transaction attributes (new)
+  time        String?  // "HH:mm" — time of transaction
+  // Media
+  photoUrl    String?  // base64 or URL of receipt photo
+  // Context
+  mood        String?  // "happy" | "neutral" | "stressed" | "excited" | "sad"
+  priority    String?  // "URGENT" | "NEED" | "WANT"
+  // Payment
+  paymentStatus String? @default("PAID") // "PAID" | "PENDING" | "SCHEDULED" | "FAILED"
+  paymentMethod String? // "CASH" | "TRANSFER" | "QRIS" | "DEBIT" | "CREDIT" | "EWALLET"
+  recipient   String?  // person/entity
+  // Multi-currency
+  currency    String   @default("IDR")
+  originalAmount Float?  // amount in original currency
+  exchangeRate Float?    // rate to IDR
+  // Relations (splits, groups, linked, installments, debts)
+  parentTransactionId String?  // for splits / linked transactions
+  groupId    String?   // TransactionGroup id (event grouping)
+  installmentId String?  // installment plan id
+  // Flags
+  isSplit     Boolean  @default(false) // this is a parent of splits
+  isDebt      Boolean  @default(false) // marks a debt/loan transaction
+  isReimbursable Boolean @default(false)
+  reimbursed  Boolean  @default(false)
+  isSubscription Boolean @default(false)
+  isTaxDeductible Boolean @default(false)
+  isBusinessExpense Boolean @default(false)
+  excludeFromBudget Boolean @default(false)
+  excludeFromStats Boolean @default(false)
+  isPinned    Boolean  @default(false)
+  // Money tracking extras
+  cashbackAmount Float? 
+  originalPrice Float?    // before discount
+  discountAmount Float?  
+  // Debt fields
+  debtDueDate DateTime?
+  creditor    String?  // who you owe / who owes you
+  // Goal allocation
+  goalId      String?  
+  // Assignment
+  assignedTo  String?  // person name
+  // Status
+  status      String   @default("CONFIRMED") // "DRAFT" | "SCHEDULED" | "CONFIRMED"
+  // Link
+  linkUrl     String?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   account     Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  splits      TransactionSplit[]
+  group       TransactionGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  installment Installment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+  receiptItems ReceiptItem[]
 
   @@index([type])
   @@index([date])
   @@index([categoryId])
   @@index([accountId])
   @@index([merchant])
+  @@index([mood])
+  @@index([priority])
+  @@index([paymentStatus])
+  @@index([paymentMethod])
+  @@index([groupId])
+  @@index([installmentId])
+  @@index([isPinned])
+  @@index([isDebt])
+  @@index([isSubscription])
+}
+
+model TransactionSplit {
+  id              String   @id @default(cuid())
+  parentTransactionId String
+  amount          Float
+  categoryId      String
+  note            String?
+  createdAt       DateTime @default(now())
+  parentTransaction Transaction @relation(fields: [parentTransactionId], references: [id], onDelete: Cascade)
+  category        Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([parentTransactionId])
+}
+
+model TransactionGroup {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String   @default("#10b981")
+  icon        String   @default("Folder")
+  createdAt   DateTime @default(now())
+  transactions Transaction[]
+}
+
+model Installment {
+  id              String   @id @default(cuid())
+  description     String
+  totalAmount     Float
+  totalInstallments Int
+  paidInstallments Int    @default(0)
+  monthlyAmount   Float
+  startDate       DateTime
+  endDate         DateTime?
+  accountId       String?
+  categoryId      String
+  merchant        String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  transactions    Transaction[]
+}
+
+model Debt {
+  id          String   @id @default(cuid())
+  type        String   // "DEBT" (you owe) | "RECEIVABLE" (owed to you)
+  person      String   // creditor / debtor name
+  amount      Float
+  paidAmount  Float    @default(0)
+  dueDate    DateTime?
+  description String?
+  note       String?
+  settled    Boolean  @default(false)
+  linkedTransactionId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([settled])
+}
+
+model TransactionTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // "INCOME" | "EXPENSE"
+  amount      Float    @default(0)
+  description String
+  categoryId  String
+  accountId   String?
+  merchant    String?
+  paymentMethod String?
+  priority    String?
+  icon        String   @default("Zap")
+  createdAt   DateTime @default(now())
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  account     Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+}
+
+model ReceiptItem {
+  id          String   @id @default(cuid())
+  transactionId String
+  name        String
+  qty         Float    @default(1)
+  price       Float
+  total       Float
+  createdAt   DateTime @default(now())
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
 }
 
 model Budget {
   id         String   @id @default(cuid())
   categoryId String
   amount     Float
-  period     String   @default("MONTHLY") // "MONTHLY" | "WEEKLY" | "YEARLY"
+  period     String   @default("MONTHLY")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -117,7 +271,7 @@ model RecurringTransaction {
   categoryId  String
   accountId   String?
   frequency   String   // "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY"
-  interval    Int      @default(1) // every N frequency units
+  interval    Int      @default(1)
   startDate   DateTime
   nextDate    DateTime
   endDate     DateTime?

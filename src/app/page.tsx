@@ -17,6 +17,8 @@ import { CalendarSection } from "@/components/finance/calendar-section";
 import { AnalyticsSection } from "@/components/finance/analytics-section";
 import { AiSection } from "@/components/finance/ai-section";
 import { SettingsSection } from "@/components/finance/settings-section";
+import { DebtsSection } from "@/components/finance/debts-section";
+import { TemplatesSection } from "@/components/finance/templates-section";
 import { useCategories, useCreateTransaction, useRunRecurring, useSeed } from "@/lib/hooks";
 import type { Transaction, TransactionType } from "@/lib/types";
 
@@ -129,6 +131,8 @@ export default function Home() {
           {section === "goals" && <GoalsSection />}
           {section === "accounts" && <AccountsSection />}
           {section === "recurring" && <RecurringSection />}
+          {section === "debts" && <DebtsSection />}
+          {section === "templates" && <TemplatesSection />}
           {section === "calendar" && <CalendarSection />}
           {section === "analytics" && <AnalyticsSection />}
           {section === "ai" && (

@@ -253,3 +253,99 @@ export const AUTO_CATEGORY_KEYWORDS: Record<string, { category: string; type: "I
   freelance: { category: "Freelance", type: "INCOME" },
   proyek: { category: "Freelance", type: "INCOME" },
 };
+
+// === Per-transaction feature constants ===
+
+export const MOOD_OPTIONS: Array<{ value: string; label: string; emoji: string; color: string }> = [
+  { value: "happy", label: "Senang", emoji: "😊", color: "#10b981" },
+  { value: "neutral", label: "Biasa", emoji: "😐", color: "#6b7280" },
+  { value: "stressed", label: "Stres", emoji: "😟", color: "#f97316" },
+  { value: "excited", label: "Excited", emoji: "🤩", color: "#8b5cf6" },
+  { value: "sad", label: "Sedih", emoji: "😢", color: "#3b82f6" },
+];
+
+export const PRIORITY_OPTIONS: Array<{ value: string; label: string; color: string; description: string }> = [
+  { value: "URGENT", label: "Urgent", color: "#ef4444", description: "Harus dibayar segera" },
+  { value: "NEED", label: "Butuh", color: "#f97316", description: "Kebutuhan pokok" },
+  { value: "WANT", label: "Ingin", color: "#6b7280", description: "Keinginan, bisa ditunda" },
+];
+
+export const PAYMENT_METHOD_OPTIONS: Array<{ value: string; label: string; icon: string }> = [
+  { value: "CASH", label: "Tunai", icon: "Banknote" },
+  { value: "TRANSFER", label: "Transfer", icon: "Send" },
+  { value: "QRIS", label: "QRIS", icon: "QrCode" },
+  { value: "DEBIT", label: "Debit", icon: "CreditCard" },
+  { value: "CREDIT", label: "Kredit", icon: "CreditCard" },
+  { value: "EWALLET", label: "E-Wallet", icon: "Smartphone" },
+];
+
+export const PAYMENT_STATUS_OPTIONS: Array<{ value: string; label: string; color: string }> = [
+  { value: "PAID", label: "Lunas", color: "#10b981" },
+  { value: "PENDING", label: "Pending", color: "#f59e0b" },
+  { value: "SCHEDULED", label: "Terjadwal", color: "#0891b2" },
+  { value: "FAILED", label: "Gagal", color: "#ef4444" },
+];
+
+export const TRANSACTION_STATUS_OPTIONS: Array<{ value: string; label: string; color: string }> = [
+  { value: "CONFIRMED", label: "Dikonfirmasi", color: "#10b981" },
+  { value: "SCHEDULED", label: "Terjadwal", color: "#0891b2" },
+  { value: "DRAFT", label: "Draft", color: "#6b7280" },
+];
+
+export const CURRENCIES: Array<{ code: string; label: string; symbol: string; flag: string }> = [
+  { code: "IDR", label: "Rupiah", symbol: "Rp", flag: "🇮🇩" },
+  { code: "USD", label: "US Dollar", symbol: "$", flag: "🇺🇸" },
+  { code: "EUR", label: "Euro", symbol: "€", flag: "🇪🇺" },
+  { code: "GBP", label: "Pound", symbol: "£", flag: "🇬🇧" },
+  { code: "JPY", label: "Yen", symbol: "¥", flag: "🇯🇵" },
+  { code: "SGD", label: "Dollar Singapura", symbol: "S$", flag: "🇸🇬" },
+  { code: "MYR", label: "Ringgit", symbol: "RM", flag: "🇲🇾" },
+  { code: "CNY", label: "Yuan", symbol: "¥", flag: "🇨🇳" },
+  { code: "AUD", label: "Dollar Australia", symbol: "A$", flag: "🇦🇺" },
+  { code: "THB", label: "Baht", symbol: "฿", flag: "🇹🇭" },
+];
+
+// Approximate static exchange rates to IDR (fallback when no live rate)
+export const FALLBACK_EXCHANGE_RATES: Record<string, number> = {
+  IDR: 1,
+  USD: 15800,
+  EUR: 17100,
+  GBP: 20100,
+  JPY: 105,
+  SGD: 11700,
+  MYR: 3370,
+  CNY: 2180,
+  AUD: 10300,
+  THB: 440,
+};
+
+export const TEMPLATE_ICONS = [
+  "Zap", "Coffee", "UtensilsCrossed", "Car", "Bus", "Train",
+  "ShoppingBag", "ReceiptText", "Home", "Dumbbell", "HeartPulse",
+  "GraduationCap", "PiggyBank", "Gift", "Plane", "Film",
+  "Smartphone", "Wifi", "Fuel", "Pizza", "Beer", "Apple",
+];
+
+export const GROUP_ICONS = [
+  "Folder", "Plane", "Cake", "Gift", "Heart", "Briefcase",
+  "Home", "Car", "GraduationCap", "PartyPopper", "Baby", "Dumbbell",
+];
+
+export const GROUP_COLORS = [
+  "#10b981", "#0891b2", "#8b5cf6", "#f97316", "#ef4444",
+  "#ec4899", "#14b8a6", "#eab308", "#6b7280",
+];
+
+export const DEBT_TYPE_OPTIONS: Array<{ value: string; label: string; icon: string; color: string }> = [
+  { value: "DEBT", label: "Hutang (saya berhutang)", icon: "ArrowUpRight", color: "#ef4444" },
+  { value: "RECEIVABLE", label: "Piutang (orang lain berhutang)", icon: "ArrowDownLeft", color: "#10b981" },
+];
+
+// Common merchants in Indonesia for quick selection
+export const COMMON_MERCHANTS = [
+  "Indomaret", "Alfamart", "Alfamidi", "Shopee", "Tokopedia", "Lazada",
+  "Gojek", "Grab", "GoFood", "GrabFood", "ShopeeFood", "McDonald's",
+  "KFC", "Starbucks", "Netflix", "Spotify", "YouTube Premium", "Indihome",
+  "PLN", "PDAM", "Pulsa", "Tokopedia", "Bukalapak", "Blibli", "Sephora",
+  "Miniso", "MR DIY", "Ace Hardware", "IKEA", "Carrefour", "Lotus",
+];
