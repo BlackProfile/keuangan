@@ -119,8 +119,35 @@ export function ReceiptScanner({
             }
           }
         },
-        onError: (err) => {
-          toast.error(err.message || "Gagal memindai struk.");
+        onError: (err: unknown) => {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : typeof err === "string"
+                ? err
+                : "Gagal memindai struk.";
+          // Detect server-down / network errors
+          if (
+            msg.includes("502") ||
+            msg.includes("503") ||
+            msg.includes("Failed to fetch") ||
+            msg.includes("NetworkError") ||
+            msg.includes("Network request failed") ||
+            msg.includes("ECONNREFUSED")
+          ) {
+            toast.error(
+              "Server sedang tidak tersambung. Coba lagi dalam beberapa detik.",
+              { duration: 5000 },
+            );
+            setResult({
+              error: "Server tidak tersambung. Gambar tetap terlampir — isi manual.",
+            });
+          } else {
+            toast.error(msg || "Gagal memindai struk.");
+            setResult({
+              error: msg || "Gagal memindai. Isi manual atau coba lagi.",
+            });
+          }
         },
       });
     };
@@ -152,7 +179,27 @@ export function ReceiptScanner({
           toast.success("Struk berhasil dipindai!");
         }
       },
-      onError: (err) => toast.error(err.message || "Gagal memindai."),
+      onError: (err: unknown) => {
+        const msg =
+          err instanceof Error ? err.message : "Gagal memindai struk.";
+        if (
+          msg.includes("502") ||
+          msg.includes("503") ||
+          msg.includes("Failed to fetch") ||
+          msg.includes("NetworkError") ||
+          msg.includes("ECONNREFUSED")
+        ) {
+          toast.error("Server tidak tersambung. Coba lagi sebentar.", {
+            duration: 5000,
+          });
+          setResult({
+            error: "Server tidak tersambung. Coba lagi atau isi manual.",
+          });
+        } else {
+          toast.error(msg || "Gagal memindai.");
+          setResult({ error: msg || "Gagal memindai. Isi manual." });
+        }
+      },
     });
   }
 
