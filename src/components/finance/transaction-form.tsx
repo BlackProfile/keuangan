@@ -8,6 +8,7 @@ import {
   ImageOff,
   Loader2,
   Plus,
+  ScanLine,
   Trash2,
   X,
 } from "lucide-react";
@@ -81,6 +82,7 @@ import {
   PRIORITY_OPTIONS,
   QUICK_ADD_PRESETS,
 } from "@/lib/constants";
+import { ReceiptScanner, type ScannedReceiptData } from "@/components/finance/receipt-scanner";
 
 interface Props {
   open: boolean;
@@ -177,6 +179,43 @@ export function TransactionForm({
 
   const [activeTab, setActiveTab] = React.useState<TabValue>("utama");
   const [error, setError] = React.useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = React.useState(false);
+
+  // Handle scan result — auto-fill form fields from scanned receipt
+  function handleScanResult(data: ScannedReceiptData) {
+    if (data.total && data.total > 0) {
+      setAmount(String(data.total));
+      setType("EXPENSE"); // receipts are expenses
+    }
+    if (data.merchant) {
+      setDescription(data.merchant);
+      setMerchant(data.merchant);
+    }
+    if (data.date) {
+      setDate(data.date);
+    }
+    if (data.categoryId) {
+      setCategoryId(data.categoryId);
+    }
+    if (data.photoUrl) {
+      setPhotoUrl(data.photoUrl);
+    }
+    if (data.items && data.items.length > 0) {
+      // Convert items to receipt items format
+      const newItems = data.items.map((name) => ({
+        name,
+        qty: 1,
+        price: 0,
+        total: 0,
+      }));
+      setReceiptItems(newItems);
+      // Enable split-like note with items
+      if (!note) {
+        setNote(`Item: ${data.items.join(", ")}`);
+      }
+    }
+    toast.success("Data struk diterapkan ke form.");
+  }
 
   const { data: categories, isLoading: catsLoading } = useCategories();
   const { data: accounts } = useAccounts();
@@ -782,6 +821,30 @@ export function TransactionForm({
             <div className="max-h-[62vh] overflow-y-auto custom-scrollbar p-5">
               {/* ============ TAB UTAMA ============ */}
               <TabsContent value="utama" className="space-y-4 outline-none">
+                {/* Scan Struk button — quick AI receipt scan */}
+                {!isEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    className="flex w-full items-center gap-3 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-3 text-left transition-colors hover:border-primary hover:bg-primary/10"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                      <ScanLine className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">
+                        Pindai Struk
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Foto struk → AI isi form otomatis
+                      </p>
+                    </div>
+                    <span className="text-xs font-medium text-primary">
+                      Buka
+                    </span>
+                  </button>
+                )}
+
                 {/* Type toggle */}
                 <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
                   <button
@@ -1829,6 +1892,13 @@ export function TransactionForm({
             </div>
           </DialogFooter>
         </form>
+
+        {/* Receipt Scanner Dialog */}
+        <ReceiptScanner
+          open={scannerOpen}
+          onOpenChange={setScannerOpen}
+          onScan={handleScanResult}
+        />
       </DialogContent>
     </Dialog>
   );
