@@ -19,8 +19,25 @@ import { AiSection } from "@/components/finance/ai-section";
 import { SettingsSection } from "@/components/finance/settings-section";
 import { DebtsSection } from "@/components/finance/debts-section";
 import { TemplatesSection } from "@/components/finance/templates-section";
-import { useCategories, useCreateTransaction, useRunRecurring, useSeed } from "@/lib/hooks";
+import { LockScreen } from "@/components/finance/lock-screen";
+import { SecuritySection } from "@/components/finance/security-section";
+import { AuditSection } from "@/components/finance/audit-section";
+import {
+  useCategories,
+  useCreateTransaction,
+  useRunRecurring,
+  useSeed,
+  useSecuritySettings,
+  usePanicWipe,
+} from "@/lib/hooks";
 import type { Transaction, TransactionType } from "@/lib/types";
+import type { SecurityConfig } from "@/lib/security-defaults";
+import {
+  DEFAULT_SECURITY_CONFIG,
+  parseSecurityConfig,
+} from "@/lib/security-defaults";
+import { useSecurityStore } from "@/lib/security-store";
+import { auditLog, AUDIT_ACTIONS } from "@/lib/audit";
 
 interface PrefillData {
   type?: TransactionType;
@@ -36,11 +53,119 @@ export default function Home() {
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Transaction | null>(null);
   const [prefill, setPrefill] = React.useState<PrefillData | null>(null);
+  const [isBlurred, setIsBlurred] = React.useState(false);
 
   const { data: categories, isLoading: catsLoading } = useCategories();
+  const { data: securityRaw } = useSecuritySettings();
   const seedMut = useSeed();
   const recurringMut = useRunRecurring();
   const createMut = useCreateTransaction();
+  const panicWipeMut = usePanicWipe();
+  const securityStore = useSecurityStore();
+
+  // Parse security config
+  const securityConfig: SecurityConfig = React.useMemo(() => {
+    if (!securityRaw) return DEFAULT_SECURITY_CONFIG;
+    return parseSecurityConfig(securityRaw);
+  }, [securityRaw]);
+
+  // Determine if app should be locked (only if any lock method enabled)
+  const lockEnabled =
+    securityConfig.pinEnabled ||
+    securityConfig.passwordEnabled ||
+    securityConfig.biometricEnabled ||
+    securityConfig.patternEnabled;
+
+  // On mount: if lock enabled and store says locked, keep locked. If lock disabled, ensure unlocked.
+  React.useEffect(() => {
+    if (!lockEnabled) {
+      if (securityStore.isLocked) securityStore.unlock();
+    } else {
+      // If lock enabled and not yet locked, lock on first load
+      if (!securityStore.isLocked && !securityStore.unlockedAt) {
+        securityStore.lock();
+      }
+    }
+  }, [lockEnabled, securityStore]);
+
+  // Auto-lock on idle
+  React.useEffect(() => {
+    if (!securityConfig.autoLockEnabled || !lockEnabled) return;
+    if (securityStore.isLocked) return;
+    const minutes = securityConfig.autoLockMinutes;
+    const interval = setInterval(() => {
+      const idleMs = Date.now() - securityStore.lastActivity;
+      if (idleMs >= minutes * 60_000) {
+        securityStore.lock();
+        auditLog(AUDIT_ACTIONS.LOCK, "auto-lock idle");
+      }
+    }, 10_000); // check every 10s
+    return () => clearInterval(interval);
+  }, [
+    securityConfig.autoLockEnabled,
+    securityConfig.autoLockMinutes,
+    lockEnabled,
+    securityStore,
+  ]);
+
+  // Touch on activity (mouse/keyboard)
+  React.useEffect(() => {
+    if (!securityConfig.autoLockEnabled || !lockEnabled) return;
+    const handler = () => securityStore.touch();
+    const events: Array<keyof WindowEventMap> = [
+      "mousemove",
+      "keydown",
+      "click",
+      "scroll",
+      "touchstart",
+    ];
+    events.forEach((e) => window.addEventListener(e, handler, { passive: true }));
+    return () => events.forEach((e) => window.removeEventListener(e, handler));
+  }, [securityConfig.autoLockEnabled, lockEnabled, securityStore]);
+
+  // Lock on tab switch (visibilitychange)
+  React.useEffect(() => {
+    if (!securityConfig.lockOnTabSwitch || !lockEnabled) return;
+    const handler = () => {
+      if (document.visibilityState === "hidden") {
+        securityStore.lock();
+        auditLog(AUDIT_ACTIONS.LOCK, "tab switch");
+      } else if (securityConfig.blurOnBackground) {
+        setIsBlurred(false);
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [securityConfig.lockOnTabSwitch, securityConfig.blurOnBackground, lockEnabled, securityStore]);
+
+  // Blur on background (when window loses focus)
+  React.useEffect(() => {
+    if (!securityConfig.blurOnBackground) return;
+    const handler = () => {
+      if (document.visibilityState === "hidden" || !document.hasFocus()) {
+        setIsBlurred(true);
+      } else {
+        setIsBlurred(false);
+      }
+    };
+    const events: Array<keyof WindowEventMap> = ["blur", "focus"];
+    events.forEach((e) => window.addEventListener(e, handler));
+    document.addEventListener("visibilitychange", handler);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, handler));
+      document.removeEventListener("visibilitychange", handler);
+    };
+  }, [securityConfig.blurOnBackground]);
+
+  // Lock on app close (beforeunload)
+  React.useEffect(() => {
+    if (!securityConfig.lockOnAppClose || !lockEnabled) return;
+    const handler = () => {
+      securityStore.lock();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [securityConfig.lockOnAppClose, lockEnabled, securityStore]);
 
   // Auto-seed on first load
   const seededRef = React.useRef(false);
@@ -83,13 +208,8 @@ export default function Home() {
     categoryId: string;
     merchant?: string;
   }) {
-    // Find category by id or name; if not found, open form prefilled
     createMut.mutate(data, {
-      onSuccess: () => {
-        // toast handled by hook? no, show here
-      },
       onError: () => {
-        // Fallback: open the form prefilled
         setPrefill(data);
         setEditing(null);
         setFormOpen(true);
@@ -97,82 +217,114 @@ export default function Home() {
     });
   }
 
+  function handlePanic() {
+    panicWipeMut.mutate(undefined, {
+      onSuccess: () => {
+        auditLog(AUDIT_ACTIONS.PANIC_WIPE, "gesture triggered");
+        window.location.reload();
+      },
+    });
+  }
+
+  // Show lock screen if locked and lock is enabled
+  const showLockScreen = lockEnabled && securityStore.isLocked;
+
   return (
-    <AppShell active={section} onNavigate={setSection} onAdd={openAdd}>
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={section}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.2 }}
-        >
-          {section === "dashboard" && (
-            <DashboardTab
-              onAdd={openAdd}
-              onEdit={openEdit}
-              onViewAll={() => setSection("transactions")}
-            />
-          )}
-          {section === "transactions" && (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight">
-                  Semua Transaksi
-                </h2>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  Kelola dan tinjau seluruh catatan keuangan Anda.
-                </p>
-              </div>
-              <TransactionList onEdit={openEdit} />
-            </div>
-          )}
-          {section === "budgets" && <BudgetsSection />}
-          {section === "goals" && <GoalsSection />}
-          {section === "accounts" && <AccountsSection />}
-          {section === "recurring" && <RecurringSection />}
-          {section === "debts" && <DebtsSection />}
-          {section === "templates" && <TemplatesSection />}
-          {section === "calendar" && <CalendarSection />}
-          {section === "analytics" && <AnalyticsSection />}
-          {section === "ai" && (
-            <AiSection
-              onCreateTransaction={handleAiCreateTransaction}
-              onNavigateToAdd={openAdd}
-            />
-          )}
-          {section === "categories" && (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight">Kategori</h2>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  Atur kategori untuk pemasukan dan pengeluaran.
-                </p>
-              </div>
-              <CategoryManager />
-            </div>
-          )}
-          {section === "settings" && <SettingsSection />}
-        </motion.div>
-      </AnimatePresence>
+    <>
+      <div className={isBlurred ? "blur-sm transition-all duration-200" : "transition-all duration-200"}>
+        <AppShell active={section} onNavigate={setSection} onAdd={openAdd}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={section}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+            >
+              {section === "dashboard" && (
+                <DashboardTab
+                  onAdd={openAdd}
+                  onEdit={openEdit}
+                  onViewAll={() => setSection("transactions")}
+                />
+              )}
+              {section === "transactions" && (
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-xl font-bold tracking-tight">
+                      Semua Transaksi
+                    </h2>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      Kelola dan tinjau seluruh catatan keuangan Anda.
+                    </p>
+                  </div>
+                  <TransactionList onEdit={openEdit} />
+                </div>
+              )}
+              {section === "budgets" && <BudgetsSection />}
+              {section === "goals" && <GoalsSection />}
+              {section === "accounts" && <AccountsSection />}
+              {section === "recurring" && <RecurringSection />}
+              {section === "debts" && <DebtsSection />}
+              {section === "templates" && <TemplatesSection />}
+              {section === "calendar" && <CalendarSection />}
+              {section === "analytics" && <AnalyticsSection />}
+              {section === "ai" && (
+                <AiSection
+                  onCreateTransaction={handleAiCreateTransaction}
+                  onNavigateToAdd={openAdd}
+                />
+              )}
+              {section === "categories" && (
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-xl font-bold tracking-tight">Kategori</h2>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      Atur kategori untuk pemasukan dan pengeluaran.
+                    </p>
+                  </div>
+                  <CategoryManager />
+                </div>
+              )}
+              {section === "security" && <SecuritySection />}
+              {section === "audit" && <AuditSection />}
+              {section === "settings" && <SettingsSection />}
+            </motion.div>
+          </AnimatePresence>
 
-      {/* Loading overlay for seed */}
-      {seedMut.isPending && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/60 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-5 shadow-xl">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Menyiapkan data...</p>
-          </div>
-        </div>
+          {/* Loading overlay for seed */}
+          {seedMut.isPending && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/60 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-3 rounded-2xl bg-card px-6 py-5 shadow-xl">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Menyiapkan data...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Transaction Form Dialog */}
+          <TransactionForm
+            open={formOpen}
+            onOpenChange={setFormOpen}
+            transaction={editing}
+            prefill={prefill}
+          />
+        </AppShell>
+      </div>
+
+      {/* Lock Screen Overlay */}
+      {showLockScreen && (
+        <LockScreen
+          config={securityConfig}
+          onUnlock={() => {
+            // unlocked via store; will re-render
+          }}
+          onDecoy={() => {
+            // decoy mode active; could show decoy data
+          }}
+          onPanic={securityConfig.panicWipeEnabled ? handlePanic : undefined}
+        />
       )}
-
-      {/* Transaction Form Dialog */}
-      <TransactionForm
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        transaction={editing}
-        prefill={prefill}
-      />
-    </AppShell>
+    </>
   );
 }

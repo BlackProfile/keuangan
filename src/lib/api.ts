@@ -300,4 +300,67 @@ export const api = {
   seed: () => request<{ message: string }>("/api/seed", { method: "POST" }),
   runRecurring: () =>
     request<{ generated: number }>("/api/recurring/run", { method: "POST" }),
+
+  // Security
+  getSecurity: () => request<Record<string, string>>("/api/security"),
+  updateSecurity: (key: string, value: string) =>
+    request<{ message: string }>("/api/security", {
+      method: "PUT",
+      body: JSON.stringify({ key, value }),
+    }),
+  updateSecurityBulk: (settings: Record<string, string>) =>
+    request<{ message: string; saved: number }>("/api/security/bulk", {
+      method: "PUT",
+      body: JSON.stringify({ settings }),
+    }),
+  listAudit: (params?: { limit?: number; offset?: number; action?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.limit) sp.set("limit", String(params.limit));
+    if (params?.offset) sp.set("offset", String(params.offset));
+    if (params?.action) sp.set("action", params.action);
+    const qs = sp.toString();
+    return request<{
+      data: Array<{
+        id: string;
+        action: string;
+        detail: string | null;
+        ipAddress: string | null;
+        userAgent: string | null;
+        success: boolean;
+        createdAt: string;
+      }>;
+      total: number;
+      limit: number;
+      offset: number;
+    }>(`/api/audit${qs ? `?${qs}` : ""}`);
+  },
+  logAudit: (action: string, detail?: string, success = true, fingerprint?: string) =>
+    request<{ message: string }>("/api/audit", {
+      method: "POST",
+      body: JSON.stringify({ action, detail, success, fingerprint }),
+    }),
+  // Biometric
+  listBiometric: () =>
+    request<Array<{ id: string; name: string; credentialId: string; createdAt: string }>>("/api/biometric"),
+  registerBiometric: (data: { name: string; credentialId: string; publicKey: string; counter: number }) =>
+    request("/api/biometric/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  verifyBiometric: (credentialId: string, counter: number) =>
+    request<{ verified: boolean }>("/api/biometric/verify", {
+      method: "POST",
+      body: JSON.stringify({ credentialId, counter }),
+    }),
+  deleteBiometric: (id: string) =>
+    request("/api/biometric", { method: "DELETE", body: JSON.stringify({ id }) }),
+  // Trusted devices
+  listTrustedDevices: () =>
+    request<Array<{ id: string; name: string; fingerprint: string; trustedUntil: string; lastSeen: string; createdAt: string }>>("/api/trusted-devices"),
+  addTrustedDevice: (data: { name: string; fingerprint: string; trustedDays: number }) =>
+    request("/api/trusted-devices", { method: "POST", body: JSON.stringify(data) }),
+  revokeTrustedDevice: (id: string) =>
+    request(`/api/trusted-devices/${id}`, { method: "DELETE" }),
+  // Panic wipe
+  panicWipe: () => request<{ message: string; wipedAt: string }>("/api/panic-wipe", { method: "POST" }),
 };

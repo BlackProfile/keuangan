@@ -298,3 +298,42 @@ model Setting {
   id    String @id
   value String
 }
+
+model SecuritySetting {
+  id              String   @id
+  value           String
+  updatedAt       DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String   // "LOGIN_SUCCESS" | "LOGIN_FAILED" | "LOGOUT" | "EXPORT" | "DELETE_TX" | "PIN_CHANGE" | "WIPE" | etc.
+  detail      String?
+  ipAddress   String?
+  userAgent   String?
+  success     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+}
+
+model TrustedDevice {
+  id            String   @id @default(cuid())
+  name          String
+  fingerprint   String   @unique // device fingerprint hash
+  trustedUntil  DateTime
+  lastSeen      DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([fingerprint])
+}
+
+model BiometricCredential {
+  id          String   @id @default(cuid())
+  name        String
+  credentialId String  @unique // base64url
+  publicKey   String   // base64url
+  counter     Int      @default(0)
+  createdAt   DateTime @default(now())
+}

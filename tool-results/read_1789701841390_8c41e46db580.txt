@@ -1,0 +1,886 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import * as React from "react";
+     4→     4→import { useTheme } from "next-themes";
+     5→     5→import { toast } from "sonner";
+     6→     6→import {
+     7→     7→  Bell,
+     8→     8→  Clock,
+     9→     9→  Database,
+    10→    10→  Download,
+    11→    11→  EyeOff,
+    12→    12→  FileJson,
+    13→    13→  Info,
+    14→    14→  Loader2,
+    15→    15→  Lock,
+    16→    16→  Monitor,
+    17→    17→  Moon,
+    18→    18→  Palette,
+    19→    19→  Send,
+    20→    20→  ShieldCheck,
+    21→    21→  Sparkles,
+    22→    22→  Sun,
+    23→    23→  Upload,
+    24→    24→  X,
+    25→    25→} from "lucide-react";
+    26→    26→
+    27→    27→import { Button } from "@/components/ui/button";
+    28→    28→import { Card } from "@/components/ui/card";
+    29→    29→import { Switch } from "@/components/ui/switch";
+    30→    30→import { Input } from "@/components/ui/input";
+    31→    31→import { Skeleton } from "@/components/ui/skeleton";
+    32→    32→import { Badge } from "@/components/ui/badge";
+    33→    33→import {
+    34→    34→  InputOTP,
+    35→    35→  InputOTPGroup,
+    36→    36→  InputOTPSlot,
+    37→    37→} from "@/components/ui/input-otp";
+    38→    38→import {
+    39→    39→  Dialog,
+    40→    40→  DialogClose,
+    41→    41→  DialogContent,
+    42→    42→  DialogDescription,
+    43→    43→  DialogFooter,
+    44→    44→  DialogHeader,
+    45→    45→  DialogTitle,
+    46→    46→} from "@/components/ui/dialog";
+    47→    47→import {
+    48→    48→  AlertDialog,
+    49→    49→  AlertDialogAction,
+    50→    50→  AlertDialogCancel,
+    51→    51→  AlertDialogContent,
+    52→    52→  AlertDialogDescription,
+    53→    53→  AlertDialogFooter,
+    54→    54→  AlertDialogHeader,
+    55→    55→  AlertDialogTitle,
+    56→    56→  AlertDialogTrigger,
+    57→    57→} from "@/components/ui/alert-dialog";
+    58→    58→import {
+    59→    59→  Table,
+    60→    60→  TableBody,
+    61→    61→  TableCell,
+    62→    62→  TableHead,
+    63→    63→  TableHeader,
+    64→    64→  TableRow,
+    65→    65→} from "@/components/ui/table";
+    66→    66→import { cn } from "@/lib/utils";
+    67→    67→import { hashPin } from "@/lib/format";
+    68→    68→import { api } from "@/lib/api";
+    69→    69→import {
+    70→    70→  useImportCsv,
+    71→    71→  useSeed,
+    72→    72→  useSettings,
+    73→    73→  useUpdateSetting,
+    74→    74→} from "@/lib/hooks";
+    75→    75→import type { AppSettings } from "@/lib/types";
+    76→    76→
+    77→    77→const DEFAULT_SETTINGS: AppSettings = {
+    78→    78→  pinEnabled: false,
+    79→    79→  pinHash: null,
+    80→    80→  hideAmounts: false,
+    81→    81→  currency: "IDR",
+    82→    82→  reminderEnabled: false,
+    83→    83→  reminderHour: 20,
+    84→    84→  theme: "system",
+    85→    85→};
+    86→    86→
+    87→    87→function parseSettings(raw: Record<string, string> | undefined): AppSettings {
+    88→    88→  if (!raw) return DEFAULT_SETTINGS;
+    89→    89→  return {
+    90→    90→    pinEnabled: raw.pinEnabled === "true",
+    91→    91→    pinHash: raw.pinHash ?? null,
+    92→    92→    hideAmounts: raw.hideAmounts === "true",
+    93→    93→    currency: raw.currency ?? "IDR",
+    94→    94→    reminderEnabled: raw.reminderEnabled === "true",
+    95→    95→    reminderHour: Number(raw.reminderHour ?? 20),
+    96→    96→    theme: (raw.theme as AppSettings["theme"]) ?? "system",
+    97→    97→  };
+    98→    98→}
+    99→    99→
+   100→   100→export function SettingsSection() {
+   101→   101→  const { data: rawSettings, isLoading } = useSettings();
+   102→   102→  const settings = React.useMemo(
+   103→   103→    () => parseSettings(rawSettings),
+   104→   104→    [rawSettings],
+   105→   105→  );
+   106→   106→
+   107→   107→  return (
+   108→   108→    <div className="space-y-4">
+   109→   109→      <div>
+   110→   110→        <h2 className="text-xl font-bold tracking-tight">Pengaturan</h2>
+   111→   111→        <p className="mt-0.5 text-sm text-muted-foreground">
+   112→   112→          Sesuaikan aplikasi sesuai kebutuhan Anda.
+   113→   113→        </p>
+   114→   114→      </div>
+   115→   115→
+   116→   116→      {isLoading ? (
+   117→   117→        <div className="space-y-4">
+   118→   118→          {Array.from({ length: 4 }).map((_, i) => (
+   119→   119→            <Skeleton key={i} className="h-40 w-full rounded-2xl" />
+   120→   120→          ))}
+   121→   121→        </div>
+   122→   122→      ) : (
+   123→   123→        <>
+   124→   124→          <KeamananSection settings={settings} />
+   125→   125→          <TampilanSection />
+   126→   126→          <PengingatSection settings={settings} />
+   127→   127→          <DataSection />
+   128→   128→          <TentangSection />
+   129→   129→        </>
+   130→   130→      )}
+   131→   131→    </div>
+   132→   132→  );
+   133→   133→}
+   134→   134→
+   135→   135→// ============================================================
+   136→   136→// Shared layout components
+   137→   137→// ============================================================
+   138→   138→
+   139→   139→function SectionCard({
+   140→   140→  icon,
+   141→   141→  title,
+   142→   142→  description,
+   143→   143→  children,
+   144→   144→}: {
+   145→   145→  icon: React.ReactNode;
+   146→   146→  title: string;
+   147→   147→  description?: string;
+   148→   148→  children: React.ReactNode;
+   149→   149→}) {
+   150→   150→  return (
+   151→   151→    <Card className="p-5">
+   152→   152→      <div className="mb-3 flex items-center gap-2.5">
+   153→   153→        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+   154→   154→          {icon}
+   155→   155→        </span>
+   156→   156→        <div>
+   157→   157→          <h3 className="text-base font-semibold">{title}</h3>
+   158→   158→          {description && (
+   159→   159→            <p className="text-xs text-muted-foreground">{description}</p>
+   160→   160→          )}
+   161→   161→        </div>
+   162→   162→      </div>
+   163→   163→      <div className="divide-y divide-border">{children}</div>
+   164→   164→    </Card>
+   165→   165→  );
+   166→   166→}
+   167→   167→
+   168→   168→function SettingRow({
+   169→   169→  icon,
+   170→   170→  title,
+   171→   171→  description,
+   172→   172→  children,
+   173→   173→}: {
+   174→   174→  icon?: React.ReactNode;
+   175→   175→  title: string;
+   176→   176→  description?: string;
+   177→   177→  children: React.ReactNode;
+   178→   178→}) {
+   179→   179→  return (
+   180→   180→    <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+   181→   181→      <div className="flex min-w-0 items-start gap-3">
+   182→   182→        {icon && (
+   183→   183→          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+   184→   184→            {icon}
+   185→   185→          </span>
+   186→   186→        )}
+   187→   187→        <div className="min-w-0">
+   188→   188→          <p className="text-sm font-medium text-foreground">{title}</p>
+   189→   189→          {description && (
+   190→   190→            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+   191→   191→          )}
+   192→   192→        </div>
+   193→   193→      </div>
+   194→   194→      <div className="shrink-0">{children}</div>
+   195→   195→    </div>
+   196→   196→  );
+   197→   197→}
+   198→   198→
+   199→   199→// ============================================================
+   200→   200→// A. Keamanan
+   201→   201→// ============================================================
+   202→   202→
+   203→   203→function KeamananSection({ settings }: { settings: AppSettings }) {
+   204→   204→  const updateMut = useUpdateSetting();
+   205→   205→  const [pinDialogOpen, setPinDialogOpen] = React.useState(false);
+   206→   206→  const [pin, setPin] = React.useState("");
+   207→   207→
+   208→   208→  function handleSwitchChange(enabled: boolean) {
+   209→   209→    if (enabled) {
+   210→   210→      setPin("");
+   211→   211→      setPinDialogOpen(true);
+   212→   212→    } else {
+   213→   213→      // Disable: clear pinHash and pinEnabled
+   214→   214→      updateMut.mutate({ key: "pinHash", value: "" });
+   215→   215→      updateMut.mutate({ key: "pinEnabled", value: "false" });
+   216→   216→      toast.success("PIN dinonaktifkan.");
+   217→   217→    }
+   218→   218→  }
+   219→   219→
+   220→   220→  async function handleSavePin() {
+   221→   221→    if (pin.length !== 4) {
+   222→   222→      toast.error("PIN harus 4 digit.");
+   223→   223→      return;
+   224→   224→    }
+   225→   225→    try {
+   226→   226→      const hash = await hashPin(pin);
+   227→   227→      updateMut.mutate({ key: "pinHash", value: hash });
+   228→   228→      updateMut.mutate({ key: "pinEnabled", value: "true" });
+   229→   229→      setPin("");
+   230→   230→      setPinDialogOpen(false);
+   231→   231→      toast.success("PIN aktif. Aplikasi akan terkunci saat dibuka.");
+   232→   232→    } catch {
+   233→   233→      toast.error("Gagal menghash PIN. Coba lagi.");
+   234→   234→    }
+   235→   235→  }
+   236→   236→
+   237→   237→  function toggleHideAmounts(enabled: boolean) {
+   238→   238→    updateMut.mutate({
+   239→   239→      key: "hideAmounts",
+   240→   240→      value: enabled ? "true" : "false",
+   241→   241→    });
+   242→   242→    toast.success(
+   243→   243→      enabled ? "Nominal disembunyikan." : "Nominal ditampilkan.",
+   244→   244→    );
+   245→   245→  }
+   246→   246→
+   247→   247→  return (
+   248→   248→    <SectionCard
+   249→   249→      icon={<ShieldCheck className="h-4 w-4" />}
+   250→   250→      title="Keamanan"
+   251→   251→      description="Lindungi privasi data keuangan Anda."
+   252→   252→    >
+   253→   253→      <SettingRow
+   254→   254→        icon={<Lock className="h-4 w-4" />}
+   255→   255→        title="Kunci PIN"
+   256→   256→        description="Minta PIN 4 digit saat membuka aplikasi."
+   257→   257→      >
+   258→   258→        <Switch
+   259→   259→          checked={settings.pinEnabled}
+   260→   260→          onCheckedChange={handleSwitchChange}
+   261→   261→          disabled={updateMut.isPending}
+   262→   262→          aria-label="Aktifkan kunci PIN"
+   263→   263→        />
+   264→   264→      </SettingRow>
+   265→   265→
+   266→   266→      <SettingRow
+   267→   267→        icon={<EyeOff className="h-4 w-4" />}
+   268→   268→        title="Sembunyikan Nominal"
+   269→   269→        description="Sembunyikan jumlah uang di semua layar."
+   270→   270→      >
+   271→   271→        <Switch
+   272→   272→          checked={settings.hideAmounts}
+   273→   273→          onCheckedChange={toggleHideAmounts}
+   274→   274→          disabled={updateMut.isPending}
+   275→   275→          aria-label="Sembunyikan nominal"
+   276→   276→        />
+   277→   277→      </SettingRow>
+   278→   278→
+   279→   279→      <Dialog open={pinDialogOpen} onOpenChange={setPinDialogOpen}>
+   280→   280→        <DialogContent showCloseButton={false} className="max-w-sm">
+   281→   281→          <DialogHeader>
+   282→   282→            <DialogTitle>Buat PIN 4 Digit</DialogTitle>
+   283→   283→            <DialogDescription>
+   284→   284→              PIN ini akan diminta setiap kali aplikasi dibuka.
+   285→   285→            </DialogDescription>
+   286→   286→          </DialogHeader>
+   287→   287→          <div className="flex flex-col items-center gap-4 py-4">
+   288→   288→            <InputOTP
+   289→   289→              maxLength={4}
+   290→   290→              value={pin}
+   291→   291→              onChange={(v) => setPin(v)}
+   292→   292→              autoFocus
+   293→   293→            >
+   294→   294→              <InputOTPGroup>
+   295→   295→                <InputOTPSlot index={0} />
+   296→   296→                <InputOTPSlot index={1} />
+   297→   297→                <InputOTPSlot index={2} />
+   298→   298→                <InputOTPSlot index={3} />
+   299→   299→              </InputOTPGroup>
+   300→   300→            </InputOTP>
+   301→   301→            <p className="text-center text-xs text-muted-foreground">
+   302→   302→              Ingat PIN ini — tidak bisa dipulihkan jika lupa.
+   303→   303→            </p>
+   304→   304→          </div>
+   305→   305→          <DialogFooter>
+   306→   306→            <DialogClose asChild>
+   307→   307→              <Button variant="outline">Batal</Button>
+   308→   308→            </DialogClose>
+   309→   309→            <Button
+   310→   310→              onClick={handleSavePin}
+   311→   311→              disabled={pin.length !== 4 || updateMut.isPending}
+   312→   312→              className="gap-1.5"
+   313→   313→            >
+   314→   314→              {updateMut.isPending && (
+   315→   315→                <Loader2 className="h-4 w-4 animate-spin" />
+   316→   316→              )}
+   317→   317→              Simpan PIN
+   318→   318→            </Button>
+   319→   319→          </DialogFooter>
+   320→   320→        </DialogContent>
+   321→   321→      </Dialog>
+   322→   322→    </SectionCard>
+   323→   323→  );
+   324→   324→}
+   325→   325→
+   326→   326→// ============================================================
+   327→   327→// B. Tampilan
+   328→   328→// ============================================================
+   329→   329→
+   330→   330→function TampilanSection() {
+   331→   331→  const { theme, setTheme } = useTheme();
+   332→   332→  const [mounted, setMounted] = React.useState(false);
+   333→   333→  React.useEffect(() => setMounted(true), []);
+   334→   334→
+   335→   335→  const themes: Array<{
+   336→   336→    value: "light" | "dark" | "system";
+   337→   337→    label: string;
+   338→   338→    icon: React.ReactNode;
+   339→   339→  }> = [
+   340→   340→    { value: "light", label: "Terang", icon: <Sun className="h-4 w-4" /> },
+   341→   341→    { value: "dark", label: "Gelap", icon: <Moon className="h-4 w-4" /> },
+   342→   342→    {
+   343→   343→      value: "system",
+   344→   344→      label: "Sistem",
+   345→   345→      icon: <Monitor className="h-4 w-4" />,
+   346→   346→    },
+   347→   347→  ];
+   348→   348→
+   349→   349→  return (
+   350→   350→    <SectionCard
+   351→   351→      icon={<Palette className="h-4 w-4" />}
+   352→   352→      title="Tampilan"
+   353→   353→      description="Pilih tema sesuai preferensi Anda."
+   354→   354→    >
+   355→   355→      <SettingRow
+   356→   356→        title="Tema"
+   357→   357→        description="Terang, gelap, atau ikuti sistem."
+   358→   358→      >
+   359→   359→        <div className="flex gap-1 rounded-lg bg-muted p-1">
+   360→   360→          {themes.map((t) => {
+   361→   361→            const active = mounted && theme === t.value;
+   362→   362→            return (
+   363→   363→              <button
+   364→   364→                key={t.value}
+   365→   365→                onClick={() => setTheme(t.value)}
+   366→   366→                className={cn(
+   367→   367→                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+   368→   368→                  active
+   369→   369→                    ? "bg-background text-foreground shadow-sm"
+   370→   370→                    : "text-muted-foreground hover:text-foreground",
+   371→   371→                )}
+   372→   372→                aria-pressed={active}
+   373→   373→                aria-label={`Tema ${t.label}`}
+   374→   374→              >
+   375→   375→                {t.icon}
+   376→   376→                <span className="hidden sm:inline">{t.label}</span>
+   377→   377→              </button>
+   378→   378→            );
+   379→   379→          })}
+   380→   380→        </div>
+   381→   381→      </SettingRow>
+   382→   382→    </SectionCard>
+   383→   383→  );
+   384→   384→}
+   385→   385→
+   386→   386→// ============================================================
+   387→   387→// C. Pengingat
+   388→   388→// ============================================================
+   389→   389→
+   390→   390→function PengingatSection({ settings }: { settings: AppSettings }) {
+   391→   391→  const updateMut = useUpdateSetting();
+   392→   392→  const [hour, setHour] = React.useState(String(settings.reminderHour));
+   393→   393→
+   394→   394→  React.useEffect(() => {
+   395→   395→    setHour(String(settings.reminderHour));
+   396→   396→  }, [settings.reminderHour]);
+   397→   397→
+   398→   398→  // Schedule in-app browser notifications while the app is open
+   399→   399→  React.useEffect(() => {
+   400→   400→    if (!settings.reminderEnabled) return;
+   401→   401→    if (typeof window === "undefined" || !("Notification" in window)) return;
+   402→   402→
+   403→   403→    const targetHour = settings.reminderHour;
+   404→   404→    const interval = setInterval(() => {
+   405→   405→      const now = new Date();
+   406→   406→      if (now.getHours() !== targetHour) return;
+   407→   407→      const nowMin = now.getMinutes();
+   408→   408→      // Fire once near the top of the hour (first 5 minutes)
+   409→   409→      if (nowMin > 5) return;
+   410→   410→      const key = `dompetku-reminder-${now.toDateString()}`;
+   411→   411→      try {
+   412→   412→        if (localStorage.getItem(key)) return;
+   413→   413→        localStorage.setItem(key, "1");
+   414→   414→        if (Notification.permission === "granted") {
+   415→   415→          new Notification("DompetKu", {
+   416→   416→            body: "Saatnya mencatat transaksi hari ini! 📒",
+   417→   417→          });
+   418→   418→        }
+   419→   419→      } catch {
+   420→   420→        // localStorage may be unavailable (private mode) — ignore
+   421→   421→      }
+   422→   422→    }, 60_000);
+   423→   423→
+   424→   424→    return () => clearInterval(interval);
+   425→   425→  }, [settings.reminderEnabled, settings.reminderHour]);
+   426→   426→
+   427→   427→  async function handleToggleReminder(enabled: boolean) {
+   428→   428→    if (enabled && typeof window !== "undefined" && "Notification" in window) {
+   429→   429→      const perm = await Notification.requestPermission();
+   430→   430→      if (perm !== "granted") {
+   431→   431→        toast.warning(
+   432→   432→          "Izin notifikasi ditolak. Pengingat aktif tapi tanpa notifikasi.",
+   433→   433→        );
+   434→   434→      }
+   435→   435→    }
+   436→   436→    updateMut.mutate({
+   437→   437→      key: "reminderEnabled",
+   438→   438→      value: enabled ? "true" : "false",
+   439→   439→    });
+   440→   440→    toast.success(enabled ? "Pengingat aktif." : "Pengingat dinonaktifkan.");
+   441→   441→  }
+   442→   442→
+   443→   443→  function handleHourChange(v: string) {
+   444→   444→    setHour(v);
+   445→   445→    const num = Number(v);
+   446→   446→    if (Number.isInteger(num) && num >= 0 && num <= 23) {
+   447→   447→      updateMut.mutate({ key: "reminderHour", value: String(num) });
+   448→   448→    }
+   449→   449→  }
+   450→   450→
+   451→   451→  function handleTestNotification() {
+   452→   452→    if (typeof window === "undefined" || !("Notification" in window)) {
+   453→   453→      toast.error("Browser tidak mendukung notifikasi.");
+   454→   454→      return;
+   455→   455→    }
+   456→   456→    if (Notification.permission !== "granted") {
+   457→   457→      toast.warning("Berikan izin notifikasi dulu.");
+   458→   458→      return;
+   459→   459→    }
+   460→   460→    new Notification("DompetKu", {
+   461→   461→      body: "Ini contoh pengingat. 📒",
+   462→   462→    });
+   463→   463→    toast.success("Notifikasi tes dikirim.");
+   464→   464→  }
+   465→   465→
+   466→   466→  return (
+   467→   467→    <SectionCard
+   468→   468→      icon={<Bell className="h-4 w-4" />}
+   469→   469→      title="Pengingat"
+   470→   470→      description="Pengingat harian untuk mencatat transaksi."
+   471→   471→    >
+   472→   472→      <SettingRow
+   473→   473→        icon={<Clock className="h-4 w-4" />}
+   474→   474→        title="Pengingat Catat Harian"
+   475→   475→        description="Aktifkan pengingat untuk mencatat setiap hari."
+   476→   476→      >
+   477→   477→        <Switch
+   478→   478→          checked={settings.reminderEnabled}
+   479→   479→          onCheckedChange={handleToggleReminder}
+   480→   480→          disabled={updateMut.isPending}
+   481→   481→          aria-label="Aktifkan pengingat"
+   482→   482→        />
+   483→   483→      </SettingRow>
+   484→   484→
+   485→   485→      {settings.reminderEnabled && (
+   486→   486→        <>
+   487→   487→          <SettingRow
+   488→   488→            title="Waktu Pengingat"
+   489→   489→            description="Pengingat akan muncul setiap hari pada jam ini."
+   490→   490→          >
+   491→   491→            <div className="flex items-center gap-2">
+   492→   492→              <Input
+   493→   493→                type="number"
+   494→   494→                min={0}
+   495→   495→                max={23}
+   496→   496→                value={hour}
+   497→   497→                onChange={(e) => handleHourChange(e.target.value)}
+   498→   498→                className="h-9 w-16 text-center"
+   499→   499→                aria-label="Jam pengingat"
+   500→   500→              />
+   501→   501→              <span className="text-xs text-muted-foreground">:00</span>
+   502→   502→            </div>
+   503→   503→          </SettingRow>
+   504→   504→
+   505→   505→          <SettingRow
+   506→   506→            title="Uji Notifikasi"
+   507→   507→            description="Kirim notifikasi tes untuk memastikan izin aktif."
+   508→   508→          >
+   509→   509→            <Button
+   510→   510→              variant="outline"
+   511→   511→              size="sm"
+   512→   512→              onClick={handleTestNotification}
+   513→   513→              className="gap-1.5"
+   514→   514→            >
+   515→   515→              <Send className="h-3.5 w-3.5" />
+   516→   516→              Tes
+   517→   517→            </Button>
+   518→   518→          </SettingRow>
+   519→   519→        </>
+   520→   520→      )}
+   521→   521→    </SectionCard>
+   522→   522→  );
+   523→   523→}
+   524→   524→
+   525→   525→// ============================================================
+   526→   526→// D. Data
+   527→   527→// ============================================================
+   528→   528→
+   529→   529→function DataSection() {
+   530→   530→  const importMut = useImportCsv();
+   531→   531→  const seedMut = useSeed();
+   532→   532→  const [importOpen, setImportOpen] = React.useState(false);
+   533→   533→  const [csvRows, setCsvRows] = React.useState<Array<Record<string, string>>>(
+   534→   534→    [],
+   535→   535→  );
+   536→   536→  const [csvHeaders, setCsvHeaders] = React.useState<string[]>([]);
+   537→   537→  const fileInputRef = React.useRef<HTMLInputElement>(null);
+   538→   538→
+   539→   539→  function handleExportCsv() {
+   540→   540→    window.location.href = api.exportTransactionsUrl();
+   541→   541→    toast.success("Mengekspor CSV...");
+   542→   542→  }
+   543→   543→
+   544→   544→  function handleBackup() {
+   545→   545→    window.location.href = api.backupUrl();
+   546→   546→    toast.success("Membuat backup JSON...");
+   547→   547→  }
+   548→   548→
+   549→   549→  function handleImportClick() {
+   550→   550→    setCsvRows([]);
+   551→   551→    setCsvHeaders([]);
+   552→   552→    setImportOpen(true);
+   553→   553→  }
+   554→   554→
+   555→   555→  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+   556→   556→    const file = e.target.files?.[0];
+   557→   557→    if (!file) return;
+   558→   558→    const reader = new FileReader();
+   559→   559→    reader.onload = () => {
+   560→   560→      const text = String(reader.result || "");
+   561→   561→      const { headers, rows } = parseCsv(text);
+   562→   562→      if (rows.length === 0) {
+   563→   563→        toast.error("CSV kosong atau tidak valid.");
+   564→   564→        return;
+   565→   565→      }
+   566→   566→      setCsvHeaders(headers);
+   567→   567→      setCsvRows(rows);
+   568→   568→    };
+   569→   569→    reader.onerror = () => toast.error("Gagal membaca file CSV.");
+   570→   570→    reader.readAsText(file);
+   571→   571→  }
+   572→   572→
+   573→   573→  function handleImport() {
+   574→   574→    if (csvRows.length === 0) return;
+   575→   575→    importMut.mutate(csvRows, {
+   576→   576→      onSuccess: (res) => {
+   577→   577→        toast.success(
+   578→   578→          `${res.imported} transaksi diimpor, ${res.skipped} dilewati.`,
+   579→   579→        );
+   580→   580→        setImportOpen(false);
+   581→   581→        setCsvRows([]);
+   582→   582→        setCsvHeaders([]);
+   583→   583→        if (fileInputRef.current) fileInputRef.current.value = "";
+   584→   584→      },
+   585→   585→      onError: (err) => {
+   586→   586→        toast.error(err.message || "Gagal mengimpor CSV.");
+   587→   587→      },
+   588→   588→    });
+   589→   589→  }
+   590→   590→
+   591→   591→  function handleCloseImport() {
+   592→   592→    setImportOpen(false);
+   593→   593→    setCsvRows([]);
+   594→   594→    setCsvHeaders([]);
+   595→   595→    if (fileInputRef.current) fileInputRef.current.value = "";
+   596→   596→  }
+   597→   597→
+   598→   598→  return (
+   599→   599→    <SectionCard
+   600→   600→      icon={<Database className="h-4 w-4" />}
+   601→   601→      title="Data"
+   602→   602→      description="Kelola data transaksi Anda."
+   603→   603→    >
+   604→   604→      <SettingRow
+   605→   605→        icon={<Upload className="h-4 w-4" />}
+   606→   606→        title="Impor CSV"
+   607→   607→        description="Impor transaksi dari file CSV."
+   608→   608→      >
+   609→   609→        <Button
+   610→   610→          variant="outline"
+   611→   611→          size="sm"
+   612→   612→          onClick={handleImportClick}
+   613→   613→          className="gap-1.5"
+   614→   614→        >
+   615→   615→          <Upload className="h-3.5 w-3.5" />
+   616→   616→          Impor
+   617→   617→        </Button>
+   618→   618→      </SettingRow>
+   619→   619→
+   620→   620→      <SettingRow
+   621→   621→        icon={<Download className="h-4 w-4" />}
+   622→   622→        title="Ekspor CSV"
+   623→   623→        description="Unduh semua transaksi sebagai CSV."
+   624→   624→      >
+   625→   625→        <Button
+   626→   626→          variant="outline"
+   627→   627→          size="sm"
+   628→   628→          onClick={handleExportCsv}
+   629→   629→          className="gap-1.5"
+   630→   630→        >
+   631→   631→          <Download className="h-3.5 w-3.5" />
+   632→   632→          Ekspor
+   633→   633→        </Button>
+   634→   634→      </SettingRow>
+   635→   635→
+   636→   636→      <SettingRow
+   637→   637→        icon={<FileJson className="h-4 w-4" />}
+   638→   638→        title="Backup JSON"
+   639→   639→        description="Cadangkan seluruh data (kategori, transaksi, dll)."
+   640→   640→      >
+   641→   641→        <Button
+   642→   642→          variant="outline"
+   643→   643→          size="sm"
+   644→   644→          onClick={handleBackup}
+   645→   645→          className="gap-1.5"
+   646→   646→        >
+   647→   647→          <FileJson className="h-3.5 w-3.5" />
+   648→   648→          Backup
+   649→   649→        </Button>
+   650→   650→      </SettingRow>
+   651→   651→
+   652→   652→      <SettingRow
+   653→   653→        icon={<Sparkles className="h-4 w-4" />}
+   654→   654→        title="Muat Data Contoh"
+   655→   655→        description="Isi aplikasi dengan kategori & transaksi contoh."
+   656→   656→      >
+   657→   657→        <AlertDialog>
+   658→   658→          <AlertDialogTrigger asChild>
+   659→   659→            <Button variant="outline" size="sm" className="gap-1.5">
+   660→   660→              <Sparkles className="h-3.5 w-3.5" />
+   661→   661→              Muat
+   662→   662→            </Button>
+   663→   663→          </AlertDialogTrigger>
+   664→   664→          <AlertDialogContent>
+   665→   665→            <AlertDialogHeader>
+   666→   666→              <AlertDialogTitle>Muat data contoh?</AlertDialogTitle>
+   667→   667→              <AlertDialogDescription>
+   668→   668→                Aplikasi akan diisi dengan kategori default dan transaksi
+   669→   669→                contoh. Data yang sudah ada tidak akan dihapus.
+   670→   670→              </AlertDialogDescription>
+   671→   671→            </AlertDialogHeader>
+   672→   672→            <AlertDialogFooter>
+   673→   673→              <AlertDialogCancel>Batal</AlertDialogCancel>
+   674→   674→              <AlertDialogAction
+   675→   675→                onClick={() => {
+   676→   676→                  seedMut.mutate(undefined, {
+   677→   677→                    onSuccess: () =>
+   678→   678→                      toast.success("Data contoh berhasil dimuat."),
+   679→   679→                    onError: (err) =>
+   680→   680→                      toast.error(
+   681→   681→                        err.message || "Gagal memuat data contoh.",
+   682→   682→                      ),
+   683→   683→                  });
+   684→   684→                }}
+   685→   685→                disabled={seedMut.isPending}
+   686→   686→                className="gap-1.5"
+   687→   687→              >
+   688→   688→                {seedMut.isPending && (
+   689→   689→                  <Loader2 className="h-4 w-4 animate-spin" />
+   690→   690→                )}
+   691→   691→                Muat Data
+   692→   692→              </AlertDialogAction>
+   693→   693→            </AlertDialogFooter>
+   694→   694→          </AlertDialogContent>
+   695→   695→        </AlertDialog>
+   696→   696→      </SettingRow>
+   697→   697→
+   698→   698→      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+   699→   699→        <DialogContent
+   700→   700→          showCloseButton={false}
+   701→   701→          className="max-w-2xl gap-0 overflow-hidden p-0 sm:rounded-2xl"
+   702→   702→        >
+   703→   703→          <DialogHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 p-5 pb-4">
+   704→   704→            <div>
+   705→   705→              <DialogTitle className="text-base">Impor CSV</DialogTitle>
+   706→   706→              <DialogDescription className="text-xs">
+   707→   707→                Pilih file CSV berisi transaksi Anda.
+   708→   708→              </DialogDescription>
+   709→   709→            </div>
+   710→   710→            <DialogClose asChild>
+   711→   711→              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+   712→   712→                <X className="h-4 w-4" />
+   713→   713→              </Button>
+   714→   714→            </DialogClose>
+   715→   715→          </DialogHeader>
+   716→   716→
+   717→   717→          <div className="max-h-[60vh] space-y-4 overflow-y-auto custom-scrollbar p-5">
+   718→   718→            <input
+   719→   719→              ref={fileInputRef}
+   720→   720→              type="file"
+   721→   721→              accept=".csv"
+   722→   722→              onChange={handleFile}
+   723→   723→              className="hidden"
+   724→   724→            />
+   725→   725→            <button
+   726→   726→              type="button"
+   727→   727→              onClick={() => fileInputRef.current?.click()}
+   728→   728→              className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-8 transition-colors hover:border-primary/50 hover:bg-muted/30"
+   729→   729→            >
+   730→   730→              <Upload className="h-6 w-6 text-muted-foreground" />
+   731→   731→              <span className="text-sm font-medium">
+   732→   732→                {csvRows.length > 0
+   733→   733→                  ? `${csvRows.length} baris siap diimpor`
+   734→   734→                  : "Pilih file CSV"}
+   735→   735→              </span>
+   736→   736→              <span className="text-xs text-muted-foreground">
+   737→   737→                Kolom: Tanggal, Tipe, Kategori, Keterangan, Jumlah, Catatan
+   738→   738→              </span>
+   739→   739→            </button>
+   740→   740→
+   741→   741→            {csvRows.length > 0 && (
+   742→   742→              <div className="custom-scrollbar max-h-72 overflow-auto rounded-lg border border-border">
+   743→   743→                <Table>
+   744→   744→                  <TableHeader>
+   745→   745→                    <TableRow>
+   746→   746→                      {csvHeaders.map((h) => (
+   747→   747→                        <TableHead key={h} className="text-xs">
+   748→   748→                          {h}
+   749→   749→                        </TableHead>
+   750→   750→                      ))}
+   751→   751→                    </TableRow>
+   752→   752→                  </TableHeader>
+   753→   753→                  <TableBody>
+   754→   754→                    {csvRows.slice(0, 50).map((row, i) => (
+   755→   755→                      <TableRow key={i}>
+   756→   756→                        {csvHeaders.map((h) => (
+   757→   757→                          <TableCell key={h} className="text-xs">
+   758→   758→                            {row[h] ?? ""}
+   759→   759→                          </TableCell>
+   760→   760→                        ))}
+   761→   761→                      </TableRow>
+   762→   762→                    ))}
+   763→   763→                  </TableBody>
+   764→   764→                </Table>
+   765→   765→                {csvRows.length > 50 && (
+   766→   766→                  <p className="border-t border-border bg-muted/30 px-3 py-2 text-center text-xs text-muted-foreground">
+   767→   767→                    Menampilkan 50 dari {csvRows.length} baris
+   768→   768→                  </p>
+   769→   769→                )}
+   770→   770→              </div>
+   771→   771→            )}
+   772→   772→          </div>
+   773→   773→
+   774→   774→          <DialogFooter className="border-t border-border bg-muted/30 p-4">
+   775→   775→            <Button variant="outline" onClick={handleCloseImport}>
+   776→   776→              Batal
+   777→   777→            </Button>
+   778→   778→            <Button
+   779→   779→              onClick={handleImport}
+   780→   780→              disabled={csvRows.length === 0 || importMut.isPending}
+   781→   781→              className="gap-1.5"
+   782→   782→            >
+   783→   783→              {importMut.isPending && (
+   784→   784→                <Loader2 className="h-4 w-4 animate-spin" />
+   785→   785→              )}
+   786→   786→              Impor{csvRows.length > 0 ? ` (${csvRows.length})` : ""}
+   787→   787→            </Button>
+   788→   788→          </DialogFooter>
+   789→   789→        </DialogContent>
+   790→   790→      </Dialog>
+   791→   791→    </SectionCard>
+   792→   792→  );
+   793→   793→}
+   794→   794→
+   795→   795→// ============================================================
+   796→   796→// CSV parser (handles quoted fields with commas)
+   797→   797→// ============================================================
+   798→   798→
+   799→   799→function parseCsv(text: string): {
+   800→   800→  headers: string[];
+   801→   801→  rows: Array<Record<string, string>>;
+   802→   802→} {
+   803→   803→  // Strip BOM if present
+   804→   804→  const cleaned = text.replace(/^\uFEFF/, "");
+   805→   805→  const lines = cleaned
+   806→   806→    .split(/\r?\n/)
+   807→   807→    .map((l) => l.trim())
+   808→   808→    .filter((l) => l !== "");
+   809→   809→  if (lines.length === 0) return { headers: [], rows: [] };
+   810→   810→
+   811→   811→  const splitLine = (line: string): string[] => {
+   812→   812→    const out: string[] = [];
+   813→   813→    let cur = "";
+   814→   814→    let inQuotes = false;
+   815→   815→    for (let i = 0; i < line.length; i++) {
+   816→   816→      const ch = line[i];
+   817→   817→      if (ch === '"') {
+   818→   818→        if (inQuotes && line[i + 1] === '"') {
+   819→   819→          cur += '"';
+   820→   820→          i++;
+   821→   821→        } else {
+   822→   822→          inQuotes = !inQuotes;
+   823→   823→        }
+   824→   824→      } else if (ch === "," && !inQuotes) {
+   825→   825→        out.push(cur);
+   826→   826→        cur = "";
+   827→   827→      } else {
+   828→   828→        cur += ch;
+   829→   829→      }
+   830→   830→    }
+   831→   831→    out.push(cur);
+   832→   832→    return out.map((s) => s.trim());
+   833→   833→  };
+   834→   834→
+   835→   835→  const headers = splitLine(lines[0]);
+   836→   836→  const rows: Array<Record<string, string>> = [];
+   837→   837→  for (let i = 1; i < lines.length; i++) {
+   838→   838→    const cells = splitLine(lines[i]);
+   839→   839→    const obj: Record<string, string> = {};
+   840→   840→    headers.forEach((h, idx) => {
+   841→   841→      obj[h] = cells[idx] ?? "";
+   842→   842→    });
+   843→   843→    rows.push(obj);
+   844→   844→  }
+   845→   845→  return { headers, rows };
+   846→   846→}
+   847→   847→
+   848→   848→// ============================================================
+   849→   849→// E. Tentang
+   850→   850→// ============================================================
+   851→   851→
+   852→   852→function TentangSection() {
+   853→   853→  return (
+   854→   854→    <SectionCard
+   855→   855→      icon={<Info className="h-4 w-4" />}
+   856→   856→      title="Tentang"
+   857→   857→      description="Informasi aplikasi."
+   858→   858→    >
+   859→   859→      <SettingRow
+   860→   860→        title="Versi"
+   861→   861→        description="DompetKu v1.0.0"
+   862→   862→      >
+   863→   863→        <Badge variant="secondary">v1.0.0</Badge>
+   864→   864→      </SettingRow>
+   865→   865→      <SettingRow
+   866→   866→        title="Teknologi"
+   867→   867→        description="Next.js 16, TypeScript, Prisma, Tailwind CSS, shadcn/ui"
+   868→   868→      >
+   869→   869→        <Badge variant="outline" className="gap-1">
+   870→   870→          <Sparkles className="h-3 w-3" />
+   871→   871→          Modern Stack
+   872→   872→        </Badge>
+   873→   873→      </SettingRow>
+   874→   874→      <SettingRow
+   875→   875→        title="Penyimpanan"
+   876→   876→        description="Semua data tersimpan lokal di perangkat Anda menggunakan SQLite."
+   877→   877→      >
+   878→   878→        <Badge variant="outline" className="gap-1">
+   879→   879→          <ShieldCheck className="h-3 w-3" />
+   880→   880→          Lokal
+   881→   881→        </Badge>
+   882→   882→      </SettingRow>
+   883→   883→    </SectionCard>
+   884→   884→  );
+   885→   885→}
+   886→   886→

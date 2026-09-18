@@ -72,6 +72,7 @@ import {
   useSettings,
   useUpdateSetting,
 } from "@/lib/hooks";
+import { SecuritySection } from "@/components/finance/security-section";
 import type { AppSettings } from "@/lib/types";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -121,7 +122,7 @@ export function SettingsSection() {
         </div>
       ) : (
         <>
-          <KeamananSection settings={settings} />
+          <SecuritySection />
           <TampilanSection />
           <PengingatSection settings={settings} />
           <DataSection />

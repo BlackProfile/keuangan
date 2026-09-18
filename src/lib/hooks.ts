@@ -573,3 +573,104 @@ export function useTogglePin() {
     },
   });
 }
+
+// ---------- Security ----------
+export function useSecuritySettings() {
+  return useQuery({
+    queryKey: ["security"] as const,
+    queryFn: () => api.getSecurity(),
+    staleTime: 30_000,
+  });
+}
+
+export function useUpdateSecurity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { key: string; value: string }) =>
+      api.updateSecurity(data.key, data.value),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
+  });
+}
+
+export function useUpdateSecurityBulk() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: Record<string, string>) =>
+      api.updateSecurityBulk(settings),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
+  });
+}
+
+// ---------- Audit Log ----------
+export function useAuditLog(params?: { limit?: number; action?: string }) {
+  return useQuery({
+    queryKey: ["audit", params] as const,
+    queryFn: () => api.listAudit(params),
+  });
+}
+
+export function useLogAudit() {
+  return useMutation({
+    mutationFn: (data: { action: string; detail?: string; success?: boolean; fingerprint?: string }) =>
+      api.logAudit(data.action, data.detail, data.success ?? true, data.fingerprint),
+  });
+}
+
+// ---------- Biometric ----------
+export function useBiometricList() {
+  return useQuery({
+    queryKey: ["biometric"] as const,
+    queryFn: () => api.listBiometric(),
+  });
+}
+
+export function useRegisterBiometric() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; credentialId: string; publicKey: string; counter: number }) =>
+      api.registerBiometric(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["biometric"] }),
+  });
+}
+
+export function useDeleteBiometric() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteBiometric(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["biometric"] }),
+  });
+}
+
+// ---------- Trusted Devices ----------
+export function useTrustedDevices() {
+  return useQuery({
+    queryKey: ["trusted-devices"] as const,
+    queryFn: () => api.listTrustedDevices(),
+  });
+}
+
+export function useAddTrustedDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; fingerprint: string; trustedDays: number }) =>
+      api.addTrustedDevice(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["trusted-devices"] }),
+  });
+}
+
+export function useRevokeTrustedDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.revokeTrustedDevice(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["trusted-devices"] }),
+  });
+}
+
+// ---------- Panic Wipe ----------
+export function usePanicWipe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.panicWipe(),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+}

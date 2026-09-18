@@ -20,6 +20,8 @@ import {
   X,
   HandCoins,
   Zap,
+  ShieldCheck,
+  Activity,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -46,6 +48,8 @@ export type SectionId =
   | "analytics"
   | "ai"
   | "categories"
+  | "security"
+  | "audit"
   | "settings";
 
 interface NavItem {
@@ -89,6 +93,8 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Lainnya",
     items: [
       { id: "categories", label: "Kategori", icon: <Tags className="h-4 w-4" /> },
+      { id: "security", label: "Keamanan", icon: <ShieldCheck className="h-4 w-4" /> },
+      { id: "audit", label: "Audit Log", icon: <Activity className="h-4 w-4" /> },
       { id: "settings", label: "Pengaturan", icon: <Settings className="h-4 w-4" /> },
     ],
   },
