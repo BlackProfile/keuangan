@@ -830,7 +830,7 @@ function TransactionRow({
       </div>
 
       {/* Right side: amount + actions */}
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-2">
         <div className="text-right">
           <div
             className={cn(
@@ -842,27 +842,26 @@ function TransactionRow({
             {formatCurrency(transaction.amount)}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-          onClick={onEdit}
-          aria-label="Edit transaksi"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
+        {/* Actions: combine edit + menu into single dropdown to avoid overlap */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Aksi cepat"
+              className="h-8 w-8 shrink-0 text-muted-foreground opacity-60 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+              aria-label="Aksi transaksi"
             >
-              <MoreVertical className="h-3.5 w-3.5" />
+              <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              onClick={onEdit}
+              className="gap-2"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={handleDuplicate}
               disabled={duplicateMut.isPending}
