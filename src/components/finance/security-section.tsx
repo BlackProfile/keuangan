@@ -303,6 +303,11 @@ export function SecuritySection() {
   // edits after a bulk save triggers a query refetch.
   const hasInitializedRef = React.useRef(false);
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mutateRef = React.useRef(bulkMut.mutate);
+  React.useEffect(() => {
+    mutateRef.current = bulkMut.mutate;
+  }, [bulkMut.mutate]);
+  const retryCountRef = React.useRef(0);
 
   // Sync from server on first load (and when raw data first arrives)
   React.useEffect(() => {
@@ -317,15 +322,39 @@ export function SecuritySection() {
     if (!hasInitializedRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      bulkMut.mutate(serializeSecurityConfig(localConfig), {
-        onSuccess: () => toast.success("Pengaturan disimpan"),
-        onError: () => toast.error("Gagal menyimpan pengaturan"),
+      mutateRef.current(serializeSecurityConfig(localConfig), {
+        onSuccess: () => {
+          retryCountRef.current = 0;
+          toast.success("Pengaturan disimpan");
+        },
+        onError: (err) => {
+          // Retry up to 3 times with backoff for transient failures
+          if (retryCountRef.current < 3) {
+            retryCountRef.current += 1;
+            const delay = 1000 * retryCountRef.current;
+            setTimeout(() => {
+              mutateRef.current(serializeSecurityConfig(localConfig), {
+                onSuccess: () => {
+                  retryCountRef.current = 0;
+                  toast.success("Pengaturan disimpan");
+                },
+                onError: () => {
+                  if (retryCountRef.current >= 3) {
+                    toast.error("Gagal menyimpan — server tidak tersambung");
+                  }
+                },
+              });
+            }, delay);
+          } else {
+            toast.error("Gagal menyimpan — server tidak tersambung");
+          }
+        },
       });
     }, 500);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [localConfig, bulkMut]);
+  }, [localConfig]);
 
   const updateConfig = React.useCallback(
     (partial: Partial<SecurityConfig>) => {
