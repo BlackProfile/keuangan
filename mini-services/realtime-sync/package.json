@@ -1,0 +1,12 @@
+{
+  "name": "dompetku-realtime-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch run.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.3"
+  }
+}

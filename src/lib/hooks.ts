@@ -15,11 +15,22 @@ import type {
   InstallmentInput,
   RecurringInput,
   ShareLinkInput,
+  Transaction,
   TransactionGroupInput,
   TransactionInput,
   TransactionTemplateInput,
   TransferInput,
 } from "@/lib/types";
+import { broadcastChange } from "@/lib/use-realtime-sync";
+
+// Wrapper to broadcast entity changes (safe to call — no-op if socket not connected)
+function broadcastEntityChange(entity: string, action: string) {
+  try {
+    broadcastChange(entity, action);
+  } catch {
+    // ignore — realtime is best-effort
+  }
+}
 
 export const queryKeys = {
   transactions: ["transactions"] as const,
@@ -81,12 +92,36 @@ export function useCreateTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: TransactionInput) => api.createTransaction(data),
+    onMutate: async (data) => {
+      // Optimistic: add temp transaction to list cache
+      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+        if (!old) return old;
+        const temp = {
+          ...data,
+          id: `temp-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isRecurringGenerated: false,
+        } as Transaction;
+        return [temp, ...old];
+      });
+      return { prev };
+    },
+    onError: (_e, _data, ctx) => {
+      // Rollback on error
+      if (ctx?.prev) {
+        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.transactions });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard });
       qc.invalidateQueries({ queryKey: queryKeys.analytics });
       qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
       qc.invalidateQueries({ queryKey: queryKeys.accounts });
+      broadcastEntityChange("transaction", "create");
     },
   });
 }
@@ -96,12 +131,27 @@ export function useUpdateTransaction() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: TransactionInput }) =>
       api.updateTransaction(id, data),
+    onMutate: async ({ id, data }) => {
+      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+        if (!old) return old;
+        return old.map((t) => (t.id === id ? { ...t, ...data } as Transaction : t));
+      });
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) {
+        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.transactions });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard });
       qc.invalidateQueries({ queryKey: queryKeys.analytics });
       qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
       qc.invalidateQueries({ queryKey: queryKeys.accounts });
+      broadcastEntityChange("transaction", "update");
     },
   });
 }
@@ -110,12 +160,27 @@ export function useDeleteTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.deleteTransaction(id),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+        if (!old) return old;
+        return old.filter((t) => t.id !== id);
+      });
+      return { prev };
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prev) {
+        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.transactions });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard });
       qc.invalidateQueries({ queryKey: queryKeys.analytics });
       qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
       qc.invalidateQueries({ queryKey: queryKeys.accounts });
+      broadcastEntityChange("transaction", "delete");
     },
   });
 }

@@ -40,6 +40,12 @@ import {
 import { useSecurityStore } from "@/lib/security-store";
 import { useSecuritySync } from "@/lib/use-security-sync";
 import { auditLog, AUDIT_ACTIONS } from "@/lib/audit";
+import {
+  useRealtimeSync,
+  useSecurityLockSync,
+  broadcastLock,
+  broadcastUnlock,
+} from "@/lib/use-realtime-sync";
 
 interface PrefillData {
   type?: TransactionType;
@@ -68,6 +74,31 @@ export default function Home() {
   // Sync security secrets (pinHash, passwordHash, duressPinHash) from server
   // to local store — ensures same PIN works across all devices.
   useSecuritySync();
+
+  // Realtime sync — invalidates queries when data changes on other devices
+  useRealtimeSync();
+
+  // When another device locks, lock this device too
+  useSecurityLockSync((reason) => {
+    if (lockEnabled && !securityStore.isLocked) {
+      securityStore.lock();
+      auditLog(AUDIT_ACTIONS.LOCK, reason || "synced from other device");
+    }
+  });
+
+  // Broadcast lock/unlock events to other devices
+  const prevLockedRef = React.useRef(securityStore.isLocked);
+  React.useEffect(() => {
+    const nowLocked = securityStore.isLocked;
+    if (nowLocked !== prevLockedRef.current) {
+      prevLockedRef.current = nowLocked;
+      if (nowLocked) {
+        broadcastLock("manual lock");
+      } else {
+        broadcastUnlock();
+      }
+    }
+  }, [securityStore.isLocked]);
 
   // Parse security config
   const securityConfig: SecurityConfig = React.useMemo(() => {
