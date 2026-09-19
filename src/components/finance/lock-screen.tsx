@@ -825,6 +825,18 @@ export function LockScreen({
     try {
       const hash = await hashSecret(setupPin);
       store.setSecrets({ pinHash: hash });
+      // Save to server so PIN syncs across all devices
+      try {
+        await fetch("/api/security/bulk", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            settings: { pinEnabled: "true", pinHash: hash },
+          }),
+        });
+      } catch {
+        // Best-effort server sync; local still works
+      }
       await auditLog(AUDIT_ACTIONS.PIN_CHANGE, "PIN baru dibuat", true).catch(
         () => {}
       );
@@ -850,6 +862,18 @@ export function LockScreen({
     try {
       const hash = await hashSecret(setupPassword);
       store.setSecrets({ passwordHash: hash });
+      // Save to server for cross-device sync
+      try {
+        await fetch("/api/security/bulk", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            settings: { passwordEnabled: "true", passwordHash: hash },
+          }),
+        });
+      } catch {
+        // best-effort
+      }
       await auditLog(
         AUDIT_ACTIONS.PIN_CHANGE,
         "Password baru dibuat",

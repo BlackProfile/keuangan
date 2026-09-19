@@ -417,8 +417,10 @@ function AppLockSection({
     if (enabled) {
       setPinDialog(true);
     } else {
-      updateConfig({ pinEnabled: false });
+      updateConfig({ pinEnabled: false, pinHash: "" });
       setSecrets({ pinHash: null });
+      // Clear from server too
+      bulkMut.mutate({ ...serializeSecurityConfig(localConfig), pinEnabled: "false", pinHash: "" });
       auditLog(AUDIT_ACTIONS.PIN_CHANGE, "PIN dinonaktifkan", true);
       toast.success("PIN dinonaktifkan");
     }
@@ -428,8 +430,9 @@ function AppLockSection({
     if (enabled) {
       setPasswordDialog(true);
     } else {
-      updateConfig({ passwordEnabled: false });
+      updateConfig({ passwordEnabled: false, passwordHash: "" });
       setSecrets({ passwordHash: null });
+      bulkMut.mutate({ ...serializeSecurityConfig(localConfig), passwordEnabled: "false", passwordHash: "" });
       toast.success("Password Master dinonaktifkan");
     }
   }
@@ -558,9 +561,16 @@ function AppLockSection({
           try {
             const hash = await hashSecret(pin);
             setSecrets({ pinHash: hash });
+            // Save to server so it syncs across all devices
+            bulkMut.mutate(
+              { ...serializeSecurityConfig(localConfig), pinEnabled: "true", pinHash: hash },
+              {
+                onSuccess: () => toast.success("PIN aktif & tersinkron ke semua device."),
+                onError: () => toast.error("PIN aktif lokal, tapi gagal sync ke server."),
+              }
+            );
             updateConfig({ pinEnabled: true });
             auditLog(AUDIT_ACTIONS.PIN_CHANGE, "PIN baru dibuat", true);
-            toast.success("PIN aktif. Aplikasi akan terkunci saat dibuka.");
             setPinDialog(false);
           } catch {
             toast.error("Gagal meng-hash PIN.");
@@ -575,6 +585,14 @@ function AppLockSection({
           try {
             const hash = await hashSecret(pw);
             setSecrets({ passwordHash: hash });
+            // Save to server for cross-device sync
+            bulkMut.mutate(
+              { ...serializeSecurityConfig(localConfig), passwordEnabled: "true", passwordHash: hash },
+              {
+                onSuccess: () => toast.success("Password Master aktif & tersinkron."),
+                onError: () => toast.error("Password aktif lokal, tapi gagal sync."),
+              }
+            );
             updateConfig({ passwordEnabled: true });
             auditLog(AUDIT_ACTIONS.PIN_CHANGE, "Password Master dibuat", true);
             toast.success("Password Master aktif.");
@@ -1566,13 +1584,20 @@ function DecoySection({
           try {
             const hash = await hashSecret(pin);
             setSecrets({ duressPinHash: hash });
+            // Save to server for cross-device sync
+            bulkMut.mutate(
+              { ...serializeSecurityConfig(localConfig), duressPinHash: hash, decoyEnabled: "true" },
+              {
+                onSuccess: () => toast.success("PIN duress disimpan & tersinkron."),
+                onError: () => toast.error("PIN duress lokal, gagal sync."),
+              }
+            );
             updateConfig({ duressPinHash: hash, decoyEnabled: true });
             auditLog(
               AUDIT_ACTIONS.PIN_CHANGE,
               "PIN duress dibuat",
               true,
             );
-            toast.success("PIN duress disimpan.");
             setDuressDialog(false);
           } catch {
             toast.error("Gagal meng-hash PIN duress.");

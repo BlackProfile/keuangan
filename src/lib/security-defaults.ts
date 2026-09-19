@@ -5,6 +5,10 @@ export interface SecurityConfig {
   passwordEnabled: boolean;
   biometricEnabled: boolean;
   patternEnabled: boolean;
+  // Secrets (synced to server, cached locally)
+  pinHash: string;
+  passwordHash: string;
+  duressPinHash: string;
   // Auto-lock
   autoLockEnabled: boolean;
   autoLockMinutes: number; // idle minutes before lock
@@ -71,6 +75,9 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   passwordEnabled: false,
   biometricEnabled: false,
   patternEnabled: false,
+  pinHash: "",
+  passwordHash: "",
+  duressPinHash: "",
   autoLockEnabled: true,
   autoLockMinutes: 5,
   lockOnTabSwitch: false,

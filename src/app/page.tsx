@@ -38,6 +38,7 @@ import {
   parseSecurityConfig,
 } from "@/lib/security-defaults";
 import { useSecurityStore } from "@/lib/security-store";
+import { useSecuritySync } from "@/lib/use-security-sync";
 import { auditLog, AUDIT_ACTIONS } from "@/lib/audit";
 
 interface PrefillData {
@@ -63,6 +64,10 @@ export default function Home() {
   const createMut = useCreateTransaction();
   const panicWipeMut = usePanicWipe();
   const securityStore = useSecurityStore();
+
+  // Sync security secrets (pinHash, passwordHash, duressPinHash) from server
+  // to local store — ensures same PIN works across all devices.
+  useSecuritySync();
 
   // Parse security config
   const securityConfig: SecurityConfig = React.useMemo(() => {
