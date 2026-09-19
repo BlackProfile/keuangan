@@ -69,7 +69,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -1096,8 +1095,7 @@ function ShareFormDialog({
               </TabsList>
             </div>
 
-            <ScrollArea className="max-h-[60vh]">
-              <div className="p-5">
+            <div className="max-h-[62vh] overflow-y-auto custom-scrollbar p-5">
                 {/* TAB 1: KONTEN */}
                 <TabsContent value="content" className="mt-0 space-y-5">
                   {/* Title */}
@@ -1594,8 +1592,7 @@ function ShareFormDialog({
                     <SharePreview form={form} />
                   </div>
                 </TabsContent>
-              </div>
-            </ScrollArea>
+            </div>
 
             {/* Footer */}
             <DialogFooter className="flex flex-col gap-3 border-t border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">

@@ -61,7 +61,9 @@ const ENTITY_TO_QUERY_KEYS: Record<string, string[]> = {
 export function useRealtimeSync() {
   const qc = useQueryClient();
   const qcRef = React.useRef(qc);
-  qcRef.current = qc;
+  React.useEffect(() => {
+    qcRef.current = qc;
+  }, [qc]);
   const initializedRef = React.useRef(false);
 
   React.useEffect(() => {
