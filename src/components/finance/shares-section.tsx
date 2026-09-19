@@ -1050,7 +1050,7 @@ function ShareFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="max-w-2xl gap-0 overflow-hidden p-0 sm:rounded-2xl"
+        className="flex max-h-[95dvh] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl"
       >
         <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
           <div className="flex items-center justify-between">
@@ -1072,11 +1072,11 @@ function ShareFormDialog({
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <Tabs
             value={tab}
             onValueChange={setTab}
-            className="flex flex-col gap-0"
+            className="flex min-h-0 flex-1 flex-col gap-0"
           >
             <div className="border-b border-border bg-background px-4 pt-3">
               <TabsList className="bg-muted/60">
@@ -1095,7 +1095,7 @@ function ShareFormDialog({
               </TabsList>
             </div>
 
-            <div className="max-h-[62vh] overflow-y-auto custom-scrollbar p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-5">
                 {/* TAB 1: KONTEN */}
                 <TabsContent value="content" className="mt-0 space-y-5">
                   {/* Title */}
