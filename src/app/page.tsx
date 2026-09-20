@@ -23,6 +23,7 @@ import { LockScreen } from "@/components/finance/lock-screen";
 import { SecuritySection } from "@/components/finance/security-section";
 import { AuditSection } from "@/components/finance/audit-section";
 import { SharesSection } from "@/components/finance/shares-section";
+import { ExportSection } from "@/components/finance/export-section";
 import {
   useCategories,
   useCreateTransaction,
@@ -326,6 +327,7 @@ export default function Home() {
               {section === "security" && <SecuritySection />}
               {section === "audit" && <AuditSection />}
               {section === "shares" && <SharesSection />}
+              {section === "export" && <ExportSection />}
               {section === "settings" && <SettingsSection />}
             </motion.div>
           </AnimatePresence>

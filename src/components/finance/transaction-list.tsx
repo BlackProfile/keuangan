@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   Eye,
+  EyeOff,
   Inbox,
   Loader2,
   MoreVertical,
@@ -54,6 +55,7 @@ import { api } from "@/lib/api";
 import {
   useCategories,
   useDuplicateTransaction,
+  useToggleHideTransaction,
   useTogglePin,
   useTransactions,
 } from "@/lib/hooks";
@@ -99,6 +101,7 @@ export function TransactionList({
   const [onlyReimbursable, setOnlyReimbursable] = React.useState(false);
   const [onlyDebt, setOnlyDebt] = React.useState(false);
   const [onlySubscription, setOnlySubscription] = React.useState(false);
+  const [showHidden, setShowHidden] = React.useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
@@ -120,6 +123,7 @@ export function TransactionList({
       reimbursable: onlyReimbursable || undefined,
       debt: onlyDebt || undefined,
       subscription: onlySubscription || undefined,
+      includeHidden: showHidden ? true : undefined,
     }),
     [
       type,
@@ -135,6 +139,7 @@ export function TransactionList({
       onlyReimbursable,
       onlyDebt,
       onlySubscription,
+      showHidden,
     ]
   );
 
@@ -486,6 +491,13 @@ export function TransactionList({
             >
               Langganan
             </ToggleChip>
+            <ToggleChip
+              active={showHidden}
+              onClick={() => setShowHidden((v) => !v)}
+            >
+              <EyeOff className="mr-1 h-3 w-3" />
+              Tersembunyi
+            </ToggleChip>
           </div>
 
           {/* Result summary */}
@@ -673,6 +685,16 @@ function TransactionRow({
 }) {
   const duplicateMut = useDuplicateTransaction();
   const pinMut = useTogglePin();
+  const hideMut = useToggleHideTransaction();
+
+  function handleToggleHide() {
+    hideMut.mutate(transaction.id, {
+      onSuccess: () => {
+        toast.success(transaction.isHidden ? "Transaksi ditampilkan" : "Transaksi disembunyikan");
+      },
+      onError: () => toast.error("Gagal mengubah status transaksi"),
+    });
+  }
 
   const isIncome = transaction.type === "INCOME";
   const cat = transaction.category;
@@ -883,6 +905,19 @@ function TransactionRow({
                 <Pin className="h-4 w-4" />
               )}
               {transaction.isPinned ? "Lepas Sematan" : "Sematkan"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleToggleHide}
+              disabled={hideMut.isPending}
+            >
+              {hideMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : transaction.isHidden ? (
+                <Eye className="h-4 w-4" />
+              ) : (
+                <EyeOff className="h-4 w-4" />
+              )}
+              {transaction.isHidden ? "Tampilkan" : "Sembunyikan"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => toast("Detail transaksi")}>

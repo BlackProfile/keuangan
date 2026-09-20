@@ -1355,3 +1355,167 @@ Stage Summary:
 - Hidden amounts + masked descriptions for privacy
 - Custom theme + hide branding for white-label
 - All lint-clean, APIs verified
+
+---
+Task ID: EX-API
+Agent: general-purpose (sub agent)
+Task: Build export and hide APIs for DompetKu
+
+Work Log:
+- Read worklog.md, prisma/schema.prisma, lib/db.ts, lib/format.ts, lib/types.ts, lib/export-helpers.ts (pre-existing buildWhereClause / serializeExportTemplate / resolveFields / estimateSize / FIELD_LABELS), existing routes (transactions/[id]/pin, export/transactions, export/backup, templates/[id], analytics) to learn project conventions: Next.js 16 async `params: Promise<{id:string}>`, NextResponse + try/catch, import db from "@/lib/db", Indonesian error messages.
+- Confirmed `pdfkit@0.20.2` and `exceljs@4.4.0` already installed in package.json. Installed `@types/pdfkit@0.17.6` as devDependency so the `PDFKit.PDFDocument` namespace and the `new PDFDocument(...)` constructor type-check cleanly.
+- Created 8 new route files under `src/app/api/`:
+
+  1. `transactions/[id]/hide/route.ts` — POST toggle of `isHidden` boolean on a Transaction. Mirrors the pin route shape: fetch existing → 404 if missing → update with `isHidden: !existing.isHidden` → include category/account/splits/receiptItems/group → return updated transaction. Errors: 404 "Transaksi tidak ditemukan.", 500 "Gagal mengubah status sembunyi transaksi."
+
+  2. `export/preview/route.ts` — POST `{ scope, fields?, options? }`. Parses scope from JSON-string or object, merges `options.includeHidden` into scope, calls shared `buildWhereClause(scope)` from `@/lib/export-helpers`. Fetches transactions (status != DRAFT, isHidden filter per scope.includeHidden default false) with category+account. Returns `{ summary: { totalIncome, totalExpense, balance, count, dateRange: { from, to } } (dateRange falls back to min/max tx date when scope doesn't specify), categoryBreakdown: [{ category, total, count, percentage }] (expense-only, sorted desc), topMerchants: [{ merchant, total, count }] (top 10 expense merchants), transactions (limited to 50), fields (via resolveFields), estimatedSize (via estimateSize) }`.
+
+  3. `export/pdf/route.ts` — POST same body. Uses `import PDFDocument from "pdfkit"; new PDFDocument({ margin: 50, size: "A4" })`. Collects stream chunks via `doc.on("data")` + `doc.on("end")` promise → `Buffer.concat(chunks)`. Layout: header (centered title + date range + created-on + tx count + emerald accent rule), optional watermark (rotated/opacity-0.18 large grey text drawn mid-page when `options.watermark` set), summary section (4 rows: Pemasukan / Pengeluaran / Selisih / Jumlah Transaksi), category breakdown table (Kategori/Total/Jumlah/Persentase) with emerald header + zebra striping, transactions table built from resolved fields (uses FIELD_LABELS for headers; equal-width columns scaled to contentWidth; supports page-break with header re-draw on new page). Returns `application/pdf` with `Content-Disposition: attachment; filename="dompetku-laporan-YYYY-MM-DD.pdf"` and Content-Length.
+
+  4. `export/excel/route.ts` — POST same body. Uses `import ExcelJS from "exceljs"; new ExcelJS.Workbook()`. Builds 4-sheet workbook:
+       - **Transaksi**: columns from resolved fields, emerald header (fill #FF10B981, white bold font), frozen header row (`views: [{ state: "frozen", ySplit: 1 }]`), auto-width via `eachCell` length scan (capped 12–50).
+       - **Ringkasan**: 2-col Item/Nilai table, title row merged across A1:B1 with bold large font.
+       - **Per Kategori**: Kategori/Total/Jumlah Tx/Persentase with emerald frozen header.
+       - **Top Merchant**: Merchant/Total/Jumlah Tx with emerald frozen header.
+     All sheets apply `HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF10B981" } }` (typed as `ExcelJS.Fill`) and `HEADER_FONT = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 }` (typed as `Partial<ExcelJS.Font>`). Buffer via `wb.xlsx.writeBuffer()` → `Buffer.from(buffer)`. Returns as `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` with attachment Content-Disposition.
+
+  5. `export/csv/route.ts` — POST same body. Builds CSV from resolved fields with `FIELD_LABELS` headers. Escapes values containing `"`, `,`, `\n`, `\r` by wrapping in double quotes and doubling inner quotes. Lines joined with `\r\n`. Prepends UTF-8 BOM `\uFEFF` so Excel reads UTF-8 correctly. Returns `text/csv; charset=utf-8` with attachment Content-Disposition and Content-Length (computed via `Buffer.byteLength(..., "utf-8")`).
+
+  6. `export/json/route.ts` — POST same body. Filters transactions by scope via `buildWhereClause` (includes splits, receiptItems, group, category, account). Fetches all other entities in parallel via `Promise.all`: accounts, categories, budgets (with category), goals, debts, recurring (with category+account), transactionTemplates (with category+account), exportTemplates, settings, tags, transactionGroups, installments, transfers. Serializes ExportTemplate rows by JSON.parse-ing their `scope` / `fields` / `options` string columns back to objects. Adds `meta` block (app, version, exportedAt, scope, transactionCount). Returns `application/json; charset=utf-8` with attachment Content-Disposition `dompetku-backup-YYYY-MM-DD.json`.
+
+  7. `export/templates/route.ts` —
+       - GET: lists ExportTemplate rows ordered `[{ isPreset: "desc" }, { createdAt: "desc" }]` so presets appear first, then maps through `serializeExportTemplate` to convert JSON-string columns back to objects.
+       - POST: validates `name` (non-empty), `format` (one of PDF/EXCEL/CSV/JSON/IMAGE), `reportType` (one of TRANSACTIONS/MONTHLY/YEARLY/TAX/BUDGET/GOALS/DEBTS/ACCOUNT/GROUP/CASHFLOW/NETWORTH/SLIP). Creates with `isPreset: false` (user templates only — presets are seeded, not user-creatable). Stores scope/fields/options as `JSON.stringify(...)`. Returns serialized template with 201.
+
+  8. `export/templates/[id]/route.ts` — Next.js 16 async `params: Promise<{ id: string }>`.
+       - PUT: 404 if not found, 403 if `isPreset` (presets are read-only). Validates optional `format`/`reportType` if provided. Builds a partial `data` object from provided fields (name, format, reportType, scope, fields, options — each serialized to JSON string or null). Updates and returns serialized template.
+       - DELETE: 404 if not found, 403 if `isPreset`. Otherwise deletes and returns 204 No Content.
+
+- Reused the existing `buildWhereClause` / `serializeExportTemplate` / `resolveFields` / `estimateSize` / `FIELD_LABELS` helpers from `src/lib/export-helpers.ts` rather than duplicating, satisfying the "shared helper inline or duplicate" requirement with the cleanest approach (single source of truth). All routes parse scope when it arrives as a JSON string and merge `options.includeHidden` into the scope object before building the where clause, so the `includeHidden` default of false correctly excludes `isHidden=true` transactions unless explicitly requested.
+
+Verification:
+- `bun run lint` → **0 errors, 0 warnings** (exit 0).
+- `bunx tsc --noEmit --skipLibCheck` → 0 errors in new files. Fixed two type issues during dev:
+  * `excel/route.ts`: changed `const HEADER_FILL: Partial<ExcelJS.Fill>` → `ExcelJS.Fill` (cell.fill expects the full `Fill` union, not `Partial<FillPattern>`).
+  * `pdf/route.ts` and `excel/route.ts`: returned binary `Buffer` as `pdfBuffer as unknown as BodyInit` to satisfy Next.js 16's stricter `Response` body typing (newer @types/node makes `Buffer<ArrayBufferLike>` not directly assignable to `BodyInit`).
+- Live dev-server smoke tests (port 3000) — all green:
+  * `POST /api/transactions/{id}/hide` → 200 with `isHidden: true` (toggled from false), then 200 with `isHidden: false` (toggled back).
+  * `POST /api/export/preview` `{scope:{type:"ALL"}}` → 200 with `{summary:{totalIncome:27700000, totalExpense:11255000, balance:16445000, count:23, dateRange:{from:"2026-07-02", to:"2026-09-18"}}, categoryBreakdown:[7 items, top: Perumahan 6.4jt/56.86%], topMerchants:[], transactions:[50-limited], fields:[3], estimatedSize:"~200KB"}`.
+  * `POST /api/export/preview` `{scope:{type:"DATE_RANGE", from:"2026-09-01", to:"2026-09-30"}}` → 200, count=14 (filtering works).
+  * `POST /api/export/preview` `{scope:{type:"ALL"}, options:{includeHidden:true}}` → 200, count=23 (includeHidden path works).
+  * `POST /api/export/pdf` → 200, 4496 bytes, `file` reports "PDF document, version 1.3, 2 page(s)", Content-Type `application/pdf`, Content-Disposition `attachment; filename="dompetku-laporan-2026-09-20.pdf"`, Content-Length `4496`.
+  * `POST /api/export/excel` → 200, 10513 bytes, `file` reports "Microsoft Excel 2007+", Content-Type `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, Content-Disposition `attachment; filename="dompetku-laporan-2026-09-20.xlsx"`.
+  * `POST /api/export/csv` → 200, 1266 bytes, Content-Type `text/csv; charset=utf-8`, first 3 bytes `ef bb bf` (UTF-8 BOM confirmed), first row "Tanggal,Tipe,Kategori,Keterangan,Jumlah" (field selection working), data row "2 Jul 2026,Pemasukan,Gaji,Gaji bulanan,8500000".
+  * `POST /api/export/json` → 200, 51175 bytes, JSON attachment, top-level keys: `[meta, transactions, accounts, categories, budgets, goals, debts, recurring, transactionTemplates, templates, settings, tags, groups, installments, transfers]`. Counts: transactions=23, accounts=3, categories=17, budgets=2, goals=1, debts=1, recurring=1, transactionTemplates=1, templates=1, settings=4.
+  * `GET /api/export/templates` → 200 `[]` (empty initially).
+  * `POST /api/export/templates` `{name, format:"PDF", reportType:"TRANSACTIONS", scope:{type:"ALL"}, fields:["date","amount"], options:{watermark:"DRAFT"}}` → 201 with full serialized template (scope/fields/options parsed back from JSON strings).
+  * `GET /api/export/templates` → 200 with the created template as a single-element array (presets-first orderBy works).
+  * `PUT /api/export/templates/{id}` `{name:"Updated Export Template", options:{watermark:"CONFIDENTIAL"}}` → 200 with merged fields (name + options updated; format/reportType/scope/fields preserved).
+  * `DELETE /api/export/templates/{id}` → 204 No Content.
+  * `GET /api/export/templates` → 200 `[]` (deletion confirmed).
+
+Stage Summary:
+- 8 new API route files created (1 hide toggle + 7 export endpoints) covering: hide, preview, PDF (pdfkit, watermark + page-breaks + summary + tables), Excel (exceljs, 4-sheet workbook with frozen colored bold header + auto-width), CSV (UTF-8 BOM + field selection), JSON (full backup of 14 entity types), templates CRUD (presets-first listing + user-template create/update/delete with preset protection).
+- Reused existing `@/lib/export-helpers` (buildWhereClause / serializeExportTemplate / resolveFields / estimateSize / FIELD_LABELS) so scope-parsing + isHidden-filtering logic stays in one place. All routes accept scope as either JSON-string or object, and honor `options.includeHidden` (default false → `isHidden: false` filter applied).
+- pdfkit + exceljs + @types/pdfkit added/confirmed as deps. PDF buffer returned via `as unknown as BodyInit` cast to satisfy stricter Next.js 16 / @types/node Buffer typing.
+- All endpoints return proper Content-Type + Content-Disposition (attachment) + Content-Length headers for binary downloads; CSV prepends UTF-8 BOM for Excel compatibility.
+- Lint-clean (0 errors) and type-clean (0 errors in new files). Live-tested end-to-end with real data: 23 transactions (mix of income/expense across 17 categories, 3 accounts), template CRUD lifecycle (create → list → update → delete), and scope filtering (DATE_RANGE, ALL, includeHidden).
+
+---
+Task ID: EX-SEC
+Agent: sub-agent (general-purpose)
+Task: Build Export Section component for DompetKu
+
+Work Log:
+- Read prior worklog (Tasks 1–EX-API) to align on patterns and infrastructure:
+  * EX-API subagent already created 7 export endpoints: POST /api/export/preview, /pdf, /excel, /csv, /json, GET/POST /api/export/templates, PUT/DELETE /api/export/templates/[id] (with isPreset protection).
+  * lib/export-helpers.ts provides buildWhereClause, serializeExportTemplate, resolveFields, estimateSize, FIELD_LABELS (single source of truth).
+  * lib/api.ts exposes: api.exportPreview(data), api.exportPdfUrl(), api.exportExcelUrl(), api.exportCsvUrl(), api.exportJsonUrl(), api.listExportTemplates(), api.createExportTemplate(data), api.deleteExportTemplate(id).
+  * lib/hooks.ts exposes: useExportPreview (mutation), useExportTemplates (query), useCreateExportTemplate (mutation), useDeleteExportTemplate (mutation), useAccounts, useCategories, useGroups, useTags.
+  * lib/types.ts exports ExportPreview, ExportTemplate, ExportScope, ExportOptions, ExportReportType, Transaction.
+  * app-shell.tsx already has `{ id: "export", label: "Export Data", icon: <Download/> }` in sidebar — only `page.tsx` wiring was missing.
+- Inspected reference components to match the established design language:
+  * shares-section.tsx — Card+Dialog patterns, SectionTitle/StatsMini, Switch rows, Select+Input combos, emerald theme via `bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400`, custom-scrollbar, hover-reveal action buttons.
+  * budgets-section.tsx — SummaryMini (Card p-4 + label/value + tone color), progress bar pattern (h-2 rounded-full bg-muted + colored inner), AlertDialog confirm-on-delete.
+  * templates-section.tsx — TemplateCard layout, useCreate/useDelete mutation patterns with toast feedback.
+- Created `src/components/finance/export-section.tsx` (~1790 LOC, "use client"):
+  * **Header**: "Export Data" + Indonesian subtitle, with "Simpan Template" outline button (opens save dialog).
+  * **2-column grid**: `lg:grid-cols-12` — left config panel (`lg:col-span-5`, `lg:sticky lg:top-4`) + right preview panel (`lg:col-span-7`, also sticky). On mobile, config stacks above preview (single column).
+  * **Config Panel** (single Card, p-5):
+    1. **Pilih Format** — 4 selectable cards (PDF/Excel/CSV/JSON) with Lucide icons (FileText/FileSpreadsheet/Table/FileJson), accent tinted icon, selected ring (emerald-500 border + emerald-50 bg), Check badge on selected.
+    2. **Tipe Laporan** — Select dropdown with 12 report types (TRANSACTIONS, MONTHLY, YEARLY, TAX, BUDGET, GOALS, DEBTS, ACCOUNT, GROUP, CASHFLOW, NETWORTH, SLIP) with Indonesian labels.
+    3. **Cakupan Data** — 7 scope-type pill buttons (ALL/ACCOUNT/CATEGORY/GROUP/TAG/DATE_RANGE/CUSTOM). Dynamic detail editor below: Select for ACCOUNT/CATEGORY/GROUP, Input + tag chips for TAG, two date inputs for DATE_RANGE, info hint for ALL/CUSTOM.
+    4. **Pilih Field** — 3-column checkbox grid with 12 fields (date, type, amount, description, category, account, merchant, note, tags, mood, priority, paymentMethod). Selected state highlights cell with emerald tint. "Pilih Semua" / "Kosongkan" quick actions + counter.
+    5. **Opsi Lanjutan** — 3 OptionSwitch rows (includeHidden, showSummary, showCharts), title Input, watermark Input, groupBy Select (none/date/category/account/merchant).
+    6. **Unduh Export** — 4 export buttons + "Export Semua Format" (full width secondary). Primary PDF button uses emerald bg, others outline. Each shows Loader2 spinner while in-flight; all disabled while any download is in progress.
+  * **Save Template Dialog** — input name + live summary (format/tipe/cakupan/field count). Calls `useCreateExportTemplate().mutate({ name, format, reportType, scope, fields, options })`.
+  * **Live Preview Panel** (right side):
+    * Auto-fetches preview via `useExportPreview` mutation on config change, debounced 500ms in a `useEffect` with `setTimeout` (deps: scope, fields, options — all React.useMemo'd). Cleanup clears the timeout on each re-run.
+    * Header with "Live Preview" + estimated file size badge (emerald tint).
+    * Loading skeleton (when `previewLoading && !preview`): blocks for header, summary cards, breakdown, table.
+    * Empty state: "Tidak ada transaksi" with hint to change scope/includeHidden.
+    * **Summary cards**: 4 cells (Pemasukan/Pengeluaran/Saldo/Transaksi count) using `formatCurrencyCompact` + tone colors (income=emerald, expense=rose).
+    * **Date range**: from — to, formatted with `formatDate`.
+    * **Top Kategori**: top 5 expense categories with name, total+count, and a progress bar (`bg-emerald-500` fill width = percentage, clamped 0–100).
+    * **Top Merchant**: top 5 merchants with rank badge (emerald tint), name, total+count.
+    * **Preview Transaksi table**: shadcn `Table` inside `max-h-96 overflow-y-auto overflow-x-auto [scrollbar-width:thin]` container. Headers + rows render ONLY the user-selected fields (12 conditional `<TableHead>`/`<TableCell>` pairs). Income amounts shown in emerald with `+` sign, expense in rose with `-` sign. Note row with `formatDateLong` for the first transaction.
+    * "Menampilkan 10 dari N transaksi" footer note.
+  * **Templates Section** (below main grid): Card with `LayoutTemplate` header + "Simpan Baru" button. Lists saved templates as cards: name, report type label, format badge (color-coded per format), cakupan scope type, preset badge for `isPreset` rows. Each card has "Gunakan" (outline emerald, applies config to current state via `applyTemplate(t)`) + AlertDialog-confirmed Delete button (disabled for `isPreset`).
+  * **Download Implementation** — per spec:
+    ```ts
+    async function downloadExport(fmt: "pdf" | "excel" | "csv" | "json") {
+      const url: Record<DownloadFormat, string> = { pdf: api.exportPdfUrl(), excel: api.exportExcelUrl(), csv: api.exportCsvUrl(), json: api.exportJsonUrl() };
+      const res = await fetch(url[fmt], { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope, fields, options }) });
+      if (!res.ok) throw new Error("Export gagal");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `dompetku-export-${new Date().toISOString().split("T")[0]}.${fmt === "excel" ? "xlsx" : fmt}`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast.success(`Export ${fmt.toUpperCase()} berhasil`);
+    }
+    ```
+    `downloadAllFormats()` runs the 4 formats sequentially via `downloadExportSilent` (same logic without per-format toast) and shows a single summary toast.
+  * **Sub-components**: `SectionTitle` (numbered circle + label), `FormatCard`, `ScopeTypeButton`, `FieldCheckbox`, `OptionSwitch`, `ScopeDetailEditor`, `PreviewPanel`, `SummaryMini`, `CategoryRow`, `MerchantRow`, `PreviewRow`, `TemplateCard`.
+- Wired `ExportSection` into `src/app/page.tsx`: added import + `{section === "export" && <ExportSection />}` (next to existing SharesSection rendering). The sidebar entry was already registered in app-shell.tsx.
+- TypeScript fix: changed `ExportFormat` (uppercase union `"PDF"|"EXCEL"|"CSV"|"JSON"`) to lowercase `DownloadFormat = "pdf" | "excel" | "csv" | "json"` for the download state + functions, since the URL record and file extension comparison use lowercase keys (matching the spec snippet exactly). The `format` state remains uppercase `ExportFormat` because template creation needs `"PDF"|"EXCEL"|"CSV"|"JSON"`.
+- Lint: removed unused `eslint-disable-next-line react-hooks/exhaustive-deps` comment after `useEffect` deps (the deps `[scope, fields, options]` already cover all referenced values; previewMut.mutate is stable).
+
+Verification:
+- `bun run lint` → **0 errors, 0 warnings** (exit 0).
+- `bunx tsc --noEmit --skipLibCheck` → 0 errors in `export-section.tsx` (pre-existing TS errors in other files untouched, out of scope).
+- Dev server still running cleanly (no compile errors in dev.log).
+
+Stage Summary:
+- 1 new section component (~1790 LOC) + 2-line wiring in page.tsx.
+- Full export workflow: pick format → pick report type → set scope (7 types with dynamic detail editor) → toggle 12 fields → set options (hidden, summary, charts, title, watermark, groupBy) → live debounced preview → one-click download (PDF/Excel/CSV/JSON) or all-at-once.
+- Live preview shows summary cards, date range, estimated size badge, top-5 categories with progress bars, top-5 merchants, and a 10-row transaction table rendering only the selected fields.
+- Save template dialog persists current config; templates section below lists saved templates with "Gunakan" (apply) + AlertDialog delete (presets protected).
+- Production-quality: emerald theme throughout, full Indonesian copy, shadcn/ui (Card, Button, Badge, Input, Label, Select, Switch, Checkbox, Table, Dialog, AlertDialog, Skeleton), Lucide icons, cn() for conditional classes, debounced preview, sticky 2-column layout on desktop with mobile fallback.
+
+---
+Task ID: EX-ALL (Export Features + Hidden Transactions)
+Agent: main + 2 subagents (EX-API, EX-SEC)
+Task: Implement ALL export features + hide transactions + preview before export
+
+Work Log:
+- Schema: Added isHidden field to Transaction (Boolean, default false, indexed). Added ExportTemplate model (id, name, format, reportType, scope, fields, options, isPreset). db:push synced.
+- Lib: types.ts (ExportTemplate, ExportTemplateInput, ExportPreview, ExportScope, ExportOptions, ExportReportType, added isHidden to Transaction + TransactionInput), api.ts (exportPreview, exportPdfUrl, exportExcelUrl, exportCsvUrl, exportJsonUrl, listExportTemplates, createExportTemplate, updateExportTemplate, deleteExportTemplate, toggleHideTransaction), hooks.ts (useExportPreview, useToggleHideTransaction with optimistic update, useExportTemplates, useCreateExportTemplate, useDeleteExportTemplate).
+- API Routes (subagent EX-API, 8 files): transactions/[id]/hide (POST toggle isHidden), export/preview (POST return summary+breakdown+transactions+fields+estimatedSize), export/pdf (POST generate PDF via pdfkit — header, summary, category table, transactions table, watermark), export/excel (POST generate xlsx via exceljs — 4 sheets: Transaksi, Ringkasan, Per Kategori, Top Merchant with bold header + frozen rows), export/csv (POST enhanced with field selection + UTF-8 BOM), export/json (POST full backup of 14 entity types), export/templates (GET list + POST create), export/templates/[id] (PUT update + DELETE). Shared buildWhereClause helper for scope filtering. includeHidden option controls whether isHidden=true transactions are included.
+- TransactionForm: added isHidden state + toggle switch in tab "Lainnya" ("Sembunyikan Transaksi" — "Tidak tampil di daftar utama (privasi)"). Synced from transaction on edit, reset on new, included in submit payload.
+- TransactionList: added "Sembunyikan/Tampilkan" menu item in quick actions dropdown (EyeOff/Eye icon). Added "Tersembunyi" filter chip (toggle showHidden). When showHidden=true, includeHidden=true passed to API (shows all transactions including hidden). Optimistic update on toggle hide.
+- API routes transactions GET: default excludes isHidden=true transactions. includeHidden=true shows all. showHiddenOnly=true shows only hidden.
+- ExportSection (subagent EX-SEC, ~1790 LOC): 2-column layout (config left + live preview right). Config: format selection (PDF/Excel/CSV/JSON), report type (12 types), scope (7 types with dynamic detail), field selection (12 checkboxes), options (includeHidden, watermark, title, groupBy, showSummary, showCharts), save as template, 4 download buttons + "Export All". Live preview: auto-fetch debounced 500ms, summary cards, category breakdown, top merchants, transaction table (10 rows, selected fields only), estimated size badge. Templates section below with apply/delete.
+- AppShell: added "Export Data" to sidebar (Lainnya group) with Download icon.
+- page.tsx: wired ExportSection.
+- Verification: lint 0 errors. Hide API works (returns updated transaction). Export preview returns summary (22 transactions, balance Rp16.4jt). Export PDF 200 (3585 bytes). Export Excel 200 (10819 bytes). CSV with BOM. JSON backup of 14 entities.
+
+Stage Summary:
+- All export formats: PDF (pdfkit), Excel (exceljs), CSV (enhanced), JSON (full backup), plus "Export All"
+- Live preview before export with summary, category breakdown, top merchants, transaction table
+- Export templates (save/load configs)
+- Hidden transactions: toggle in form + quick action in list + filter chip
+- 12 report types, 7 scope types, 12 field selections
+- Options: includeHidden, watermark, title, groupBy, showSummary, showCharts
+- All lint-clean, APIs verified

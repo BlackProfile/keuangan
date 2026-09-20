@@ -1,0 +1,1912 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import { toast } from "sonner";
+     5→import {
+     6→  CalendarClock,
+     7→  CalendarDays,
+     8→  Check,
+     9→  Copy,
+    10→  Database,
+    11→  Eye,
+    12→  EyeOff,
+    13→  Globe,
+    14→  Link2,
+    15→  ListChecks,
+    16→  Loader2,
+    17→  Lock,
+    18→  Mail,
+    19→  MessageCircle,
+    20→  MessageSquare,
+    21→  MoreVertical,
+    22→  Pencil,
+    23→  Plus,
+    24→  QrCode,
+    25→  Shield,
+    26→  ShieldAlert,
+    27→  Sparkles,
+    28→  Trash2,
+    29→  Users,
+    30→  X,
+    31→  Zap,
+    32→} from "lucide-react";
+    33→
+    34→import { Badge } from "@/components/ui/badge";
+    35→import { Button } from "@/components/ui/button";
+    36→import { Card } from "@/components/ui/card";
+    37→import {
+    38→  AlertDialog,
+    39→  AlertDialogAction,
+    40→  AlertDialogCancel,
+    41→  AlertDialogContent,
+    42→  AlertDialogDescription,
+    43→  AlertDialogFooter,
+    44→  AlertDialogHeader,
+    45→  AlertDialogTitle,
+    46→  AlertDialogTrigger,
+    47→} from "@/components/ui/alert-dialog";
+    48→import {
+    49→  Dialog,
+    50→  DialogClose,
+    51→  DialogContent,
+    52→  DialogDescription,
+    53→  DialogFooter,
+    54→  DialogHeader,
+    55→  DialogTitle,
+    56→} from "@/components/ui/dialog";
+    57→import {
+    58→  DropdownMenu,
+    59→  DropdownMenuContent,
+    60→  DropdownMenuItem,
+    61→  DropdownMenuSeparator,
+    62→  DropdownMenuTrigger,
+    63→} from "@/components/ui/dropdown-menu";
+    64→import { Input } from "@/components/ui/input";
+    65→import { Label } from "@/components/ui/label";
+    66→import {
+    67→  Popover,
+    68→  PopoverContent,
+    69→  PopoverTrigger,
+    70→} from "@/components/ui/popover";
+    71→import { Calendar } from "@/components/ui/calendar";
+    72→import {
+    73→  Select,
+    74→  SelectContent,
+    75→  SelectItem,
+    76→  SelectTrigger,
+    77→  SelectValue,
+    78→} from "@/components/ui/select";
+    79→import { Separator } from "@/components/ui/separator";
+    80→import { Skeleton } from "@/components/ui/skeleton";
+    81→import { Switch } from "@/components/ui/switch";
+    82→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    83→import { Textarea } from "@/components/ui/textarea";
+    84→import { LucideIcon } from "@/components/lucide-icon";
+    85→
+    86→import { cn } from "@/lib/utils";
+    87→import {
+    88→  formatDate,
+    89→  formatDateInput,
+    90→  formatDateLong,
+    91→  parseDateLocal,
+    92→} from "@/lib/format";
+    93→import {
+    94→  SHARE_ACCESS_LEVELS,
+    95→  SHARE_EXPIRY_PRESETS,
+    96→  SHARE_SCOPE_TYPES,
+    97→  SHARE_THEME_COLORS,
+    98→  buildShareUrl,
+    99→  isShareExpired,
+   100→  viewsRemaining,
+   101→} from "@/lib/share-helpers";
+   102→import {
+   103→  useAccounts,
+   104→  useCategories,
+   105→  useCloneShareLink,
+   106→  useCreateShareLink,
+   107→  useDeleteShareLink,
+   108→  useGroups,
+   109→  useRevokeShareLink,
+   110→  useShareLinks,
+   111→  useUpdateShareLink,
+   112→} from "@/lib/hooks";
+   113→import type {
+   114→  ShareAccessLevel,
+   115→  ShareLink,
+   116→  ShareLinkInput,
+   117→  ShareScopeType,
+   118→} from "@/lib/types";
+   119→
+   120→// ---------- Helpers ----------
+   121→function parseScopeData(raw: string | null): Record<string, unknown> {
+   122→  if (!raw) return {};
+   123→  try {
+   124→    const parsed = JSON.parse(raw);
+   125→    return typeof parsed === "object" && parsed !== null
+   126→      ? (parsed as Record<string, unknown>)
+   127→      : {};
+   128→  } catch {
+   129→    return {};
+   130→  }
+   131→}
+   132→
+   133→function describeScope(
+   134→  scopeType: ShareScopeType,
+   135→  scopeDataStr: string | null,
+   136→  ctx: {
+   137→    accounts: Array<{ id: string; name: string }>;
+   138→    categories: Array<{ id: string; name: string }>;
+   139→    groups: Array<{ id: string; name: string }>;
+   140→  }
+   141→): string {
+   142→  const data = parseScopeData(scopeDataStr);
+   143→  switch (scopeType) {
+   144→    case "ALL":
+   145→      return "Semua Data";
+   146→    case "ACCOUNT": {
+   147→      const id = String(data.accountId ?? data.accountIds?.[0] ?? "");
+   148→      const acc = ctx.accounts.find((a) => a.id === id);
+   149→      return acc ? `Akun: ${acc.name}` : "Per Akun";
+   150→    }
+   151→    case "CATEGORY": {
+   152→      const id = String(data.categoryId ?? data.categoryIds?.[0] ?? "");
+   153→      const cat = ctx.categories.find((c) => c.id === id);
+   154→      return cat ? `Kategori: ${cat.name}` : "Per Kategori";
+   155→    }
+   156→    case "GROUP": {
+   157→      const id = String(data.groupId ?? data.groupIds?.[0] ?? "");
+   158→      const g = ctx.groups.find((x) => x.id === id);
+   159→      return g ? `Group: ${g.name}` : "Per Group";
+   160→    }
+   161→    case "TAG": {
+   162→      const tag = String(data.tag ?? data.tags?.[0] ?? "");
+   163→      return tag ? `Tag: ${tag}` : "Per Tag";
+   164→    }
+   165→    case "DATE_RANGE": {
+   166→      const from = data.from ? formatDate(String(data.from)) : "?";
+   167→      const to = data.to ? formatDate(String(data.to)) : "?";
+   168→      return `Rentang: ${from} - ${to}`;
+   169→    }
+   170→    case "CUSTOM":
+   171→      return "Pilihan Manual";
+   172→    default:
+   173→      return "—";
+   174→  }
+   175→}
+   176→
+   177→function statusInfo(link: ShareLink): {
+   178→  label: string;
+   179→  dotClass: string;
+   180→  textClass: string;
+   181→} {
+   182→  if (!link.active) {
+   183→    return {
+   184→      label: "Dicabut",
+   185→      dotClass: "bg-gray-400",
+   186→      textClass: "text-gray-500 dark:text-gray-400",
+   187→    };
+   188→  }
+   189→  const expired = isShareExpired({
+   190→    expiresAt: link.expiresAt,
+   191→    hoursActive: link.hoursActive,
+   192→    createdAt: link.createdAt,
+   193→    maxViews: link.maxViews,
+   194→    viewCount: link.viewCount,
+   195→    oneTime: link.oneTime,
+   196→  });
+   197→  if (expired.expired) {
+   198→    return {
+   199→      label: "Kadaluarsa",
+   200→      dotClass: "bg-red-500",
+   201→      textClass: "text-red-600 dark:text-red-400",
+   202→    };
+   203→  }
+   204→  return {
+   205→    label: "Aktif",
+   206→    dotClass: "bg-emerald-500",
+   207→    textClass: "text-emerald-600 dark:text-emerald-400",
+   208→  };
+   209→}
+   210→
+   211→function expiryLabel(link: ShareLink): string {
+   212→  if (link.oneTime) {
+   213→    if (link.viewCount >= 1) return "Sudah digunakan";
+   214→    return "Sekali pakai";
+   215→  }
+   216→  const remaining = viewsRemaining(link);
+   217→  if (remaining !== null) return `${remaining}x tersisa`;
+   218→  if (link.expiresAt) {
+   219→    return `Berlaku hingga ${formatDate(link.expiresAt)}`;
+   220→  }
+   221→  if (link.hoursActive) {
+   222→    return `Aktif ${link.hoursActive} jam`;
+   223→  }
+   224→  return "Permanen";
+   225→}
+   226→
+   227→// ---------- Main Section ----------
+   228→export function SharesSection() {
+   229→  const { data: shares, isLoading } = useShareLinks();
+   230→  const { data: accounts } = useAccounts();
+   231→  const { data: categories } = useCategories();
+   232→  const { data: groups } = useGroups();
+   233→
+   234→  const [dialogOpen, setDialogOpen] = React.useState(false);
+   235→  const [editShare, setEditShare] = React.useState<ShareLink | null>(null);
+   236→  const [qrShare, setQrShare] = React.useState<ShareLink | null>(null);
+   237→
+   238→  const ctx = React.useMemo(
+   239→    () => ({
+   240→      accounts: (accounts ?? []).map((a) => ({ id: a.id, name: a.name })),
+   241→      categories: (categories ?? []).map((c) => ({ id: c.id, name: c.name })),
+   242→      groups: (groups ?? []).map((g) => ({ id: g.id, name: g.name })),
+   243→    }),
+   244→    [accounts, categories, groups]
+   245→  );
+   246→
+   247→  const stats = React.useMemo(() => {
+   248→    const list = shares ?? [];
+   249→    const active = list.filter((l) => {
+   250→      if (!l.active) return false;
+   251→      const e = isShareExpired({
+   252→        expiresAt: l.expiresAt,
+   253→        hoursActive: l.hoursActive,
+   254→        createdAt: l.createdAt,
+   255→        maxViews: l.maxViews,
+   256→        viewCount: l.viewCount,
+   257→        oneTime: l.oneTime,
+   258→      });
+   259→      return !e.expired;
+   260→    }).length;
+   261→    const totalViews = list.reduce((s, l) => s + (l.viewCount || 0), 0);
+   262→    const totalComments = list.reduce(
+   263→      (s, l) => s + (l._count?.comments ?? 0),
+   264→      0
+   265→    );
+   266→    const expired = list.filter((l) => {
+   267→      if (!l.active) return false;
+   268→      const e = isShareExpired({
+   269→        expiresAt: l.expiresAt,
+   270→        hoursActive: l.hoursActive,
+   271→        createdAt: l.createdAt,
+   272→        maxViews: l.maxViews,
+   273→        viewCount: l.viewCount,
+   274→        oneTime: l.oneTime,
+   275→      });
+   276→      return e.expired;
+   277→    }).length;
+   278→    return { active, totalViews, totalComments, expired };
+   279→  }, [shares]);
+   280→
+   281→  function openCreate() {
+   282→    setEditShare(null);
+   283→    setDialogOpen(true);
+   284→  }
+   285→
+   286→  function openEdit(s: ShareLink) {
+   287→    setEditShare(s);
+   288→    setDialogOpen(true);
+   289→  }
+   290→
+   291→  return (
+   292→    <div className="space-y-6">
+   293→      {/* Header */}
+   294→      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   295→        <div>
+   296→          <h2 className="text-xl font-semibold tracking-tight">Link Berbagi</h2>
+   297→          <p className="mt-0.5 text-sm text-muted-foreground">
+   298→            Bagikan data keuangan ke orang lain
+   299→          </p>
+   300→        </div>
+   301→        <Button onClick={openCreate} className="gap-1">
+   302→          <Plus className="h-4 w-4" />
+   303→          Buat Link Baru
+   304→        </Button>
+   305→      </div>
+   306→
+   307→      {/* Stats strip */}
+   308→      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+   309→        <StatCard
+   310→          label="Total Link Aktif"
+   311→          value={stats.active}
+   312→          icon={<Link2 className="h-4 w-4" />}
+   313→          tone="primary"
+   314→        />
+   315→        <StatCard
+   316→          label="Total Views"
+   317→          value={stats.totalViews}
+   318→          icon={<Eye className="h-4 w-4" />}
+   319→          tone="default"
+   320→        />
+   321→        <StatCard
+   322→          label="Total Komentar"
+   323→          value={stats.totalComments}
+   324→          icon={<MessageSquare className="h-4 w-4" />}
+   325→          tone="default"
+   326→        />
+   327→        <StatCard
+   328→          label="Link Kadaluarsa"
+   329→          value={stats.expired}
+   330→          icon={<CalendarClock className="h-4 w-4" />}
+   331→          tone="danger"
+   332→        />
+   333→      </div>
+   334→
+   335→      {/* List */}
+   336→      {isLoading ? (
+   337→        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+   338→          {Array.from({ length: 4 }).map((_, i) => (
+   339→            <Skeleton key={i} className="h-52 rounded-2xl" />
+   340→          ))}
+   341→        </div>
+   342→      ) : (shares ?? []).length === 0 ? (
+   343→        <EmptyState onCreate={openCreate} />
+   344→      ) : (
+   345→        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+   346→          {(shares ?? []).map((s) => (
+   347→            <ShareCard
+   348→              key={s.id}
+   349→              share={s}
+   350→              scopeLabel={describeScope(s.scopeType, s.scopeData, ctx)}
+   351→              onEdit={() => openEdit(s)}
+   352→              onShowQr={() => setQrShare(s)}
+   353→            />
+   354→          ))}
+   355→        </div>
+   356→      )}
+   357→
+   358→      <ShareFormDialog
+   359→        open={dialogOpen}
+   360→        onOpenChange={setDialogOpen}
+   361→        editShare={editShare}
+   362→      />
+   363→
+   364→      <QrCodeDialog share={qrShare} onOpenChange={(o) => !o && setQrShare(null)} />
+   365→    </div>
+   366→  );
+   367→}
+   368→
+   369→// ---------- Stat Card ----------
+   370→function StatCard({
+   371→  label,
+   372→  value,
+   373→  icon,
+   374→  tone,
+   375→}: {
+   376→  label: string;
+   377→  value: number;
+   378→  icon: React.ReactNode;
+   379→  tone: "default" | "primary" | "danger";
+   380→}) {
+   381→  return (
+   382→    <Card className="p-4">
+   383→      <div className="flex items-center justify-between gap-2">
+   384→        <p className="text-xs text-muted-foreground">{label}</p>
+   385→        <span
+   386→          className={cn(
+   387→            "flex h-7 w-7 items-center justify-center rounded-lg",
+   388→            tone === "primary" && "bg-primary/10 text-primary",
+   389→            tone === "danger" && "bg-destructive/10 text-destructive",
+   390→            tone === "default" && "bg-muted text-muted-foreground"
+   391→          )}
+   392→        >
+   393→          {icon}
+   394→        </span>
+   395→      </div>
+   396→      <p
+   397→        className={cn(
+   398→          "mt-2 text-2xl font-bold tabular-nums",
+   399→          tone === "primary" && "text-primary",
+   400→          tone === "danger" && "text-destructive"
+   401→        )}
+   402→      >
+   403→        {value}
+   404→      </p>
+   405→    </Card>
+   406→  );
+   407→}
+   408→
+   409→// ---------- Empty State ----------
+   410→function EmptyState({ onCreate }: { onCreate: () => void }) {
+   411→  return (
+   412→    <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+   413→      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+   414→        <Link2 className="h-7 w-7 text-primary" />
+   415→      </span>
+   416→      <div>
+   417→        <p className="text-sm font-medium text-foreground">
+   418→          Belum ada link berbagi
+   419→        </p>
+   420→        <p className="mt-0.5 text-xs text-muted-foreground">
+   421→          Buat link pertama Anda untuk berbagi data keuangan.
+   422→        </p>
+   423→      </div>
+   424→      <Button onClick={onCreate} className="gap-1">
+   425→        <Plus className="h-4 w-4" />
+   426→        Buat Link Baru
+   427→      </Button>
+   428→    </Card>
+   429→  );
+   430→}
+   431→
+   432→// ---------- Share Card ----------
+   433→function ShareCard({
+   434→  share,
+   435→  scopeLabel,
+   436→  onEdit,
+   437→  onShowQr,
+   438→}: {
+   439→  share: ShareLink;
+   440→  scopeLabel: string;
+   441→  onEdit: () => void;
+   442→  onShowQr: () => void;
+   443→}) {
+   444→  const deleteMut = useDeleteShareLink();
+   445→  const revokeMut = useRevokeShareLink();
+   446→  const cloneMut = useCloneShareLink();
+   447→
+   448→  const status = statusInfo(share);
+   449→  const access = SHARE_ACCESS_LEVELS.find((a) => a.value === share.accessLevel);
+   450→  const scope = SHARE_SCOPE_TYPES.find((s) => s.value === share.scopeType);
+   451→  const themeColor = share.customTheme || "#10b981";
+   452→  const url = buildShareUrl(share.token);
+   453→  const commentCount = share._count?.comments ?? 0;
+   454→
+   455→  async function handleCopy() {
+   456→    try {
+   457→      await navigator.clipboard.writeText(url);
+   458→      toast.success("Link disalin");
+   459→    } catch {
+   460→      toast.error("Gagal menyalin link.");
+   461→    }
+   462→  }
+   463→
+   464→  function handleWhatsApp() {
+   465→    window.open(
+   466→      `https://wa.me/?text=${encodeURIComponent(url)}`,
+   467→      "_blank",
+   468→      "noopener,noreferrer"
+   469→    );
+   470→  }
+   471→
+   472→  function handleRevoke() {
+   473→    revokeMut.mutate(share.token, {
+   474→      onSuccess: () => toast.success("Link berhasil dicabut."),
+   475→      onError: (err) =>
+   476→        toast.error(err.message || "Gagal mencabut link."),
+   477→    });
+   478→  }
+   479→
+   480→  function handleClone() {
+   481→    cloneMut.mutate(share.token, {
+   482→      onSuccess: () => toast.success("Link berhasil diduplikasi."),
+   483→      onError: (err) =>
+   484→        toast.error(err.message || "Gagal menduplikasi link."),
+   485→    });
+   486→  }
+   487→
+   488→  function handleDelete() {
+   489→    deleteMut.mutate(share.id, {
+   490→      onSuccess: () => toast.success(`Link "${share.title}" dihapus.`),
+   491→      onError: (err) =>
+   492→        toast.error(err.message || "Gagal menghapus link."),
+   493→    });
+   494→  }
+   495→
+   496→  return (
+   497→    <Card className="relative flex flex-col gap-3 p-4 transition-shadow hover:shadow-md">
+   498→      {/* Header */}
+   499→      <div className="flex items-start justify-between gap-3">
+   500→        <div className="flex min-w-0 items-start gap-3">
+   501→          <span
+   502→            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+   503→            style={{ backgroundColor: `${themeColor}1a` }}
+   504→          >
+   505→            <LucideIcon
+   506→              name={access?.icon ?? "Eye"}
+   507→              className="h-5 w-5"
+   508→              style={{ color: themeColor }}
+   509→            />
+   510→          </span>
+   511→          <div className="min-w-0">
+   512→            <p className="truncate text-sm font-semibold text-foreground">
+   513→              {share.title}
+   514→            </p>
+   515→            <p className="mt-0.5 text-xs text-muted-foreground">
+   516→              {scopeLabel}
+   517→            </p>
+   518→          </div>
+   519→        </div>
+   520→        <Badge
+   521→          variant="secondary"
+   522→          className={cn(
+   523→            "border-transparent",
+   524→            "bg-opacity-100 text-xs font-medium"
+   525→          )}
+   526→          style={{
+   527→            backgroundColor: `${access?.color}1a`,
+   528→            color: access?.color,
+   529→          }}
+   530→        >
+   531→          {access?.label ?? share.accessLevel}
+   532→        </Badge>
+   533→      </div>
+   534→
+   535→      {/* Stats row */}
+   536→      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+   537→        <span className="inline-flex items-center gap-1">
+   538→          <Eye className="h-3.5 w-3.5" />
+   539→          <span className="font-medium tabular-nums text-foreground">
+   540→            {share.viewCount}
+   541→          </span>{" "}
+   542→          views
+   543→        </span>
+   544→        <span className="inline-flex items-center gap-1">
+   545→          <MessageCircle className="h-3.5 w-3.5" />
+   546→          <span className="font-medium tabular-nums text-foreground">
+   547→            {commentCount}
+   548→          </span>{" "}
+   549→          komentar
+   550→        </span>
+   551→        {share.passwordHash && (
+   552→          <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+   553→            <Lock className="h-3.5 w-3.5" />
+   554→            Password
+   555→          </span>
+   556→        )}
+   557→        {share.requireEmail && (
+   558→          <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400">
+   559→            <Mail className="h-3.5 w-3.5" />
+   560→            Email
+   561→          </span>
+   562→        )}
+   563→      </div>
+   564→
+   565→      {/* Status + expiry */}
+   566→      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs">
+   567→        <span className="inline-flex items-center gap-1.5">
+   568→          <span
+   569→            className={cn("h-2 w-2 rounded-full", status.dotClass)}
+   570→            aria-hidden="true"
+   571→          />
+   572→          <span className={cn("font-medium", status.textClass)}>
+   573→            {status.label}
+   574→          </span>
+   575→        </span>
+   576→        <span className="text-muted-foreground">
+   577→          {expiryLabel(share)}
+   578→        </span>
+   579→      </div>
+   580→
+   581→      {/* Created date */}
+   582→      <p className="text-[11px] text-muted-foreground">
+   583→        Dibuat {formatDate(share.createdAt)}
+   584→      </p>
+   585→
+   586→      {/* Actions */}
+   587→      <div className="mt-1 flex items-center gap-1.5">
+   588→        <Button
+   589→          size="sm"
+   590→          variant="outline"
+   591→          className="gap-1.5 flex-1"
+   592→          onClick={handleCopy}
+   593→        >
+   594→          <Copy className="h-3.5 w-3.5" />
+   595→          Salin
+   596→        </Button>
+   597→        <Button
+   598→          size="sm"
+   599→          variant="outline"
+   600→          className="gap-1.5 flex-1"
+   601→          onClick={onShowQr}
+   602→        >
+   603→          <QrCode className="h-3.5 w-3.5" />
+   604→          QR
+   605→        </Button>
+   606→        <Button
+   607→          size="sm"
+   608→          variant="outline"
+   609→          className="gap-1.5 flex-1"
+   610→          onClick={handleWhatsApp}
+   611→        >
+   612→          <MessageCircle className="h-3.5 w-3.5" />
+   613→          WhatsApp
+   614→        </Button>
+   615→
+   616→        <DropdownMenu>
+   617→          <DropdownMenuTrigger asChild>
+   618→            <Button
+   619→              size="sm"
+   620→              variant="ghost"
+   621→              className="h-8 w-8 p-0"
+   622→              aria-label="Aksi lainnya"
+   623→            >
+   624→              <MoreVertical className="h-4 w-4" />
+   625→            </Button>
+   626→          </DropdownMenuTrigger>
+   627→          <DropdownMenuContent align="end" className="w-44">
+   628→            <DropdownMenuItem onClick={onEdit} className="gap-2">
+   629→              <Pencil className="h-3.5 w-3.5" />
+   630→              Edit
+   631→            </DropdownMenuItem>
+   632→            <DropdownMenuItem
+   633→              onClick={handleClone}
+   634→              disabled={cloneMut.isPending || !share.active}
+   635→              className="gap-2"
+   636→            >
+   637→              {cloneMut.isPending ? (
+   638→                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   639→              ) : (
+   640→                <Plus className="h-3.5 w-3.5" />
+   641→              )}
+   642→              Duplikasi
+   643→            </DropdownMenuItem>
+   644→            <DropdownMenuItem
+   645→              onClick={handleRevoke}
+   646→              disabled={revokeMut.isPending || !share.active}
+   647→              className="gap-2 text-amber-600 focus:text-amber-700 dark:text-amber-400"
+   648→            >
+   649→              {revokeMut.isPending ? (
+   650→                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   651→              ) : (
+   652→                <ShieldAlert className="h-3.5 w-3.5" />
+   653→              )}
+   654→              Cabut
+   655→            </DropdownMenuItem>
+   656→            <DropdownMenuSeparator />
+   657→            <AlertDialog>
+   658→              <AlertDialogTrigger asChild>
+   659→                <DropdownMenuItem
+   660→                  onSelect={(e) => e.preventDefault()}
+   661→                  className="gap-2 text-destructive focus:text-destructive"
+   662→                >
+   663→                  <Trash2 className="h-3.5 w-3.5" />
+   664→                  Hapus
+   665→                </DropdownMenuItem>
+   666→              </AlertDialogTrigger>
+   667→              <AlertDialogContent>
+   668→                <AlertDialogHeader>
+   669→                  <AlertDialogTitle>
+   670→                    Hapus link berbagi ini?
+   671→                  </AlertDialogTitle>
+   672→                  <AlertDialogDescription>
+   673→                    Link <strong>{share.title}</strong> akan dihapus
+   674→                    permanen bersama semua data views dan komentar. Tindakan ini
+   675→                    tidak dapat dibatalkan.
+   676→                  </AlertDialogDescription>
+   677→                </AlertDialogHeader>
+   678→                <AlertDialogFooter>
+   679→                  <AlertDialogCancel>Batal</AlertDialogCancel>
+   680→                  <AlertDialogAction
+   681→                    onClick={handleDelete}
+   682→                    disabled={deleteMut.isPending}
+   683→                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+   684→                  >
+   685→                    {deleteMut.isPending && (
+   686→                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+   687→                    )}
+   688→                    Hapus
+   689→                  </AlertDialogAction>
+   690→                </AlertDialogFooter>
+   691→              </AlertDialogContent>
+   692→            </AlertDialog>
+   693→          </DropdownMenuContent>
+   694→        </DropdownMenu>
+   695→      </div>
+   696→    </Card>
+   697→  );
+   698→}
+   699→
+   700→// ---------- QR Code Dialog ----------
+   701→function QrCodeDialog({
+   702→  share,
+   703→  onOpenChange,
+   704→}: {
+   705→  share: ShareLink | null;
+   706→  onOpenChange: (o: boolean) => void;
+   707→}) {
+   708→  const [copied, setCopied] = React.useState(false);
+   709→  if (!share) return null;
+   710→  const url = buildShareUrl(share.token);
+   711→  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+   712→    url
+   713→  )}`;
+   714→
+   715→  async function copyLink() {
+   716→    try {
+   717→      await navigator.clipboard.writeText(url);
+   718→      setCopied(true);
+   719→      toast.success("Link disalin");
+   720→      setTimeout(() => setCopied(false), 1500);
+   721→    } catch {
+   722→      toast.error("Gagal menyalin link.");
+   723→    }
+   724→  }
+   725→
+   726→  return (
+   727→    <Dialog open={!!share} onOpenChange={onOpenChange}>
+   728→      <DialogContent className="max-w-sm gap-0 overflow-hidden p-0 sm:rounded-2xl">
+   729→        <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+   730→          <div className="flex items-center justify-between">
+   731→            <div>
+   732→              <DialogTitle className="text-base">Kode QR Link</DialogTitle>
+   733→              <DialogDescription className="text-xs">
+   734→                Pindai untuk membuka link berbagi.
+   735→              </DialogDescription>
+   736→            </div>
+   737→            <DialogClose asChild>
+   738→              <Button variant="ghost" size="icon" className="h-8 w-8">
+   739→                <X className="h-4 w-4" />
+   740→              </Button>
+   741→            </DialogClose>
+   742→          </div>
+   743→        </DialogHeader>
+   744→        <div className="flex flex-col items-center gap-4 p-6">
+   745→          <div className="rounded-xl border border-border bg-white p-3">
+   746→            <img
+   747→              src={qrSrc}
+   748→              alt={`QR Code for ${share.title}`}
+   749→              width={200}
+   750→              height={200}
+   751→              className="h-[200px] w-[200px]"
+   752→            />
+   753→          </div>
+   754→          <div className="w-full space-y-1.5 text-center">
+   755→            <p className="text-sm font-medium text-foreground">{share.title}</p>
+   756→            <p className="break-all text-[11px] text-muted-foreground">{url}</p>
+   757→          </div>
+   758→          <Button
+   759→            type="button"
+   760→            onClick={copyLink}
+   761→            className="w-full gap-1.5"
+   762→            variant="outline"
+   763→          >
+   764→            {copied ? (
+   765→              <Check className="h-4 w-4 text-emerald-500" />
+   766→            ) : (
+   767→              <Copy className="h-4 w-4" />
+   768→            )}
+   769→            {copied ? "Tersalin" : "Salin Link"}
+   770→          </Button>
+   771→        </div>
+   772→      </DialogContent>
+   773→    </Dialog>
+   774→  );
+   775→}
+   776→
+   777→// ---------- Form Dialog (Create / Edit) ----------
+   778→type FormState = {
+   779→  title: string;
+   780→  message: string;
+   781→  accessLevel: ShareAccessLevel;
+   782→  scopeType: ShareScopeType;
+   783→  scopeData: Record<string, unknown>;
+   784→  // expiry
+   785→  expiresAt: string; // yyyy-mm-dd or ""
+   786→  maxViews: string;
+   787→  hoursActive: string;
+   788→  oneTime: boolean;
+   789→  // security
+   790→  maxConcurrent: string;
+   791→  passwordEnabled: boolean;
+   792→  password: string;
+   793→  requireEmailEnabled: boolean;
+   794→  requireEmail: string;
+   795→  ipWhitelist: string;
+   796→  hiddenAmounts: boolean;
+   797→  maskedDesc: boolean;
+   798→  // appearance
+   799→  customTheme: string;
+   800→  hideBranding: boolean;
+   801→  language: string;
+   802→};
+   803→
+   804→const DEFAULT_FORM: FormState = {
+   805→  title: "",
+   806→  message: "",
+   807→  accessLevel: "VIEW",
+   808→  scopeType: "ALL",
+   809→  scopeData: {},
+   810→  expiresAt: "",
+   811→  maxViews: "",
+   812→  hoursActive: "",
+   813→  oneTime: false,
+   814→  maxConcurrent: "",
+   815→  passwordEnabled: false,
+   816→  password: "",
+   817→  requireEmailEnabled: false,
+   818→  requireEmail: "",
+   819→  ipWhitelist: "",
+   820→  hiddenAmounts: false,
+   821→  maskedDesc: false,
+   822→  customTheme: "#10b981",
+   823→  hideBranding: false,
+   824→  language: "id",
+   825→};
+   826→
+   827→function shareToForm(s: ShareLink): FormState {
+   828→  const sd = parseScopeData(s.scopeData);
+   829→  return {
+   830→    title: s.title,
+   831→    message: s.message ?? "",
+   832→    accessLevel: s.accessLevel,
+   833→    scopeType: s.scopeType,
+   834→    scopeData: sd,
+   835→    expiresAt: s.expiresAt ? formatDateInput(s.expiresAt) : "",
+   836→    maxViews: s.maxViews != null ? String(s.maxViews) : "",
+   837→    hoursActive: s.hoursActive != null ? String(s.hoursActive) : "",
+   838→    oneTime: s.oneTime,
+   839→    maxConcurrent: s.maxConcurrent != null ? String(s.maxConcurrent) : "",
+   840→    passwordEnabled: !!s.passwordHash,
+   841→    password: "",
+   842→    requireEmailEnabled: !!s.requireEmail,
+   843→    requireEmail: s.requireEmail ?? "",
+   844→    ipWhitelist: s.ipWhitelist ?? "",
+   845→    hiddenAmounts: s.hiddenAmounts,
+   846→    maskedDesc: s.maskedDesc,
+   847→    customTheme: s.customTheme ?? "#10b981",
+   848→    hideBranding: s.hideBranding,
+   849→    language: s.language || "id",
+   850→  };
+   851→}
+   852→
+   853→function ShareFormDialog({
+   854→  open,
+   855→  onOpenChange,
+   856→  editShare,
+   857→}: {
+   858→  open: boolean;
+   859→  onOpenChange: (o: boolean) => void;
+   860→  editShare: ShareLink | null;
+   861→}) {
+   862→  const isEdit = !!editShare;
+   863→  const { data: accounts } = useAccounts();
+   864→  const { data: categories } = useCategories();
+   865→  const { data: groups } = useGroups();
+   866→
+   867→  const createMut = useCreateShareLink();
+   868→  const updateMut = useUpdateShareLink();
+   869→
+   870→  const [form, setForm] = React.useState<FormState>(DEFAULT_FORM);
+   871→  const [tab, setTab] = React.useState<string>("content");
+   872→  const [error, setError] = React.useState<string | null>(null);
+   873→  const [datePickerOpen, setDatePickerOpen] = React.useState(false);
+   874→
+   875→  React.useEffect(() => {
+   876→    if (open) {
+   877→      setForm(editShare ? shareToForm(editShare) : DEFAULT_FORM);
+   878→      setTab("content");
+   879→      setError(null);
+   880→    }
+   881→  }, [open, editShare]);
+   882→
+   883→  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+   884→    setForm((prev) => ({ ...prev, [key]: value }));
+   885→  }
+   886→
+   887→  // Apply an expiry preset to form state
+   888→  function applyPreset(preset: (typeof SHARE_EXPIRY_PRESETS)[number]) {
+   889→    setForm((prev) => {
+   890→      const next = { ...prev, oneTime: false };
+   891→      if (preset.views) {
+   892→        next.maxViews = String(preset.views);
+   893→        next.expiresAt = "";
+   894→        next.hoursActive = "";
+   895→        next.oneTime = true;
+   896→      } else if (preset.hours) {
+   897→        next.hoursActive = String(preset.hours);
+   898→        next.expiresAt = "";
+   899→        next.maxViews = "";
+   900→      } else if (preset.days) {
+   901→        const d = new Date();
+   902→        d.setDate(d.getDate() + preset.days);
+   903→        next.expiresAt = formatDateInput(d);
+   904→        next.hoursActive = "";
+   905→        next.maxViews = "";
+   906→      } else {
+   907→        // Tidak kadaluarsa
+   908→        next.expiresAt = "";
+   909→        next.hoursActive = "";
+   910→        next.maxViews = "";
+   911→      }
+   912→      return next;
+   913→    });
+   914→  }
+   915→
+   916→  function buildScopeData(): Record<string, unknown> {
+   917→    const sd: Record<string, unknown> = {};
+   918→    switch (form.scopeType) {
+   919→      case "ACCOUNT":
+   920→        if (form.scopeData.accountId)
+   921→          sd.accountId = form.scopeData.accountId;
+   922→        break;
+   923→      case "CATEGORY":
+   924→        if (form.scopeData.categoryId)
+   925→          sd.categoryId = form.scopeData.categoryId;
+   926→        break;
+   927→      case "GROUP":
+   928→        if (form.scopeData.groupId) sd.groupId = form.scopeData.groupId;
+   929→        break;
+   930→      case "TAG":
+   931→        if (form.scopeData.tag) sd.tag = form.scopeData.tag;
+   932→        break;
+   933→      case "DATE_RANGE":
+   934→        if (form.scopeData.from) sd.from = form.scopeData.from;
+   935→        if (form.scopeData.to) sd.to = form.scopeData.to;
+   936→        break;
+   937→      case "CUSTOM":
+   938→        sd.txIds = Array.isArray(form.scopeData.txIds)
+   939→          ? form.scopeData.txIds
+   940→          : [];
+   941→        break;
+   942→      case "ALL":
+   943→      default:
+   944→        break;
+   945→    }
+   946→    return sd;
+   947→  }
+   948→
+   949→  function handleSubmit(e: React.FormEvent) {
+   950→    e.preventDefault();
+   951→    setError(null);
+   952→
+   953→    if (!form.title.trim()) {
+   954→      setError("Judul link wajib diisi.");
+   955→      setTab("content");
+   956→      return;
+   957→    }
+   958→    if (form.passwordEnabled && !form.password.trim() && !isEdit) {
+   959→      setError("Kata sandi belum diisi.");
+   960→      setTab("security");
+   961→      return;
+   962→    }
+   963→    if (
+   964→      form.passwordEnabled &&
+   965→      form.password.trim() &&
+   966→      form.password.trim().length < 4
+   967→    ) {
+   968→      setError("Kata sandi minimal 4 karakter.");
+   969→      setTab("security");
+   970→      return;
+   971→    }
+   972→    if (form.requireEmailEnabled && !form.requireEmail.trim()) {
+   973→      setError("Email verifikasi belum diisi.");
+   974→      setTab("security");
+   975→      return;
+   976→    }
+   977→    if (
+   978→      form.requireEmailEnabled &&
+   979→      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.requireEmail)
+   980→    ) {
+   981→      setError("Format email verifikasi tidak valid.");
+   982→      setTab("security");
+   983→      return;
+   984→    }
+   985→
+   986→    const scopeData = buildScopeData();
+   987→
+   988→    const payload: ShareLinkInput = {
+   989→      title: form.title.trim(),
+   990→      message: form.message.trim() || undefined,
+   991→      accessLevel: form.accessLevel,
+   992→      scopeType: form.scopeType,
+   993→      scopeData,
+   994→      expiresAt: form.expiresAt
+   995→        ? parseDateLocal(form.expiresAt).toISOString()
+   996→        : undefined,
+   997→      maxViews: form.maxViews ? Number(form.maxViews) : undefined,
+   998→      hoursActive: form.hoursActive ? Number(form.hoursActive) : undefined,
+   999→      oneTime: form.oneTime,
+  1000→      maxConcurrent: form.maxConcurrent ? Number(form.maxConcurrent) : undefined,
+  1001→      requireEmail: form.requireEmailEnabled
+  1002→        ? form.requireEmail.trim()
+  1003→        : undefined,
+  1004→      ipWhitelist: form.ipWhitelist.trim() || undefined,
+  1005→      hiddenAmounts: form.hiddenAmounts,
+  1006→      maskedDesc: form.maskedDesc,
+  1007→      customTheme: form.customTheme,
+  1008→      hideBranding: form.hideBranding,
+  1009→      language: form.language,
+  1010→    };
+  1011→
+  1012→    // Password handling: only send if user typed one (create: required if enabled; edit: only if changed)
+  1013→    if (form.passwordEnabled && form.password.trim()) {
+  1014→      payload.password = form.password.trim();
+  1015→    } else if (isEdit && !form.passwordEnabled) {
+  1016→      // Disabled in edit → clear password
+  1017→      payload.password = "";
+  1018→    }
+  1019→
+  1020→    if (isEdit && editShare) {
+  1021→      updateMut.mutate(
+  1022→        { id: editShare.id, data: payload },
+  1023→        {
+  1024→          onSuccess: () => {
+  1025→            toast.success("Link berbagi diperbarui.");
+  1026→            onOpenChange(false);
+  1027→          },
+  1028→          onError: (err) =>
+  1029→            setError(err.message || "Gagal memperbarui link."),
+  1030→        }
+  1031→      );
+  1032→    } else {
+  1033→      createMut.mutate(payload, {
+  1034→        onSuccess: () => {
+  1035→          toast.success("Link berbagi dibuat.");
+  1036→          onOpenChange(false);
+  1037→        },
+  1038→        onError: (err) => setError(err.message || "Gagal membuat link."),
+  1039→      });
+  1040→    }
+  1041→  }
+  1042→
+  1043→  const pending = createMut.isPending || updateMut.isPending;
+  1044→
+  1045→  const previewUrl = editShare
+  1046→    ? buildShareUrl(editShare.token)
+  1047→    : "/share/preview-link-anda";
+  1048→
+  1049→  return (
+  1050→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1051→      <DialogContent
+  1052→        showCloseButton={false}
+  1053→        className="flex max-h-[95dvh] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl"
+  1054→      >
+  1055→        <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+  1056→          <div className="flex items-center justify-between">
+  1057→            <div>
+  1058→              <DialogTitle className="text-base">
+  1059→                {isEdit ? "Ubah Link Berbagi" : "Buat Link Berbagi Baru"}
+  1060→              </DialogTitle>
+  1061→              <DialogDescription className="text-xs">
+  1062→                {isEdit
+  1063→                  ? "Perbarui pengaturan link berbagi Anda."
+  1064→                  : "Bagikan data keuangan dengan aman."}
+  1065→              </DialogDescription>
+  1066→            </div>
+  1067→            <DialogClose asChild>
+  1068→              <Button variant="ghost" size="icon" className="h-8 w-8">
+  1069→                <X className="h-4 w-4" />
+  1070→              </Button>
+  1071→            </DialogClose>
+  1072→          </div>
+  1073→        </DialogHeader>
+  1074→
+  1075→        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+  1076→          <Tabs
+  1077→            value={tab}
+  1078→            onValueChange={setTab}
+  1079→            className="flex min-h-0 flex-1 flex-col gap-0"
+  1080→          >
+  1081→            <div className="border-b border-border bg-background px-4 pt-3">
+  1082→              <TabsList className="bg-muted/60">
+  1083→                <TabsTrigger value="content" className="gap-1.5">
+  1084→                  <Database className="h-3.5 w-3.5" />
+  1085→                  Konten
+  1086→                </TabsTrigger>
+  1087→                <TabsTrigger value="security" className="gap-1.5">
+  1088→                  <Shield className="h-3.5 w-3.5" />
+  1089→                  Keamanan
+  1090→                </TabsTrigger>
+  1091→                <TabsTrigger value="appearance" className="gap-1.5">
+  1092→                  <Sparkles className="h-3.5 w-3.5" />
+  1093→                  Tampilan
+  1094→                </TabsTrigger>
+  1095→              </TabsList>
+  1096→            </div>
+  1097→
+  1098→            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-5">
+  1099→                {/* TAB 1: KONTEN */}
+  1100→                <TabsContent value="content" className="mt-0 space-y-5">
+  1101→                  {/* Title */}
+  1102→                  <div className="space-y-1.5">
+  1103→                    <Label htmlFor="sh-title">
+  1104→                      Judul <span className="text-destructive">*</span>
+  1105→                    </Label>
+  1106→                    <Input
+  1107→                      id="sh-title"
+  1108→                      value={form.title}
+  1109→                      onChange={(e) => update("title", e.target.value)}
+  1110→                      placeholder="cth. Laporan Keuangan September"
+  1111→                      autoFocus
+  1112→                    />
+  1113→                  </div>
+  1114→
+  1115→                  {/* Message */}
+  1116→                  <div className="space-y-1.5">
+  1117→                    <Label htmlFor="sh-message">Pesan (opsional)</Label>
+  1118→                    <Textarea
+  1119→                      id="sh-message"
+  1120→                      value={form.message}
+  1121→                      onChange={(e) => update("message", e.target.value)}
+  1122→                      placeholder="Tulis pesan singkat untuk penerima link…"
+  1123→                      rows={3}
+  1124→                    />
+  1125→                  </div>
+  1126→
+  1127→                  <Separator />
+  1128→
+  1129→                  {/* Access level */}
+  1130→                  <div className="space-y-2">
+  1131→                    <Label>Tingkat Akses</Label>
+  1132→                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+  1133→                      {SHARE_ACCESS_LEVELS.map((lvl) => {
+  1134→                        const selected = form.accessLevel === lvl.value;
+  1135→                        return (
+  1136→                          <button
+  1137→                            key={lvl.value}
+  1138→                            type="button"
+  1139→                            onClick={() => update("accessLevel", lvl.value)}
+  1140→                            className={cn(
+  1141→                              "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+  1142→                              selected
+  1143→                                ? "border-foreground/30 bg-muted/60"
+  1144→                                : "border-border hover:border-foreground/20 hover:bg-muted/30"
+  1145→                            )}
+  1146→                            style={
+  1147→                              selected
+  1148→                                ? {
+  1149→                                    borderColor: `${lvl.color}80`,
+  1150→                                    backgroundColor: `${lvl.color}0d`,
+  1151→                                  }
+  1152→                                : undefined
+  1153→                            }
+  1154→                          >
+  1155→                            <span
+  1156→                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+  1157→                              style={{
+  1158→                                backgroundColor: `${lvl.color}1a`,
+  1159→                              }}
+  1160→                            >
+  1161→                              <LucideIcon
+  1162→                                name={lvl.icon}
+  1163→                                className="h-4 w-4"
+  1164→                                style={{ color: lvl.color }}
+  1165→                              />
+  1166→                            </span>
+  1167→                            <div className="min-w-0 flex-1">
+  1168→                              <div className="flex items-center justify-between gap-2">
+  1169→                                <p className="text-sm font-medium text-foreground">
+  1170→                                  {lvl.label}
+  1171→                                </p>
+  1172→                                {selected && (
+  1173→                                  <Check
+  1174→                                    className="h-4 w-4 shrink-0"
+  1175→                                    style={{ color: lvl.color }}
+  1176→                                  />
+  1177→                                )}
+  1178→                              </div>
+  1179→                              <p className="mt-0.5 text-xs text-muted-foreground">
+  1180→                                {lvl.description}
+  1181→                              </p>
+  1182→                            </div>
+  1183→                          </button>
+  1184→                        );
+  1185→                      })}
+  1186→                    </div>
+  1187→                  </div>
+  1188→
+  1189→                  <Separator />
+  1190→
+  1191→                  {/* Scope type */}
+  1192→                  <div className="space-y-2">
+  1193→                    <Label>Cakupan Data</Label>
+  1194→                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+  1195→                      {SHARE_SCOPE_TYPES.map((sc) => {
+  1196→                        const selected = form.scopeType === sc.value;
+  1197→                        return (
+  1198→                          <button
+  1199→                            key={sc.value}
+  1200→                            type="button"
+  1201→                            onClick={() =>
+  1202→                              update("scopeType", sc.value as ShareScopeType)
+  1203→                            }
+  1204→                            className={cn(
+  1205→                              "flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition-colors",
+  1206→                              selected
+  1207→                                ? "border-primary bg-primary/5"
+  1208→                                : "border-border hover:bg-muted/30"
+  1209→                            )}
+  1210→                          >
+  1211→                            <LucideIcon
+  1212→                              name={sc.icon}
+  1213→                              className={cn(
+  1214→                                "h-4 w-4",
+  1215→                                selected
+  1216→                                  ? "text-primary"
+  1217→                                  : "text-muted-foreground"
+  1218→                              )}
+  1219→                            />
+  1220→                            <p className="text-xs font-medium text-foreground">
+  1221→                              {sc.label}
+  1222→                            </p>
+  1223→                            <p className="text-[10px] leading-tight text-muted-foreground">
+  1224→                              {sc.description}
+  1225→                            </p>
+  1226→                          </button>
+  1227→                        );
+  1228→                      })}
+  1229→                    </div>
+  1230→                  </div>
+  1231→
+  1232→                  {/* Scope detail */}
+  1233→                  <ScopeDetailEditor
+  1234→                    form={form}
+  1235→                    update={update}
+  1236→                    accounts={accounts ?? []}
+  1237→                    categories={categories ?? []}
+  1238→                    groups={groups ?? []}
+  1239→                  />
+  1240→                </TabsContent>
+  1241→
+  1242→                {/* TAB 2: KEAMANAN & MASA BERLAKU */}
+  1243→                <TabsContent value="security" className="mt-0 space-y-5">
+  1244→                  {/* Expiry presets */}
+  1245→                  <div className="space-y-2">
+  1246→                    <Label>Masa Berlaku Cepat</Label>
+  1247→                    <div className="flex flex-wrap gap-2">
+  1248→                      {SHARE_EXPIRY_PRESETS.map((preset) => (
+  1249→                        <Button
+  1250→                          key={preset.label}
+  1251→                          type="button"
+  1252→                          variant="outline"
+  1253→                          size="sm"
+  1254→                          className="gap-1.5"
+  1255→                          onClick={() => applyPreset(preset)}
+  1256→                        >
+  1257→                          <Zap className="h-3.5 w-3.5" />
+  1258→                          {preset.label}
+  1259→                        </Button>
+  1260→                      ))}
+  1261→                    </div>
+  1262→                  </div>
+  1263→
+  1264→                  <Separator />
+  1265→
+  1266→                  {/* Custom expiry */}
+  1267→                  <div className="space-y-3">
+  1268→                    <Label>Atur Masa Berlaku Manual</Label>
+  1269→                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+  1270→                      {/* Expiry date picker */}
+  1271→                      <div className="space-y-1.5">
+  1272→                        <Label
+  1273→                          htmlFor="sh-expires"
+  1274→                          className="text-xs text-muted-foreground"
+  1275→                        >
+  1276→                          Tanggal Kadaluarsa
+  1277→                        </Label>
+  1278→                        <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+  1279→                          <PopoverTrigger asChild>
+  1280→                            <Button
+  1281→                              id="sh-expires"
+  1282→                              type="button"
+  1283→                              variant="outline"
+  1284→                              className="w-full justify-start text-left font-normal"
+  1285→                            >
+  1286→                              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+  1287→                              {form.expiresAt
+  1288→                                ? formatDateLong(form.expiresAt)
+  1289→                                : "Pilih tanggal"}
+  1290→                            </Button>
+  1291→                          </PopoverTrigger>
+  1292→                          <PopoverContent className="w-auto p-0" align="start">
+  1293→                            <Calendar
+  1294→                              mode="single"
+  1295→                              selected={
+  1296→                                form.expiresAt
+  1297→                                  ? parseDateLocal(form.expiresAt)
+  1298→                                  : undefined
+  1299→                              }
+  1300→                              onSelect={(d) => {
+  1301→                                if (d) {
+  1302→                                  update("expiresAt", formatDateInput(d));
+  1303→                                }
+  1304→                                setDatePickerOpen(false);
+  1305→                              }}
+  1306→                              disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+  1307→                            />
+  1308→                          </PopoverContent>
+  1309→                        </Popover>
+  1310→                      </div>
+  1311→
+  1312→                      {/* Max views */}
+  1313→                      <div className="space-y-1.5">
+  1314→                        <Label
+  1315→                          htmlFor="sh-maxviews"
+  1316→                          className="text-xs text-muted-foreground"
+  1317→                        >
+  1318→                          Batas Pembukaan
+  1319→                        </Label>
+  1320→                        <Input
+  1321→                          id="sh-maxviews"
+  1322→                          type="number"
+  1323→                          min={0}
+  1324→                          value={form.maxViews}
+  1325→                          onChange={(e) => update("maxViews", e.target.value)}
+  1326→                          placeholder="cth. 50"
+  1327→                        />
+  1328→                      </div>
+  1329→
+  1330→                      {/* Hours active */}
+  1331→                      <div className="space-y-1.5">
+  1332→                        <Label
+  1333→                          htmlFor="sh-hours"
+  1334→                          className="text-xs text-muted-foreground"
+  1335→                        >
+  1336→                          Aktif Selama (jam)
+  1337→                        </Label>
+  1338→                        <Input
+  1339→                          id="sh-hours"
+  1340→                          type="number"
+  1341→                          min={0}
+  1342→                          value={form.hoursActive}
+  1343→                          onChange={(e) => update("hoursActive", e.target.value)}
+  1344→                          placeholder="cth. 24"
+  1345→                        />
+  1346→                      </div>
+  1347→
+  1348→                      {/* Max concurrent */}
+  1349→                      <div className="space-y-1.5">
+  1350→                        <Label
+  1351→                          htmlFor="sh-concurrent"
+  1352→                          className="text-xs text-muted-foreground"
+  1353→                        >
+  1354→                          Maksimum Penonton Bersamaan
+  1355→                        </Label>
+  1356→                        <Input
+  1357→                          id="sh-concurrent"
+  1358→                          type="number"
+  1359→                          min={0}
+  1360→                          value={form.maxConcurrent}
+  1361→                          onChange={(e) =>
+  1362→                            update("maxConcurrent", e.target.value)
+  1363→                          }
+  1364→                          placeholder="cth. 5"
+  1365→                        />
+  1366→                      </div>
+  1367→                    </div>
+  1368→
+  1369→                    {/* One-time switch */}
+  1370→                    <div className="flex items-center justify-between rounded-lg border border-border p-3">
+  1371→                      <div className="space-y-0.5">
+  1372→                        <Label htmlFor="sh-onetime" className="text-sm">
+  1373→                          Sekali Pakai
+  1374→                        </Label>
+  1375→                        <p className="text-xs text-muted-foreground">
+  1376→                          Link otomatis kadaluarsa setelah dibuka 1 kali.
+  1377→                        </p>
+  1378→                      </div>
+  1379→                      <Switch
+  1380→                        id="sh-onetime"
+  1381→                        checked={form.oneTime}
+  1382→                        onCheckedChange={(v) => update("oneTime", v)}
+  1383→                      />
+  1384→                    </div>
+  1385→                  </div>
+  1386→
+  1387→                  <Separator />
+  1388→
+  1389→                  {/* Password protection */}
+  1390→                  <div className="space-y-3">
+  1391→                    <div className="flex items-center justify-between rounded-lg border border-border p-3">
+  1392→                      <div className="space-y-0.5">
+  1393→                        <Label htmlFor="sh-pw-toggle" className="text-sm">
+  1394→                          Proteksi Kata Sandi
+  1395→                        </Label>
+  1396→                        <p className="text-xs text-muted-foreground">
+  1397→                          Penerima harus memasukkan kata sandi untuk membuka.
+  1398→                        </p>
+  1399→                      </div>
+  1400→                      <Switch
+  1401→                        id="sh-pw-toggle"
+  1402→                        checked={form.passwordEnabled}
+  1403→                        onCheckedChange={(v) => update("passwordEnabled", v)}
+  1404→                      />
+  1405→                    </div>
+  1406→                    {form.passwordEnabled && (
+  1407→                      <div className="space-y-1.5">
+  1408→                        <Label htmlFor="sh-pw">
+  1409→                          {isEdit
+  1410→                            ? "Kata Sandi Baru (kosongkan jika tidak diubah)"
+  1411→                            : "Kata Sandi"}
+  1412→                        </Label>
+  1413→                        <Input
+  1414→                          id="sh-pw"
+  1415→                          type="text"
+  1416→                          autoComplete="off"
+  1417→                          value={form.password}
+  1418→                          onChange={(e) => update("password", e.target.value)}
+  1419→                          placeholder="Min. 4 karakter"
+  1420→                        />
+  1421→                      </div>
+  1422→                    )}
+  1423→                  </div>
+  1424→
+  1425→                  <Separator />
+  1426→
+  1427→                  {/* Email verification */}
+  1428→                  <div className="space-y-3">
+  1429→                    <div className="flex items-center justify-between rounded-lg border border-border p-3">
+  1430→                      <div className="space-y-0.5">
+  1431→                        <Label htmlFor="sh-email-toggle" className="text-sm">
+  1432→                          Verifikasi Email
+  1433→                        </Label>
+  1434→                        <p className="text-xs text-muted-foreground">
+  1435→                          Hanya penerima dengan email tertentu yang dapat
+  1436→                          membuka.
+  1437→                        </p>
+  1438→                      </div>
+  1439→                      <Switch
+  1440→                        id="sh-email-toggle"
+  1441→                        checked={form.requireEmailEnabled}
+  1442→                        onCheckedChange={(v) =>
+  1443→                          update("requireEmailEnabled", v)
+  1444→                        }
+  1445→                      />
+  1446→                    </div>
+  1447→                    {form.requireEmailEnabled && (
+  1448→                      <div className="space-y-1.5">
+  1449→                        <Label htmlFor="sh-email">Email Penerima</Label>
+  1450→                        <Input
+  1451→                          id="sh-email"
+  1452→                          type="email"
+  1453→                          value={form.requireEmail}
+  1454→                          onChange={(e) => update("requireEmail", e.target.value)}
+  1455→                          placeholder="nama@email.com"
+  1456→                        />
+  1457→                      </div>
+  1458→                    )}
+  1459→                  </div>
+  1460→
+  1461→                  <Separator />
+  1462→
+  1463→                  {/* IP Whitelist */}
+  1464→                  <div className="space-y-1.5">
+  1465→                    <Label htmlFor="sh-ip">Daftar Putih IP (opsional)</Label>
+  1466→                    <Textarea
+  1467→                      id="sh-ip"
+  1468→                      value={form.ipWhitelist}
+  1469→                      onChange={(e) => update("ipWhitelist", e.target.value)}
+  1470→                      placeholder="192.168.1.1, 203.0.0.0/24"
+  1471→                      rows={2}
+  1472→                    />
+  1473→                    <p className="text-xs text-muted-foreground">
+  1474→                      Pisahkan beberapa IP dengan koma. Gunakan CIDR untuk
+  1475→                      subnet.
+  1476→                    </p>
+  1477→                  </div>
+  1478→
+  1479→                  <Separator />
+  1480→
+  1481→                  {/* Privacy switches */}
+  1482→                  <div className="space-y-2">
+  1483→                    <Label>Privasi</Label>
+  1484→                    <div className="flex items-center justify-between rounded-lg border border-border p-3">
+  1485→                      <div className="space-y-0.5">
+  1486→                        <Label htmlFor="sh-hidden-amt" className="text-sm">
+  1487→                          Sembunyikan Nominal
+  1488→                        </Label>
+  1489→                        <p className="text-xs text-muted-foreground">
+  1490→                          Nominal transaksi tidak ditampilkan.
+  1491→                        </p>
+  1492→                      </div>
+  1493→                      <Switch
+  1494→                        id="sh-hidden-amt"
+  1495→                        checked={form.hiddenAmounts}
+  1496→                        onCheckedChange={(v) => update("hiddenAmounts", v)}
+  1497→                      />
+  1498→                    </div>
+  1499→                    <div className="flex items-center justify-between rounded-lg border border-border p-3">
+  1500→                      <div className="space-y-0.5">
+  1501→                        <Label htmlFor="sh-masked-desc" className="text-sm">
+  1502→                          Samarkan Deskripsi
+  1503→                        </Label>
+  1504→                        <p className="text-xs text-muted-foreground">
+  1505→                          Deskripsi transaksi dipotong sebagian.
+  1506→                        </p>
+  1507→                      </div>
+  1508→                      <Switch
+  1509→                        id="sh-masked-desc"
+  1510→                        checked={form.maskedDesc}
+  1511→                        onCheckedChange={(v) => update("maskedDesc", v)}
+  1512→                      />
+  1513→                    </div>
+  1514→                  </div>
+  1515→                </TabsContent>
+  1516→
+  1517→                {/* TAB 3: TAMPILAN */}
+  1518→                <TabsContent value="appearance" className="mt-0 space-y-5">
+  1519→                  {/* Theme color */}
+  1520→                  <div className="space-y-2">
+  1521→                    <Label>Warna Tema</Label>
+  1522→                    <div className="flex flex-wrap gap-2">
+  1523→                      {SHARE_THEME_COLORS.map((color) => {
+  1524→                        const selected = form.customTheme === color;
+  1525→                        return (
+  1526→                          <button
+  1527→                            key={color}
+  1528→                            type="button"
+  1529→                            onClick={() => update("customTheme", color)}
+  1530→                            className={cn(
+  1531→                              "h-8 w-8 rounded-full border-2 transition-all",
+  1532→                              selected
+  1533→                                ? "border-foreground scale-110"
+  1534→                                : "border-transparent hover:scale-105"
+  1535→                            )}
+  1536→                            style={{ backgroundColor: color }}
+  1537→                            aria-label={`Warna ${color}`}
+  1538→                          >
+  1539→                            {selected && (
+  1540→                              <Check className="mx-auto h-4 w-4 text-white drop-shadow" />
+  1541→                            )}
+  1542→                          </button>
+  1543→                        );
+  1544→                      })}
+  1545→                    </div>
+  1546→                  </div>
+  1547→
+  1548→                  <Separator />
+  1549→
+  1550→                  {/* Hide branding */}
+  1551→                  <div className="flex items-center justify-between rounded-lg border border-border p-3">
+  1552→                    <div className="space-y-0.5">
+  1553→                      <Label htmlFor="sh-branding" className="text-sm">
+  1554→                        Sembunyikan Branding
+  1555→                      </Label>
+  1556→                      <p className="text-xs text-muted-foreground">
+  1557→                        Logo & nama DompetKu tidak ditampilkan di halaman
+  1558→                        share.
+  1559→                      </p>
+  1560→                    </div>
+  1561→                    <Switch
+  1562→                      id="sh-branding"
+  1563→                      checked={form.hideBranding}
+  1564→                      onCheckedChange={(v) => update("hideBranding", v)}
+  1565→                    />
+  1566→                  </div>
+  1567→
+  1568→                  <Separator />
+  1569→
+  1570→                  {/* Language */}
+  1571→                  <div className="space-y-1.5">
+  1572→                    <Label htmlFor="sh-lang">Bahasa</Label>
+  1573→                    <Select
+  1574→                      value={form.language}
+  1575→                      onValueChange={(v) => update("language", v)}
+  1576→                    >
+  1577→                      <SelectTrigger id="sh-lang" className="w-full">
+  1578→                        <SelectValue />
+  1579→                      </SelectTrigger>
+  1580→                      <SelectContent>
+  1581→                        <SelectItem value="id">Indonesia</SelectItem>
+  1582→                        <SelectItem value="en">English</SelectItem>
+  1583→                      </SelectContent>
+  1584→                    </Select>
+  1585→                  </div>
+  1586→
+  1587→                  <Separator />
+  1588→
+  1589→                  {/* Preview */}
+  1590→                  <div className="space-y-2">
+  1591→                    <Label>Pratinjau Kartu Link</Label>
+  1592→                    <SharePreview form={form} />
+  1593→                  </div>
+  1594→                </TabsContent>
+  1595→            </div>
+  1596→
+  1597→            {/* Footer */}
+  1598→            <DialogFooter className="flex flex-col gap-3 border-t border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+  1599→              {/* URL preview */}
+  1600→              <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+  1601→                <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+  1602→                <span className="truncate text-muted-foreground">
+  1603→                  {previewUrl}
+  1604→                </span>
+  1605→              </div>
+  1606→              <div className="flex shrink-0 gap-2">
+  1607→                <DialogClose asChild>
+  1608→                  <Button type="button" variant="outline" disabled={pending}>
+  1609→                    Batal
+  1610→                  </Button>
+  1611→                </DialogClose>
+  1612→                <Button type="submit" disabled={pending} className="gap-1">
+  1613→                  {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+  1614→                  {isEdit ? "Simpan Perubahan" : "Buat Link"}
+  1615→                </Button>
+  1616→              </div>
+  1617→            </DialogFooter>
+  1618→
+  1619→            {/* Hidden error banner */}
+  1620→            {error && (
+  1621→              <div className="border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+  1622→                {error}
+  1623→              </div>
+  1624→            )}
+  1625→          </Tabs>
+  1626→        </form>
+  1627→      </DialogContent>
+  1628→    </Dialog>
+  1629→  );
+  1630→}
+  1631→
+  1632→// ---------- Scope Detail Editor ----------
+  1633→function ScopeDetailEditor({
+  1634→  form,
+  1635→  update,
+  1636→  accounts,
+  1637→  categories,
+  1638→  groups,
+  1639→}: {
+  1640→  form: FormState;
+  1641→  update: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+  1642→  accounts: Array<{ id: string; name: string; type: string; color: string; icon: string }>;
+  1643→  categories: Array<{ id: string; name: string; type: string; color: string; icon: string }>;
+  1644→  groups: Array<{ id: string; name: string; color: string; icon: string }>;
+  1645→}) {
+  1646→  const setScopeField = (key: string, value: unknown) => {
+  1647→    update("scopeData", { ...form.scopeData, [key]: value });
+  1648→  };
+  1649→
+  1650→  switch (form.scopeType) {
+  1651→    case "ACCOUNT":
+  1652→      return (
+  1653→        <div className="space-y-1.5">
+  1654→          <Label htmlFor="sh-account">Pilih Akun</Label>
+  1655→          <Select
+  1656→            value={String(form.scopeData.accountId ?? "")}
+  1657→            onValueChange={(v) => setScopeField("accountId", v)}
+  1658→          >
+  1659→            <SelectTrigger id="sh-account" className="w-full">
+  1660→              <SelectValue placeholder="Pilih akun" />
+  1661→            </SelectTrigger>
+  1662→            <SelectContent>
+  1663→              {accounts.length === 0 ? (
+  1664→                <div className="px-3 py-2 text-xs text-muted-foreground">
+  1665→                  Tidak ada akun tersedia.
+  1666→                </div>
+  1667→              ) : (
+  1668→                accounts.map((a) => (
+  1669→                  <SelectItem key={a.id} value={a.id}>
+  1670→                    <span className="flex items-center gap-2">
+  1671→                      <LucideIcon
+  1672→                        name={a.icon}
+  1673→                        className="h-4 w-4"
+  1674→                        style={{ color: a.color }}
+  1675→                      />
+  1676→                      {a.name}
+  1677→                    </span>
+  1678→                  </SelectItem>
+  1679→                ))
+  1680→              )}
+  1681→            </SelectContent>
+  1682→          </Select>
+  1683→        </div>
+  1684→      );
+  1685→    case "CATEGORY":
+  1686→      return (
+  1687→        <div className="space-y-1.5">
+  1688→          <Label htmlFor="sh-category">Pilih Kategori</Label>
+  1689→          <Select
+  1690→            value={String(form.scopeData.categoryId ?? "")}
+  1691→            onValueChange={(v) => setScopeField("categoryId", v)}
+  1692→          >
+  1693→            <SelectTrigger id="sh-category" className="w-full">
+  1694→              <SelectValue placeholder="Pilih kategori" />
+  1695→            </SelectTrigger>
+  1696→            <SelectContent>
+  1697→              {categories.length === 0 ? (
+  1698→                <div className="px-3 py-2 text-xs text-muted-foreground">
+  1699→                  Tidak ada kategori tersedia.
+  1700→                </div>
+  1701→              ) : (
+  1702→                categories.map((c) => (
+  1703→                  <SelectItem key={c.id} value={c.id}>
+  1704→                    <span className="flex items-center gap-2">
+  1705→                      <LucideIcon
+  1706→                        name={c.icon}
+  1707→                        className="h-4 w-4"
+  1708→                        style={{ color: c.color }}
+  1709→                      />
+  1710→                      {c.name}
+  1711→                    </span>
+  1712→                  </SelectItem>
+  1713→                ))
+  1714→              )}
+  1715→            </SelectContent>
+  1716→          </Select>
+  1717→        </div>
+  1718→      );
+  1719→    case "GROUP":
+  1720→      return (
+  1721→        <div className="space-y-1.5">
+  1722→          <Label htmlFor="sh-group">Pilih Event/Group</Label>
+  1723→          <Select
+  1724→            value={String(form.scopeData.groupId ?? "")}
+  1725→            onValueChange={(v) => setScopeField("groupId", v)}
+  1726→          >
+  1727→            <SelectTrigger id="sh-group" className="w-full">
+  1728→              <SelectValue placeholder="Pilih group" />
+  1729→            </SelectTrigger>
+  1730→            <SelectContent>
+  1731→              {groups.length === 0 ? (
+  1732→                <div className="px-3 py-2 text-xs text-muted-foreground">
+  1733→                  Tidak ada group tersedia.
+  1734→                </div>
+  1735→              ) : (
+  1736→                groups.map((g) => (
+  1737→                  <SelectItem key={g.id} value={g.id}>
+  1738→                    <span className="flex items-center gap-2">
+  1739→                      <LucideIcon
+  1740→                        name={g.icon}
+  1741→                        className="h-4 w-4"
+  1742→                        style={{ color: g.color }}
+  1743→                      />
+  1744→                      {g.name}
+  1745→                    </span>
+  1746→                  </SelectItem>
+  1747→                ))
+  1748→              )}
+  1749→            </SelectContent>
+  1750→          </Select>
+  1751→        </div>
+  1752→      );
+  1753→    case "TAG":
+  1754→      return (
+  1755→        <div className="space-y-1.5">
+  1756→          <Label htmlFor="sh-tag">Nama Tag</Label>
+  1757→          <Input
+  1758→            id="sh-tag"
+  1759→            value={String(form.scopeData.tag ?? "")}
+  1760→            onChange={(e) => setScopeField("tag", e.target.value)}
+  1761→            placeholder="cth. liburan2026"
+  1762→          />
+  1763→        </div>
+  1764→      );
+  1765→    case "DATE_RANGE":
+  1766→      return (
+  1767→        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+  1768→          <div className="space-y-1.5">
+  1769→            <Label htmlFor="sh-from">Dari Tanggal</Label>
+  1770→            <Input
+  1771→              id="sh-from"
+  1772→              type="date"
+  1773→              value={String(form.scopeData.from ?? "")}
+  1774→              onChange={(e) => setScopeField("from", e.target.value)}
+  1775→            />
+  1776→          </div>
+  1777→          <div className="space-y-1.5">
+  1778→            <Label htmlFor="sh-to">Sampai Tanggal</Label>
+  1779→            <Input
+  1780→              id="sh-to"
+  1781→              type="date"
+  1782→              value={String(form.scopeData.to ?? "")}
+  1783→              onChange={(e) => setScopeField("to", e.target.value)}
+  1784→            />
+  1785→          </div>
+  1786→        </div>
+  1787→      );
+  1788→    case "CUSTOM":
+  1789→      return (
+  1790→        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3">
+  1791→          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+  1792→            <ListChecks className="h-4 w-4" />
+  1793→            Pilih transaksi setelah link dibuat. Anda dapat memilih transaksi
+  1794→            individual dari halaman share nanti.
+  1795→          </p>
+  1796→        </div>
+  1797→      );
+  1798→    case "ALL":
+  1799→    default:
+  1800→      return (
+  1801→        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3">
+  1802→          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+  1803→            <Database className="h-4 w-4" />
+  1804→            Semua transaksi Anda akan dibagikan melalui link ini.
+  1805→          </p>
+  1806→        </div>
+  1807→      );
+  1808→  }
+  1809→}
+  1810→
+  1811→// ---------- Share Preview Card ----------
+  1812→function SharePreview({ form }: { form: FormState }) {
+  1813→  const access = SHARE_ACCESS_LEVELS.find((a) => a.value === form.accessLevel);
+  1814→  const scope = SHARE_SCOPE_TYPES.find((s) => s.value === form.scopeType);
+  1815→  const theme = form.customTheme;
+  1816→
+  1817→  return (
+  1818→    <div
+  1819→      className="overflow-hidden rounded-xl border border-border"
+  1820→      style={{ borderTopColor: theme, borderTopWidth: 3 }}
+  1821→    >
+  1822→      <div className="space-y-3 p-4">
+  1823→        <div className="flex items-start gap-3">
+  1824→          <span
+  1825→            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+  1826→            style={{ backgroundColor: `${theme}1a` }}
+  1827→          >
+  1828→            <LucideIcon
+  1829→              name={access?.icon ?? "Eye"}
+  1830→              className="h-4 w-4"
+  1831→              style={{ color: theme }}
+  1832→            />
+  1833→          </span>
+  1834→          <div className="min-w-0 flex-1">
+  1835→            <p className="truncate text-sm font-semibold text-foreground">
+  1836→              {form.title.trim() || "Judul Link Berbagi"}
+  1837→            </p>
+  1838→            <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
+  1839→              <LucideIcon
+  1840→                name={scope?.icon ?? "Database"}
+  1841→                className="h-3 w-3"
+  1842→              />
+  1843→              {scope?.label ?? "Semua Data"}
+  1844→            </p>
+  1845→          </div>
+  1846→          {!form.hideBranding && (
+  1847→            <Badge
+  1848→              variant="secondary"
+  1849→              className="border-transparent bg-primary/10 text-[10px] text-primary"
+  1850→            >
+  1851→              DompetKu
+  1852→            </Badge>
+  1853→          )}
+  1854→        </div>
+  1855→
+  1856→        {form.message.trim() && (
+  1857→          <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+  1858→            {form.message.trim()}
+  1859→          </p>
+  1860→        )}
+  1861→
+  1862→        <div className="flex flex-wrap gap-2 text-[11px]">
+  1863→          <span
+  1864→            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium"
+  1865→            style={{
+  1866→              backgroundColor: `${access?.color}1a`,
+  1867→              color: access?.color,
+  1868→            }}
+  1869→          >
+  1870→            <Shield className="h-3 w-3" />
+  1871→            {access?.label}
+  1872→          </span>
+  1873→          {form.passwordEnabled && (
+  1874→            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400">
+  1875→              <Lock className="h-3 w-3" />
+  1876→              Terproteksi
+  1877→            </span>
+  1878→          )}
+  1879→          {form.requireEmailEnabled && (
+  1880→            <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-0.5 font-medium text-cyan-600 dark:text-cyan-400">
+  1881→              <Mail className="h-3 w-3" />
+  1882→              Verifikasi Email
+  1883→            </span>
+  1884→          )}
+  1885→          {form.hiddenAmounts && (
+  1886→            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground">
+  1887→              <EyeOff className="h-3 w-3" />
+  1888→              Nominal Disembunyikan
+  1889→            </span>
+  1890→          )}
+  1891→          {form.maskedDesc && (
+  1892→            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground">
+  1893→              <EyeOff className="h-3 w-3" />
+  1894→              Deskripsi Disamarkan
+  1895→            </span>
+  1896→          )}
+  1897→        </div>
+  1898→
+  1899→        <div className="flex items-center gap-2 border-t border-border pt-3 text-[11px] text-muted-foreground">
+  1900→          <Users className="h-3 w-3" />
+  1901→          <span>0 views</span>
+  1902→          <Separator orientation="vertical" className="mx-1 h-3" />
+  1903→          <MessageCircle className="h-3 w-3" />
+  1904→          <span>0 komentar</span>
+  1905→        </div>
+  1906→      </div>
+  1907→    </div>
+  1908→  );
+  1909→}
+  1910→
+  1911→export default SharesSection;
+  1912→

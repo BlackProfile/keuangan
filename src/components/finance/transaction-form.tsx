@@ -163,6 +163,7 @@ export function TransactionForm({
   const [isBusinessExpense, setIsBusinessExpense] = React.useState(false);
   const [excludeFromBudget, setExcludeFromBudget] = React.useState(false);
   const [excludeFromStats, setExcludeFromStats] = React.useState(false);
+  const [isHidden, setIsHidden] = React.useState(false);
   const [goalId, setGoalId] = React.useState("");
   const [assignedTo, setAssignedTo] = React.useState("");
   const [cashbackAmount, setCashbackAmount] = React.useState("");
@@ -308,6 +309,7 @@ export function TransactionForm({
       setIsBusinessExpense(transaction.isBusinessExpense);
       setExcludeFromBudget(transaction.excludeFromBudget);
       setExcludeFromStats(transaction.excludeFromStats);
+      setIsHidden(transaction.isHidden);
       setGoalId(transaction.goalId ?? "");
       setAssignedTo(transaction.assignedTo ?? "");
       setCashbackAmount(
@@ -369,6 +371,7 @@ export function TransactionForm({
       setIsBusinessExpense(false);
       setExcludeFromBudget(false);
       setExcludeFromStats(false);
+      setIsHidden(false);
       setGoalId("");
       setAssignedTo("");
       setCashbackAmount("");
@@ -410,6 +413,7 @@ export function TransactionForm({
       setIsBusinessExpense(false);
       setExcludeFromBudget(false);
       setExcludeFromStats(false);
+      setIsHidden(false);
       setGoalId("");
       setAssignedTo("");
       setCashbackAmount("");
@@ -654,6 +658,7 @@ export function TransactionForm({
       isBusinessExpense,
       excludeFromBudget,
       excludeFromStats,
+      isHidden,
       cashbackAmount: cashbackAmount
         ? Number(cashbackAmount.replace(/[^\d.-]/g, ""))
         : undefined,
@@ -1502,6 +1507,12 @@ export function TransactionForm({
                     onCheckedChange={setExcludeFromStats}
                     title="Exclude from Stats"
                     description="Tidak dihitung di statistik"
+                  />
+                  <ToggleRow
+                    checked={isHidden}
+                    onCheckedChange={setIsHidden}
+                    title="Sembunyikan Transaksi"
+                    description="Tidak tampil di daftar utama (privasi)"
                   />
                 </div>
 

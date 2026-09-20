@@ -106,6 +106,7 @@ model Transaction {
   excludeFromBudget Boolean @default(false)
   excludeFromStats Boolean @default(false)
   isPinned    Boolean  @default(false)
+  isHidden    Boolean  @default(false)  // hidden from main views (private)
   // Money tracking extras
   cashbackAmount Float? 
   originalPrice Float?    // before discount
@@ -143,6 +144,7 @@ model Transaction {
   @@index([groupId])
   @@index([installmentId])
   @@index([isPinned])
+  @@index([isHidden])
   @@index([isDebt])
   @@index([isSubscription])
 }
@@ -402,4 +404,20 @@ model ShareComment {
 
   @@index([shareLinkId])
   @@index([transactionId])
+}
+
+model ExportTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  format      String   // "PDF" | "EXCEL" | "CSV" | "JSON" | "IMAGE"
+  reportType  String   @default("TRANSACTIONS") // "MONTHLY" | "YEARLY" | "TAX" | "BUDGET" | "GOALS" | "DEBTS" | "ACCOUNT" | "GROUP" | "TRANSACTIONS" | "CASHFLOW" | "NETWORTH"
+  scope       String?  // JSON: {type, accountId?, categoryId?, groupId?, tag?, from?, to?, txIds[]?}
+  fields      String?  // JSON: array of field names to include
+  options     String?  // JSON: {includeHidden, password, watermark, logo, theme, etc}
+  isPreset    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([format])
+  @@index([reportType])
 }

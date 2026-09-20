@@ -13,10 +13,18 @@ export async function GET(req: Request) {
     const from = searchParams.get("from") ?? undefined;
     const to = searchParams.get("to") ?? undefined;
     const tag = searchParams.get("tag") ?? undefined;
+    const includeHidden = searchParams.get("includeHidden") === "true";
+    const showHiddenOnly = searchParams.get("showHiddenOnly") === "true";
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? Math.min(Number(limitParam), 500) : undefined;
 
     const where: Record<string, unknown> = {};
+    // By default, hide hidden transactions unless explicitly requested
+    if (showHiddenOnly) {
+      where.isHidden = true;
+    } else if (!includeHidden) {
+      where.isHidden = false;
+    }
     if (type && type !== "ALL") where.type = type;
     if (categoryId && categoryId !== "ALL") where.categoryId = categoryId;
     if (accountId && accountId !== "ALL") where.accountId = accountId;
@@ -162,6 +170,7 @@ export async function POST(req: Request) {
         excludeFromBudget: !!body.excludeFromBudget,
         excludeFromStats: !!body.excludeFromStats,
         isPinned: !!body.isPinned,
+        isHidden: !!body.isHidden,
         cashbackAmount: body.cashbackAmount || null,
         originalPrice: body.originalPrice || null,
         discountAmount: body.discountAmount || null,

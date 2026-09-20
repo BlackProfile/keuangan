@@ -108,6 +108,7 @@ export interface Transaction {
   excludeFromBudget: boolean;
   excludeFromStats: boolean;
   isPinned: boolean;
+  isHidden: boolean;
   cashbackAmount: number | null;
   originalPrice: number | null;
   discountAmount: number | null;
@@ -165,6 +166,7 @@ export interface TransactionInput {
   excludeFromBudget?: boolean;
   excludeFromStats?: boolean;
   isPinned?: boolean;
+  isHidden?: boolean;
   cashbackAmount?: number;
   originalPrice?: number;
   discountAmount?: number;
@@ -552,4 +554,88 @@ export interface SharePageData {
   requireEmailVerification: boolean;
   expired: boolean;
   viewsRemaining: number | null;
+}
+
+// ============ EXPORT & HIDDEN TRANSACTIONS ============
+export interface ExportTemplate {
+  id: string;
+  name: string;
+  format: "PDF" | "EXCEL" | "CSV" | "JSON" | "IMAGE";
+  reportType: ExportReportType;
+  scope: ExportScope | null;
+  fields: string[] | null;
+  options: ExportOptions | null;
+  isPreset: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ExportReportType =
+  | "TRANSACTIONS"
+  | "MONTHLY"
+  | "YEARLY"
+  | "TAX"
+  | "BUDGET"
+  | "GOALS"
+  | "DEBTS"
+  | "ACCOUNT"
+  | "GROUP"
+  | "CASHFLOW"
+  | "NETWORTH"
+  | "SLIP";
+
+export interface ExportScope {
+  type: "ALL" | "ACCOUNT" | "CATEGORY" | "GROUP" | "TAG" | "DATE_RANGE" | "CUSTOM";
+  accountId?: string;
+  categoryId?: string;
+  groupId?: string;
+  tag?: string;
+  from?: string;
+  to?: string;
+  txIds?: string[];
+  includeHidden?: boolean;
+}
+
+export interface ExportOptions {
+  includeHidden?: boolean;
+  password?: string;
+  watermark?: string;
+  logo?: string;
+  theme?: string;
+  title?: string;
+  language?: "id" | "en";
+  numberFormat?: "id" | "en";
+  groupBy?: "date" | "category" | "account" | "merchant" | "tag";
+  showSummary?: boolean;
+  showCharts?: boolean;
+  showReceiptItems?: boolean;
+}
+
+export interface ExportTemplateInput {
+  name: string;
+  format: "PDF" | "EXCEL" | "CSV" | "JSON" | "IMAGE";
+  reportType: ExportReportType;
+  scope?: ExportScope;
+  fields?: string[];
+  options?: ExportOptions;
+}
+
+export interface ExportPreview {
+  summary: {
+    totalIncome: number;
+    totalExpense: number;
+    balance: number;
+    transactionCount: number;
+    dateRange: { from: string | null; to: string | null };
+  };
+  categoryBreakdown: Array<{
+    category: string;
+    total: number;
+    count: number;
+    percentage: number;
+  }>;
+  topMerchants: Array<{ merchant: string; total: number; count: number }>;
+  transactions: Transaction[];
+  fields: string[];
+  estimatedSize: string;
 }

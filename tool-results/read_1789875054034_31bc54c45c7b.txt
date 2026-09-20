@@ -1,0 +1,854 @@
+     1→"use client";
+     2→
+     3→import {
+     4→  useMutation,
+     5→  useQuery,
+     6→  useQueryClient,
+     7→} from "@tanstack/react-query";
+     8→import { api } from "@/lib/api";
+     9→import type {
+    10→  AccountInput,
+    11→  BudgetInput,
+    12→  CategoryInput,
+    13→  DebtInput,
+    14→  ExportTemplateInput,
+    15→  GoalInput,
+    16→  InstallmentInput,
+    17→  RecurringInput,
+    18→  ShareLinkInput,
+    19→  Transaction,
+    20→  TransactionGroupInput,
+    21→  TransactionInput,
+    22→  TransactionTemplateInput,
+    23→  TransferInput,
+    24→} from "@/lib/types";
+    25→import { broadcastChange } from "@/lib/use-realtime-sync";
+    26→
+    27→// Wrapper to broadcast entity changes (safe to call — no-op if socket not connected)
+    28→function broadcastEntityChange(entity: string, action: string) {
+    29→  try {
+    30→    broadcastChange(entity, action);
+    31→  } catch {
+    32→    // ignore — realtime is best-effort
+    33→  }
+    34→}
+    35→
+    36→export const queryKeys = {
+    37→  transactions: ["transactions"] as const,
+    38→  transactionsList: (
+    39→    params?: Record<string, string | number | boolean | undefined>
+    40→  ) => ["transactions", "list", params] as const,
+    41→  categories: (type?: string) => ["categories", type] as const,
+    42→  accounts: ["accounts"] as const,
+    43→  budgets: ["budgets"] as const,
+    44→  budgetStatuses: ["budgets", "statuses"] as const,
+    45→  goals: ["goals"] as const,
+    46→  recurring: ["recurring"] as const,
+    47→  tags: ["tags"] as const,
+    48→  dashboard: ["dashboard"] as const,
+    49→  dashboardMonth: (month: string) => ["dashboard", month] as const,
+    50→  analytics: ["analytics"] as const,
+    51→  analyticsMonth: (month: string) => ["analytics", month] as const,
+    52→  settings: ["settings"] as const,
+    53→  shares: ["shares"] as const,
+    54→};
+    55→
+    56→// ---------- Transactions ----------
+    57→export function useTransactions(params?: {
+    58→  // API-supported filters (sent to /api/transactions)
+    59→  type?: string;
+    60→  categoryId?: string;
+    61→  accountId?: string;
+    62→  search?: string;
+    63→  from?: string;
+    64→  to?: string;
+    65→  tag?: string;
+    66→  limit?: number;
+    67→  // Client-side filters (not sent to API — used for cache key + client filtering)
+    68→  mood?: string;
+    69→  priority?: string;
+    70→  paymentMethod?: string;
+    71→  pinned?: boolean;
+    72→  reimbursable?: boolean;
+    73→  debt?: boolean;
+    74→  subscription?: boolean;
+    75→}) {
+    76→  return useQuery({
+    77→    queryKey: queryKeys.transactionsList(params),
+    78→    queryFn: () =>
+    79→      api.listTransactions({
+    80→        type: params?.type,
+    81→        categoryId: params?.categoryId,
+    82→        accountId: params?.accountId,
+    83→        search: params?.search,
+    84→        from: params?.from,
+    85→        to: params?.to,
+    86→        tag: params?.tag,
+    87→        limit: params?.limit,
+    88→      }),
+    89→  });
+    90→}
+    91→
+    92→export function useCreateTransaction() {
+    93→  const qc = useQueryClient();
+    94→  return useMutation({
+    95→    mutationFn: (data: TransactionInput) => api.createTransaction(data),
+    96→    onMutate: async (data) => {
+    97→      // Optimistic: add temp transaction to list cache
+    98→      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+    99→      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+   100→      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+   101→        if (!old) return old;
+   102→        const temp = {
+   103→          ...data,
+   104→          id: `temp-${Date.now()}`,
+   105→          createdAt: new Date().toISOString(),
+   106→          updatedAt: new Date().toISOString(),
+   107→          isRecurringGenerated: false,
+   108→        } as Transaction;
+   109→        return [temp, ...old];
+   110→      });
+   111→      return { prev };
+   112→    },
+   113→    onError: (_e, _data, ctx) => {
+   114→      // Rollback on error
+   115→      if (ctx?.prev) {
+   116→        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+   117→      }
+   118→    },
+   119→    onSuccess: () => {
+   120→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   121→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   122→      qc.invalidateQueries({ queryKey: queryKeys.analytics });
+   123→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   124→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   125→      broadcastEntityChange("transaction", "create");
+   126→    },
+   127→  });
+   128→}
+   129→
+   130→export function useUpdateTransaction() {
+   131→  const qc = useQueryClient();
+   132→  return useMutation({
+   133→    mutationFn: ({ id, data }: { id: string; data: TransactionInput }) =>
+   134→      api.updateTransaction(id, data),
+   135→    onMutate: async ({ id, data }) => {
+   136→      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+   137→      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+   138→      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+   139→        if (!old) return old;
+   140→        return old.map((t) => (t.id === id ? { ...t, ...data } as Transaction : t));
+   141→      });
+   142→      return { prev };
+   143→    },
+   144→    onError: (_e, _v, ctx) => {
+   145→      if (ctx?.prev) {
+   146→        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+   147→      }
+   148→    },
+   149→    onSuccess: () => {
+   150→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   151→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   152→      qc.invalidateQueries({ queryKey: queryKeys.analytics });
+   153→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   154→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   155→      broadcastEntityChange("transaction", "update");
+   156→    },
+   157→  });
+   158→}
+   159→
+   160→export function useDeleteTransaction() {
+   161→  const qc = useQueryClient();
+   162→  return useMutation({
+   163→    mutationFn: (id: string) => api.deleteTransaction(id),
+   164→    onMutate: async (id) => {
+   165→      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+   166→      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+   167→      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+   168→        if (!old) return old;
+   169→        return old.filter((t) => t.id !== id);
+   170→      });
+   171→      return { prev };
+   172→    },
+   173→    onError: (_e, _id, ctx) => {
+   174→      if (ctx?.prev) {
+   175→        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+   176→      }
+   177→    },
+   178→    onSuccess: () => {
+   179→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   180→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   181→      qc.invalidateQueries({ queryKey: queryKeys.analytics });
+   182→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   183→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   184→      broadcastEntityChange("transaction", "delete");
+   185→    },
+   186→  });
+   187→}
+   188→
+   189→// ---------- Categories ----------
+   190→export function useCategories(type?: string) {
+   191→  return useQuery({
+   192→    queryKey: queryKeys.categories(type),
+   193→    queryFn: () => api.listCategories(type),
+   194→    staleTime: 60_000,
+   195→  });
+   196→}
+   197→
+   198→export function useCreateCategory() {
+   199→  const qc = useQueryClient();
+   200→  return useMutation({
+   201→    mutationFn: (data: CategoryInput) => api.createCategory(data),
+   202→    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+   203→  });
+   204→}
+   205→
+   206→export function useDeleteCategory() {
+   207→  const qc = useQueryClient();
+   208→  return useMutation({
+   209→    mutationFn: (id: string) => api.deleteCategory(id),
+   210→    onSuccess: () => {
+   211→      qc.invalidateQueries({ queryKey: ["categories"] });
+   212→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   213→    },
+   214→  });
+   215→}
+   216→
+   217→// ---------- Accounts ----------
+   218→export function useAccounts() {
+   219→  return useQuery({
+   220→    queryKey: queryKeys.accounts,
+   221→    queryFn: () => api.listAccounts(),
+   222→    staleTime: 30_000,
+   223→  });
+   224→}
+   225→
+   226→export function useCreateAccount() {
+   227→  const qc = useQueryClient();
+   228→  return useMutation({
+   229→    mutationFn: (data: AccountInput) => api.createAccount(data),
+   230→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+   231→  });
+   232→}
+   233→
+   234→export function useUpdateAccount() {
+   235→  const qc = useQueryClient();
+   236→  return useMutation({
+   237→    mutationFn: ({ id, data }: { id: string; data: Partial<AccountInput> }) =>
+   238→      api.updateAccount(id, data),
+   239→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+   240→  });
+   241→}
+   242→
+   243→export function useDeleteAccount() {
+   244→  const qc = useQueryClient();
+   245→  return useMutation({
+   246→    mutationFn: (id: string) => api.deleteAccount(id),
+   247→    onSuccess: () => {
+   248→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   249→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   250→    },
+   251→  });
+   252→}
+   253→
+   254→export function useTransfer() {
+   255→  const qc = useQueryClient();
+   256→  return useMutation({
+   257→    mutationFn: (data: TransferInput) => api.transfer(data),
+   258→    onSuccess: () => {
+   259→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   260→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   261→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   262→    },
+   263→  });
+   264→}
+   265→
+   266→// ---------- Budgets ----------
+   267→export function useBudgets() {
+   268→  return useQuery({
+   269→    queryKey: queryKeys.budgets,
+   270→    queryFn: () => api.listBudgets(),
+   271→    staleTime: 30_000,
+   272→  });
+   273→}
+   274→
+   275→export function useBudgetStatuses() {
+   276→  return useQuery({
+   277→    queryKey: queryKeys.budgetStatuses,
+   278→    queryFn: () => api.budgetStatuses(),
+   279→  });
+   280→}
+   281→
+   282→export function useCreateBudget() {
+   283→  const qc = useQueryClient();
+   284→  return useMutation({
+   285→    mutationFn: (data: BudgetInput) => api.createBudget(data),
+   286→    onSuccess: () => {
+   287→      qc.invalidateQueries({ queryKey: queryKeys.budgets });
+   288→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   289→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   290→    },
+   291→  });
+   292→}
+   293→
+   294→export function useUpdateBudget() {
+   295→  const qc = useQueryClient();
+   296→  return useMutation({
+   297→    mutationFn: ({ id, data }: { id: string; data: BudgetInput }) =>
+   298→      api.updateBudget(id, data),
+   299→    onSuccess: () => {
+   300→      qc.invalidateQueries({ queryKey: queryKeys.budgets });
+   301→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   302→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   303→    },
+   304→  });
+   305→}
+   306→
+   307→export function useDeleteBudget() {
+   308→  const qc = useQueryClient();
+   309→  return useMutation({
+   310→    mutationFn: (id: string) => api.deleteBudget(id),
+   311→    onSuccess: () => {
+   312→      qc.invalidateQueries({ queryKey: queryKeys.budgets });
+   313→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   314→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   315→    },
+   316→  });
+   317→}
+   318→
+   319→// ---------- Goals ----------
+   320→export function useGoals() {
+   321→  return useQuery({
+   322→    queryKey: queryKeys.goals,
+   323→    queryFn: () => api.listGoals(),
+   324→  });
+   325→}
+   326→
+   327→export function useCreateGoal() {
+   328→  const qc = useQueryClient();
+   329→  return useMutation({
+   330→    mutationFn: (data: GoalInput) => api.createGoal(data),
+   331→    onSuccess: () => {
+   332→      qc.invalidateQueries({ queryKey: queryKeys.goals });
+   333→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   334→    },
+   335→  });
+   336→}
+   337→
+   338→export function useUpdateGoal() {
+   339→  const qc = useQueryClient();
+   340→  return useMutation({
+   341→    mutationFn: ({ id, data }: { id: string; data: Partial<GoalInput> }) =>
+   342→      api.updateGoal(id, data),
+   343→    onSuccess: () => {
+   344→      qc.invalidateQueries({ queryKey: queryKeys.goals });
+   345→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   346→    },
+   347→  });
+   348→}
+   349→
+   350→export function useDeleteGoal() {
+   351→  const qc = useQueryClient();
+   352→  return useMutation({
+   353→    mutationFn: (id: string) => api.deleteGoal(id),
+   354→    onSuccess: () => {
+   355→      qc.invalidateQueries({ queryKey: queryKeys.goals });
+   356→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   357→    },
+   358→  });
+   359→}
+   360→
+   361→// ---------- Recurring ----------
+   362→export function useRecurring() {
+   363→  return useQuery({
+   364→    queryKey: queryKeys.recurring,
+   365→    queryFn: () => api.listRecurring(),
+   366→  });
+   367→}
+   368→
+   369→export function useCreateRecurring() {
+   370→  const qc = useQueryClient();
+   371→  return useMutation({
+   372→    mutationFn: (data: RecurringInput) => api.createRecurring(data),
+   373→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.recurring }),
+   374→  });
+   375→}
+   376→
+   377→export function useUpdateRecurring() {
+   378→  const qc = useQueryClient();
+   379→  return useMutation({
+   380→    mutationFn: ({ id, data }: { id: string; data: Partial<RecurringInput> }) =>
+   381→      api.updateRecurring(id, data),
+   382→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.recurring }),
+   383→  });
+   384→}
+   385→
+   386→export function useDeleteRecurring() {
+   387→  const qc = useQueryClient();
+   388→  return useMutation({
+   389→    mutationFn: (id: string) => api.deleteRecurring(id),
+   390→    onSuccess: () => {
+   391→      qc.invalidateQueries({ queryKey: queryKeys.recurring });
+   392→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   393→    },
+   394→  });
+   395→}
+   396→
+   397→// ---------- Tags ----------
+   398→export function useTags() {
+   399→  return useQuery({
+   400→    queryKey: queryKeys.tags,
+   401→    queryFn: () => api.listTags(),
+   402→    staleTime: 60_000,
+   403→  });
+   404→}
+   405→
+   406→// ---------- Dashboard & Analytics ----------
+   407→export function useDashboard(month?: string) {
+   408→  return useQuery({
+   409→    queryKey: month ? queryKeys.dashboardMonth(month) : queryKeys.dashboard,
+   410→    queryFn: () => api.getDashboard(month),
+   411→  });
+   412→}
+   413→
+   414→export function useAnalytics(month?: string) {
+   415→  return useQuery({
+   416→    queryKey: month ? queryKeys.analyticsMonth(month) : queryKeys.analytics,
+   417→    queryFn: () => api.getAnalytics(month),
+   418→  });
+   419→}
+   420→
+   421→// ---------- Settings ----------
+   422→export function useSettings() {
+   423→  return useQuery({
+   424→    queryKey: queryKeys.settings,
+   425→    queryFn: () => api.getSettings(),
+   426→    staleTime: 30_000,
+   427→  });
+   428→}
+   429→
+   430→export function useUpdateSetting() {
+   431→  const qc = useQueryClient();
+   432→  return useMutation({
+   433→    mutationFn: ({ key, value }: { key: string; value: string }) =>
+   434→      api.updateSetting(key, value),
+   435→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.settings }),
+   436→  });
+   437→}
+   438→
+   439→// ---------- AI ----------
+   440→export function useAiChat() {
+   441→  return useMutation({
+   442→    mutationFn: (messages: { role: "user" | "assistant"; content: string }[]) =>
+   443→      api.chat(messages),
+   444→  });
+   445→}
+   446→
+   447→export function useReceiptScan() {
+   448→  return useMutation({
+   449→    mutationFn: (imageBase64: string) => api.receiptScan(imageBase64),
+   450→  });
+   451→}
+   452→
+   453→export function useInsights() {
+   454→  return useQuery({
+   455→    queryKey: ["ai", "insights"],
+   456→    queryFn: () => api.insights(),
+   457→    staleTime: 5 * 60_000,
+   458→  });
+   459→}
+   460→
+   461→// ---------- Import ----------
+   462→export function useImportCsv() {
+   463→  const qc = useQueryClient();
+   464→  return useMutation({
+   465→    mutationFn: (rows: Array<Record<string, string>>) => api.importCsv(rows),
+   466→    onSuccess: () => {
+   467→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   468→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   469→      qc.invalidateQueries({ queryKey: queryKeys.analytics });
+   470→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   471→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   472→    },
+   473→  });
+   474→}
+   475→
+   476→// ---------- Seed & Recurring run ----------
+   477→export function useSeed() {
+   478→  const qc = useQueryClient();
+   479→  return useMutation({
+   480→    mutationFn: () => api.seed(),
+   481→    onSuccess: () => {
+   482→      qc.invalidateQueries();
+   483→    },
+   484→  });
+   485→}
+   486→
+   487→export function useRunRecurring() {
+   488→  const qc = useQueryClient();
+   489→  return useMutation({
+   490→    mutationFn: () => api.runRecurring(),
+   491→    onSuccess: () => {
+   492→      qc.invalidateQueries({ queryKey: queryKeys.recurring });
+   493→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   494→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   495→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   496→    },
+   497→  });
+   498→}
+   499→
+   500→// ---------- Debts ----------
+   501→export function useDebts() {
+   502→  return useQuery({
+   503→    queryKey: ["debts"] as const,
+   504→    queryFn: () => api.listDebts(),
+   505→  });
+   506→}
+   507→
+   508→export function useCreateDebt() {
+   509→  const qc = useQueryClient();
+   510→  return useMutation({
+   511→    mutationFn: (data: DebtInput) => api.createDebt(data),
+   512→    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+   513→  });
+   514→}
+   515→
+   516→export function useUpdateDebt() {
+   517→  const qc = useQueryClient();
+   518→  return useMutation({
+   519→    mutationFn: ({ id, data }: { id: string; data: Partial<DebtInput> }) =>
+   520→      api.updateDebt(id, data),
+   521→    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+   522→  });
+   523→}
+   524→
+   525→export function useDeleteDebt() {
+   526→  const qc = useQueryClient();
+   527→  return useMutation({
+   528→    mutationFn: (id: string) => api.deleteDebt(id),
+   529→    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+   530→  });
+   531→}
+   532→
+   533→export function useSettleDebt() {
+   534→  const qc = useQueryClient();
+   535→  return useMutation({
+   536→    mutationFn: (id: string) => api.settleDebt(id),
+   537→    onSuccess: () => {
+   538→      qc.invalidateQueries({ queryKey: ["debts"] });
+   539→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   540→    },
+   541→  });
+   542→}
+   543→
+   544→// ---------- Installments ----------
+   545→export function useInstallments() {
+   546→  return useQuery({
+   547→    queryKey: ["installments"] as const,
+   548→    queryFn: () => api.listInstallments(),
+   549→  });
+   550→}
+   551→
+   552→export function useCreateInstallment() {
+   553→  const qc = useQueryClient();
+   554→  return useMutation({
+   555→    mutationFn: (data: InstallmentInput) => api.createInstallment(data),
+   556→    onSuccess: () => {
+   557→      qc.invalidateQueries({ queryKey: ["installments"] });
+   558→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   559→    },
+   560→  });
+   561→}
+   562→
+   563→export function useDeleteInstallment() {
+   564→  const qc = useQueryClient();
+   565→  return useMutation({
+   566→    mutationFn: (id: string) => api.deleteInstallment(id),
+   567→    onSuccess: () => qc.invalidateQueries({ queryKey: ["installments"] }),
+   568→  });
+   569→}
+   570→
+   571→// ---------- Transaction Templates ----------
+   572→export function useTemplates() {
+   573→  return useQuery({
+   574→    queryKey: ["templates"] as const,
+   575→    queryFn: () => api.listTemplates(),
+   576→  });
+   577→}
+   578→
+   579→export function useCreateTemplate() {
+   580→  const qc = useQueryClient();
+   581→  return useMutation({
+   582→    mutationFn: (data: TransactionTemplateInput) => api.createTemplate(data),
+   583→    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+   584→  });
+   585→}
+   586→
+   587→export function useDeleteTemplate() {
+   588→  const qc = useQueryClient();
+   589→  return useMutation({
+   590→    mutationFn: (id: string) => api.deleteTemplate(id),
+   591→    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+   592→  });
+   593→}
+   594→
+   595→// ---------- Transaction Groups ----------
+   596→export function useGroups() {
+   597→  return useQuery({
+   598→    queryKey: ["transaction-groups"] as const,
+   599→    queryFn: () => api.listGroups(),
+   600→  });
+   601→}
+   602→
+   603→export function useCreateGroup() {
+   604→  const qc = useQueryClient();
+   605→  return useMutation({
+   606→    mutationFn: (data: TransactionGroupInput) => api.createGroup(data),
+   607→    onSuccess: () => qc.invalidateQueries({ queryKey: ["transaction-groups"] }),
+   608→  });
+   609→}
+   610→
+   611→export function useDeleteGroup() {
+   612→  const qc = useQueryClient();
+   613→  return useMutation({
+   614→    mutationFn: (id: string) => api.deleteGroup(id),
+   615→    onSuccess: () => {
+   616→      qc.invalidateQueries({ queryKey: ["transaction-groups"] });
+   617→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   618→    },
+   619→  });
+   620→}
+   621→
+   622→// ---------- Transaction actions ----------
+   623→export function useDuplicateTransaction() {
+   624→  const qc = useQueryClient();
+   625→  return useMutation({
+   626→    mutationFn: (id: string) => api.duplicateTransaction(id),
+   627→    onSuccess: () => {
+   628→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   629→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   630→    },
+   631→  });
+   632→}
+   633→
+   634→export function useTogglePin() {
+   635→  const qc = useQueryClient();
+   636→  return useMutation({
+   637→    mutationFn: (id: string) => api.togglePin(id),
+   638→    onSuccess: () => {
+   639→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   640→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   641→    },
+   642→  });
+   643→}
+   644→
+   645→// ---------- Security ----------
+   646→export function useSecuritySettings() {
+   647→  return useQuery({
+   648→    queryKey: ["security"] as const,
+   649→    queryFn: () => api.getSecurity(),
+   650→    staleTime: 30_000,
+   651→  });
+   652→}
+   653→
+   654→export function useUpdateSecurity() {
+   655→  const qc = useQueryClient();
+   656→  return useMutation({
+   657→    mutationFn: (data: { key: string; value: string }) =>
+   658→      api.updateSecurity(data.key, data.value),
+   659→    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
+   660→  });
+   661→}
+   662→
+   663→export function useUpdateSecurityBulk() {
+   664→  const qc = useQueryClient();
+   665→  return useMutation({
+   666→    mutationFn: (settings: Record<string, string>) =>
+   667→      api.updateSecurityBulk(settings),
+   668→    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
+   669→  });
+   670→}
+   671→
+   672→// ---------- Audit Log ----------
+   673→export function useAuditLog(params?: { limit?: number; action?: string }) {
+   674→  return useQuery({
+   675→    queryKey: ["audit", params] as const,
+   676→    queryFn: () => api.listAudit(params),
+   677→  });
+   678→}
+   679→
+   680→export function useLogAudit() {
+   681→  return useMutation({
+   682→    mutationFn: (data: { action: string; detail?: string; success?: boolean; fingerprint?: string }) =>
+   683→      api.logAudit(data.action, data.detail, data.success ?? true, data.fingerprint),
+   684→  });
+   685→}
+   686→
+   687→// ---------- Biometric ----------
+   688→export function useBiometricList() {
+   689→  return useQuery({
+   690→    queryKey: ["biometric"] as const,
+   691→    queryFn: () => api.listBiometric(),
+   692→  });
+   693→}
+   694→
+   695→export function useRegisterBiometric() {
+   696→  const qc = useQueryClient();
+   697→  return useMutation({
+   698→    mutationFn: (data: { name: string; credentialId: string; publicKey: string; counter: number }) =>
+   699→      api.registerBiometric(data),
+   700→    onSuccess: () => qc.invalidateQueries({ queryKey: ["biometric"] }),
+   701→  });
+   702→}
+   703→
+   704→export function useDeleteBiometric() {
+   705→  const qc = useQueryClient();
+   706→  return useMutation({
+   707→    mutationFn: (id: string) => api.deleteBiometric(id),
+   708→    onSuccess: () => qc.invalidateQueries({ queryKey: ["biometric"] }),
+   709→  });
+   710→}
+   711→
+   712→// ---------- Trusted Devices ----------
+   713→export function useTrustedDevices() {
+   714→  return useQuery({
+   715→    queryKey: ["trusted-devices"] as const,
+   716→    queryFn: () => api.listTrustedDevices(),
+   717→  });
+   718→}
+   719→
+   720→export function useAddTrustedDevice() {
+   721→  const qc = useQueryClient();
+   722→  return useMutation({
+   723→    mutationFn: (data: { name: string; fingerprint: string; trustedDays: number }) =>
+   724→      api.addTrustedDevice(data),
+   725→    onSuccess: () => qc.invalidateQueries({ queryKey: ["trusted-devices"] }),
+   726→  });
+   727→}
+   728→
+   729→export function useRevokeTrustedDevice() {
+   730→  const qc = useQueryClient();
+   731→  return useMutation({
+   732→    mutationFn: (id: string) => api.revokeTrustedDevice(id),
+   733→    onSuccess: () => qc.invalidateQueries({ queryKey: ["trusted-devices"] }),
+   734→  });
+   735→}
+   736→
+   737→// ---------- Panic Wipe ----------
+   738→export function usePanicWipe() {
+   739→  const qc = useQueryClient();
+   740→  return useMutation({
+   741→    mutationFn: () => api.panicWipe(),
+   742→    onSuccess: () => qc.invalidateQueries(),
+   743→  });
+   744→}
+   745→
+   746→// ---------- Share Links ----------
+   747→export function useShareLinks() {
+   748→  return useQuery({
+   749→    queryKey: queryKeys.shares,
+   750→    queryFn: () => api.listShares(),
+   751→  });
+   752→}
+   753→
+   754→export function useCreateShareLink() {
+   755→  const qc = useQueryClient();
+   756→  return useMutation({
+   757→    mutationFn: (data: ShareLinkInput) => api.createShare(data),
+   758→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   759→  });
+   760→}
+   761→
+   762→export function useUpdateShareLink() {
+   763→  const qc = useQueryClient();
+   764→  return useMutation({
+   765→    mutationFn: ({ id, data }: { id: string; data: Partial<ShareLinkInput> }) =>
+   766→      api.updateShare(id, data),
+   767→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   768→  });
+   769→}
+   770→
+   771→export function useDeleteShareLink() {
+   772→  const qc = useQueryClient();
+   773→  return useMutation({
+   774→    mutationFn: (id: string) => api.deleteShare(id),
+   775→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   776→  });
+   777→}
+   778→
+   779→export function useRevokeShareLink() {
+   780→  const qc = useQueryClient();
+   781→  return useMutation({
+   782→    mutationFn: (token: string) => api.revokeShare(token),
+   783→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   784→  });
+   785→}
+   786→
+   787→export function useCloneShareLink() {
+   788→  const qc = useQueryClient();
+   789→  return useMutation({
+   790→    mutationFn: (token: string) => api.cloneShare(token),
+   791→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   792→  });
+   793→}
+   794→
+   795→// ---------- Export ----------
+   796→export function useExportPreview() {
+   797→  return useMutation({
+   798→    mutationFn: (data: {
+   799→      scope: Record<string, unknown>;
+   800→      fields?: string[];
+   801→      options?: Record<string, unknown>;
+   802→    }) => api.exportPreview(data),
+   803→  });
+   804→}
+   805→
+   806→export function useToggleHideTransaction() {
+   807→  const qc = useQueryClient();
+   808→  return useMutation({
+   809→    mutationFn: (id: string) => api.toggleHideTransaction(id),
+   810→    onMutate: async (id) => {
+   811→      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+   812→      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+   813→      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+   814→        if (!old) return old;
+   815→        return old.map((t) => (t.id === id ? { ...t, isHidden: !t.isHidden } : t));
+   816→      });
+   817→      return { prev };
+   818→    },
+   819→    onError: (_e, _id, ctx) => {
+   820→      if (ctx?.prev) {
+   821→        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+   822→      }
+   823→    },
+   824→    onSuccess: () => {
+   825→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   826→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   827→    },
+   828→  });
+   829→}
+   830→
+   831→// ---------- Export Templates ----------
+   832→export function useExportTemplates() {
+   833→  return useQuery({
+   834→    queryKey: ["export-templates"] as const,
+   835→    queryFn: () => api.listExportTemplates(),
+   836→  });
+   837→}
+   838→
+   839→export function useCreateExportTemplate() {
+   840→  const qc = useQueryClient();
+   841→  return useMutation({
+   842→    mutationFn: (data: ExportTemplateInput) => api.createExportTemplate(data),
+   843→    onSuccess: () => qc.invalidateQueries({ queryKey: ["export-templates"] }),
+   844→  });
+   845→}
+   846→
+   847→export function useDeleteExportTemplate() {
+   848→  const qc = useQueryClient();
+   849→  return useMutation({
+   850→    mutationFn: (id: string) => api.deleteExportTemplate(id),
+   851→    onSuccess: () => qc.invalidateQueries({ queryKey: ["export-templates"] }),
+   852→  });
+   853→}
+   854→

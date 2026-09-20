@@ -12,6 +12,9 @@ import type {
   DashboardData,
   Debt,
   DebtInput,
+  ExportPreview,
+  ExportTemplate,
+  ExportTemplateInput,
   Goal,
   GoalInput,
   Installment,
@@ -297,6 +300,38 @@ export const api = {
     return `/api/export/transactions${qs ? `?${qs}` : ""}`;
   },
   backupUrl: () => "/api/export/backup",
+  // Enhanced export with preview + multi-format
+  exportPreview: (data: {
+    scope: Record<string, unknown>;
+    fields?: string[];
+    options?: Record<string, unknown>;
+  }) =>
+    request<ExportPreview>("/api/export/preview", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  exportPdfUrl: () => "/api/export/pdf",
+  exportExcelUrl: () => "/api/export/excel",
+  exportCsvUrl: () => "/api/export/csv",
+  exportJsonUrl: () => "/api/export/json",
+  // Export templates
+  listExportTemplates: () =>
+    request<ExportTemplate[]>("/api/export/templates"),
+  createExportTemplate: (data: ExportTemplateInput) =>
+    request<ExportTemplate>("/api/export/templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateExportTemplate: (id: string, data: Partial<ExportTemplateInput>) =>
+    request<ExportTemplate>(`/api/export/templates/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteExportTemplate: (id: string) =>
+    request<void>(`/api/export/templates/${id}`, { method: "DELETE" }),
+  // Hide transaction
+  toggleHideTransaction: (id: string) =>
+    request<Transaction>(`/api/transactions/${id}/hide`, { method: "POST" }),
 
   // Seed
   seed: () => request<{ message: string }>("/api/seed", { method: "POST" }),

@@ -11,6 +11,7 @@ import type {
   BudgetInput,
   CategoryInput,
   DebtInput,
+  ExportTemplateInput,
   GoalInput,
   InstallmentInput,
   RecurringInput,
@@ -788,5 +789,65 @@ export function useCloneShareLink() {
   return useMutation({
     mutationFn: (token: string) => api.cloneShare(token),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+  });
+}
+
+// ---------- Export ----------
+export function useExportPreview() {
+  return useMutation({
+    mutationFn: (data: {
+      scope: Record<string, unknown>;
+      fields?: string[];
+      options?: Record<string, unknown>;
+    }) => api.exportPreview(data),
+  });
+}
+
+export function useToggleHideTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.toggleHideTransaction(id),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+        if (!old) return old;
+        return old.map((t) => (t.id === id ? { ...t, isHidden: !t.isHidden } : t));
+      });
+      return { prev };
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prev) {
+        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+// ---------- Export Templates ----------
+export function useExportTemplates() {
+  return useQuery({
+    queryKey: ["export-templates"] as const,
+    queryFn: () => api.listExportTemplates(),
+  });
+}
+
+export function useCreateExportTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ExportTemplateInput) => api.createExportTemplate(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["export-templates"] }),
+  });
+}
+
+export function useDeleteExportTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteExportTemplate(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["export-templates"] }),
   });
 }

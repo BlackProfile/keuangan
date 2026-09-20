@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Activity,
   Share2,
+  Download,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ export type SectionId =
   | "shares"
   | "security"
   | "audit"
+  | "export"
   | "settings";
 
 interface NavItem {
@@ -96,6 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "categories", label: "Kategori", icon: <Tags className="h-4 w-4" /> },
       { id: "shares", label: "Link Berbagi", icon: <Share2 className="h-4 w-4" /> },
+      { id: "export", label: "Export Data", icon: <Download className="h-4 w-4" /> },
       { id: "security", label: "Keamanan", icon: <ShieldCheck className="h-4 w-4" /> },
       { id: "audit", label: "Audit Log", icon: <Activity className="h-4 w-4" /> },
       { id: "settings", label: "Pengaturan", icon: <Settings className="h-4 w-4" /> },
