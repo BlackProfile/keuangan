@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
+  AlertCircle,
   ArrowDownToLine,
   Check,
   Database,
@@ -15,6 +16,7 @@ import {
   LayoutTemplate,
   Loader2,
   Receipt,
+  RefreshCw,
   Save,
   Sparkles,
   Store,
@@ -316,6 +318,7 @@ export function ExportSection() {
 
   const preview = previewMut.data;
   const previewLoading = previewMut.isPending;
+  const previewError = previewMut.isError;
 
   // ====================== Actions ======================
   function toggleField(id: string) {
@@ -738,7 +741,15 @@ export function ExportSection() {
             <PreviewPanel
               loading={previewLoading && !preview}
               preview={preview}
+              previewError={previewError}
               fields={fields}
+              onRetry={() => {
+                previewMut.mutate({
+                  scope: scope as unknown as Record<string, unknown>,
+                  fields,
+                  options: options as unknown as Record<string, unknown>,
+                });
+              }}
             />
           </div>
         </div>
@@ -1210,9 +1221,13 @@ function ScopeDetailEditor(props: {
 function PreviewPanel({
   loading,
   preview,
+  previewError,
   fields,
+  onRetry,
 }: {
   loading: boolean;
+  previewError: boolean;
+  onRetry: () => void;
   preview:
     | {
         summary: {
@@ -1260,18 +1275,51 @@ function PreviewPanel({
     );
   }
 
+  if (previewError && !preview) {
+    return (
+      <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
+          <AlertCircle className="h-7 w-7 text-destructive" />
+        </span>
+        <div>
+          <p className="text-sm font-medium text-foreground">
+            Gagal memuat preview
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Server mungkin sedang tidak aktif. Coba lagi sebentar.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-1 gap-1.5"
+          onClick={onRetry}
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Coba lagi
+        </Button>
+      </Card>
+    );
+  }
+
   if (!preview) {
     return (
       <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
         <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-          <Eye className="h-7 w-7 text-muted-foreground" />
+          {loading ? (
+            <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+          ) : (
+            <Eye className="h-7 w-7 text-muted-foreground" />
+          )}
         </span>
         <div>
           <p className="text-sm font-medium text-foreground">
-            Memuat preview...
+            {loading ? "Memuat preview..." : "Menunggu konfigurasi"}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Preview akan muncul otomatis saat konfigurasi berubah.
+            {loading
+              ? "Mengambil data dari server..."
+              : "Preview akan muncul otomatis saat konfigurasi berubah."}
           </p>
         </div>
       </Card>
