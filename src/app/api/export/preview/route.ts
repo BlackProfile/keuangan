@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       totalIncome,
       totalExpense,
       balance,
-      count: transactions.length,
+      transactionCount: transactions.length,
       dateRange: { from, to },
     };
 
