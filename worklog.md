@@ -1638,3 +1638,104 @@ Stage Summary:
 - Daily allowance projection (will run out day + daily cut needed)
 - Academic mode toggle (KULIAH/UTS/UAS/LIBUR/SKRIPSI/MAGANG)
 - All lint-clean, APIs verified
+
+---
+Task ID: PDF-UI
+Agent: pdf-template-picker (frontend sub-agent)
+Task: Add PDF template picker gallery to Export section UI
+
+Work Log:
+- Baca `/home/z/my-project/src/lib/pdf-templates.ts` — 25 templates (id, name, description, category, emoji, theme{primary,secondary,accent}) + `PDF_TEMPLATE_CATEGORIES` (style/report/audience/student)
+- Update imports di `src/components/finance/export-section.tsx`: tambah `Palette`, `Users`, `GraduationCap` dari lucide-react + `PDF_TEMPLATES, PDF_TEMPLATE_CATEGORIES, type PdfTemplateId` dari `@/lib/pdf-templates`
+- Tambah konstanta: `PdfCategoryFilter` type, `PDF_CATEGORY_TABS` (5 tab: Semua, Gaya Tampilan, Tipe Laporan, Untuk Siapa, Mahasiswa) + helper `pdfCategoryLabel`
+- Tambah state: `pdfTemplateId` (default `"minimal-clean"`) + `pdfCategory` (default `"all"`)
+- Tambah memo: `filteredPdfTemplates` (filter by kategori) + `selectedPdfTemplate` (lookup by id)
+- Update preview useEffect: `previewMut.mutate({ scope, fields, options: { ...options, templateId: pdfTemplateId } })` + add `pdfTemplateId` ke dependency array
+- Update `downloadExport` body: `{ scope, fields, options: { ...options, templateId: pdfTemplateId } }`
+- Insert Template PDF picker UI antara format cards & "Tipe Laporan" (step 2), hanya visible saat `format === "PDF"`:
+  - Header: badge icon LayoutTemplate + title "Template PDF" + desc "Pilih gaya template untuk PDF Anda"
+  - Category filter pills (emerald saat aktif, mirip ScopeTypeButton)
+  - Grid `grid-cols-2 sm:grid-cols-3` di dalam `max-h-96 overflow-y-auto custom-scrollbar`
+  - Card: emoji + name (line-clamp-1) + desc (line-clamp-2) + category badge + 3 color dots (primary/secondary/accent via inline style backgroundColor)
+  - Selected card: emerald border + emerald-50 bg + check badge top-right
+  - Footer: box emerald-tinted "Template terpilih: {emoji} {name}"
+- A11y: `aria-pressed` on all toggles, `aria-hidden` on decorative, `title` tooltip, `truncate` on selected name
+- Responsive: 2 cols mobile, 3 cols sm+, filter pills flex-wrap
+- Run `bun run lint` → 0 errors, 0 warnings ✓
+- Dev server recompile sukses, `POST /api/export/preview 200` terlihat di dev.log
+
+Stage Summary:
+- Template picker gallery terintegrasi penuh, hanya muncul saat format PDF dipilih
+- 25 template dapat di-filter via 5 tab kategori (Semua + 4 kategori dari PDF_TEMPLATE_CATEGORIES)
+- `templateId` dikirim ke backend via preview fetch dan download POST (di dalam `options`)
+- Lint clean, dev server healthy
+- File agent ctx: `/home/z/my-project/agent-ctx/PDF-UI-pdf-template-picker.md`
+
+---
+Task ID: PDF-TPL
+Agent: pdf-api-rewriter
+Task: Rewrite PDF export API (`/api/export/pdf`) to support template selection (theme, layout, sections) via `options.templateId`
+
+Work Log:
+- Baca `src/app/api/export/pdf/route.ts` (448 lines, pdfkit, hardcoded emerald theme), `src/lib/pdf-templates.ts` (25 templates × theme/layout/sections/options), `src/lib/export-helpers.ts` (buildWhereClause, resolveFields, FIELD_LABELS), `src/lib/format.ts` (formatCurrency, formatDate, parseDateLocal)
+- Rewrite `src/app/api/export/pdf/route.ts` (now 1239 lines) end-to-end while preserving the public POST signature, scope parsing, TxRow type, and getFieldValue helper verbatim
+- Request body now: `{ scope?, fields?, options?: { templateId?, watermark?, title?, includeHidden?, showSummary? } }`
+- Template lookup: `PDF_TEMPLATES.find(t => t.id === requestedId) ?? PDF_TEMPLATES.find(t => t.id === "minimal-clean")` (default minimal-clean)
+- Theme application: every visual primitive reads from `template.theme` — `primary` (section headings, accent divider, bar fills), `text`/`textMuted` (body), `border` (rules), `tableHeaderBg`/`tableHeaderText`/`tableStripe` (table renderer), `bg` (dark-mode fill)
+- Layout application: `pdfSize` derives A4/A5/LETTER or `[w,h]` custom (receipt-style [280,600], slip-jajan [280,400]); `layout.orientation` → pdfkit `layout: 'portrait' | 'landscape'`; `layout.margin` → PDFDocument margins + content math; `layout.titleSize` + `layout.fontSize` drive heading/body sizes
+- Sections gated by `template.sections.*` flags: summary, categoryBreakdown (with optional `charts` bars), topMerchants, transactionList, insights, tips, watermark, footer
+- Dark-mode: `isDarkColor(theme.bg)` detects dark bgs (luminance < 0.5); on first page + `pageAdded` event, run `doc.rect(0,0,pageWidth,pageHeight).fill(theme.bg)` before content. Tested via `dark-mode` template (#0f172a bg, #f1f5f9 text)
+- Cover page: when `layout.coverPage === true` (corporate-formal, laporan-tahunan), `drawCoverPage()` paints top/bottom accent bars, large centered title, period subtitle, three big stat numbers (income/expense/balance), tx count footer — then `doc.addPage()` to start content
+- Two-column (infographic, landscape A4): `if (layout.twoColumn)` branch splits content width into 2 columns (colGap 16pt). LEFT: summary card + category bars. RIGHT: top merchants + insights + tips. Final y = max(leftEndY, rightEndY)
+- Receipt-style + slip-jajan: `fontFamily = 'Courier'`, `fontBold = 'Courier-Bold'`, `dashed: true` flag in drawTable → `doc.dash(2, {space:2})` borders, header bottom border, no zebra (tableStripe=#ffffff)
+- Watermark: drawn when `options.watermark` OR `template.sections.watermark` (e.g., laporan-pajak). `drawWatermark()` translates to page center, rotates -45°, opacity 0.1, large text
+- Charts (text-based fallback): `drawCategoryBars()` renders category name, percentage, total in 3-segment continued line, then a `theme.border` track rect + `theme.primary` fill rect proportional to `percentage/100`. No external chart lib needed
+- Top merchants: `drawTopMerchantList()` computes top-10 EXPENSE merchants by total (count-based aggregation), renders rank+name + amount (primary color), then mini bar proportional to max
+- Footers: `drawFooters()` iterates `doc.bufferedPageRange()`, `doc.switchToPage(i)` for each page, draws a divider line + `showBranding` ("Generated by DompetKu", left), `showTimestamp` (center), `showPageNumbers` (`Hal. N / Total`, right). Skipped entirely if `sections.footer === false`
+- compactMode: `baseFontSize = compact ? max(layout.fontSize - 1, 7) : layout.fontSize`; section headings use `baseFontSize + 2/3`
+- Existing functionality preserved: scope filtering (buildWhereClause), field selection (resolveFields + FIELD_LABELS), TxRow type + getFieldValue helper (verbatim), transactions table with field-label headers + scaled column widths
+- `drawTable` refactored: signature extended with `theme, startX, pageBottom, pageHeight, fontFamily, fontBold, dashed` opts; header fill uses `theme.tableHeaderBg` + `theme.tableHeaderText`; zebra uses `theme.tableStripe`; cell text uses `theme.text`; page break re-draws header at `topMargin = pageHeight - pageBottom`
+- Helpers added: `isDarkColor(hex)`, `drawWatermark`, `drawCoverPage`, `drawHeader`, `drawSummaryRows`, `drawSummaryCard` (2-col card), `drawTopMerchantList`, `drawCategoryBars`, `drawInsights`, `drawTips`, `drawFooters`
+- Output filename: `dompetku-{templateId}-{YYYY-MM-DD}.pdf` (now includes template id for traceability)
+- PDF metadata: `info: { Title, Author: "DompetKu", Subject }` set via PDFDocument constructor
+
+Verification:
+- `bun run lint` → **0 errors, 0 warnings** ✓
+- `npx tsc --noEmit --skipLibCheck` → no errors in `src/app/api/export/pdf/route.ts` (other pre-existing errors in unrelated files: dashboard route, security-section, transaction-form, crypto — out of scope)
+- `bun build src/app/api/export/pdf/route.ts --target node` → "Bundled 109 modules in 93ms", 2.61 MB ✓ (imports resolve, no syntax errors)
+
+Stage Summary:
+- 1 file rewritten: `src/app/api/export/pdf/route.ts` (448 → 1239 lines)
+- All 25 templates supported via `options.templateId` (default `minimal-clean`)
+- 12 requirements met: PDF_TEMPLATES import, template lookup, theme colors, layout (size/orientation/margin/fonts), sections gating, dark-mode bg fill, receipt-style custom size + Courier + dashed borders, coverPage, twoColumn, showBranding/showPageNumbers/showTimestamp, compactMode, watermark (template OR options)
+- Charts rendered as text-based progress bars (no chart lib needed)
+- TxRow + getFieldValue preserved verbatim; drawTable signature extended with theme (headerFill comes from `theme.tableHeaderBg`)
+- Lint clean, type-clean (file-local), bundler-clean
+- Backward compat: `options.watermark`, `options.title`, `options.includeHidden`, `options.showSummary` still honored; old `showSummary=false` overrides template's summary section
+
+---
+Task ID: PDF-ALL (PDF Templates System)
+Agent: main + 2 subagents (PDF-TPL, PDF-UI)
+Task: Implement ALL 25 PDF templates with theme, layout, sections + template picker UI
+
+Work Log:
+- Created pdf-templates.ts with 25 template definitions across 4 categories:
+  * Style (9): Minimal Clean, Modern Gradient, Corporate Formal, Dark Mode, Pastel Soft, Vintage Paper, Infographic, Bank Statement, Receipt Style
+  * Report (9): Slip Transaksi, Laporan Tahunan, Laporan Pajak, Laporan Budget, Laporan Goals, Laporan Hutang, Laporan Akun, Cash Flow, Net Worth
+  * Audience (1): Laporan ke Ortu
+  * Student (6): Laporan Patungan, Laporan Skripsi, Laporan Semester, Weekly Summary, Slip Jajan
+- Each template has: theme (10 colors), layout (size/orientation/margin/font/coverPage/twoColumn), sections (11 toggles), options (branding/pageNumbers/timestamp/compactMode/emoji)
+- PDF API rewritten (448→1239 lines): template lookup, theme colors applied to all elements, layout (A4/A5/Letter/custom sizes, portrait/landscape), sections toggling, dark mode (fill bg per page), cover pages (big title + stats), two-column (infographic), receipt style (monospace + dashed borders), text-based chart bars, page numbers/branding/timestamp footers, watermark
+- Export section UI updated: template picker gallery (category tabs: Semua/Gaya/Tipe/Untuk Siapa/Mahasiswa, scrollable grid of 25 template cards with emoji + name + description + color dots, selected card with emerald border + checkmark). Template ID sent to both preview and PDF download APIs.
+- Verification: lint 0 errors. All 4 test PDFs generated successfully (dark-mode 7KB, receipt 5KB, ortu 3KB, jajan 3KB). Browser verified: template picker visible with all 25 templates.
+
+Stage Summary:
+- 25 PDF templates implemented (9 style + 9 report + 1 audience + 6 student)
+- Full template system: theme, layout, sections, options per template
+- Dark mode PDF support (dark bg + light text)
+- Cover page support (big title + summary stats)
+- Two-column layout (infographic landscape)
+- Receipt style (monospace, dashed borders, compact)
+- Custom page sizes (receipt 280x600, slip jajan 280x400)
+- Template picker UI with category filter + color preview
+- All lint-clean, verified end-to-end

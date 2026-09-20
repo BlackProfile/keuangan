@@ -11,10 +11,12 @@ import {
   FileJson,
   FileSpreadsheet,
   FileText,
+  GraduationCap,
   Hash,
   Layers,
   LayoutTemplate,
   Loader2,
+  Palette,
   Receipt,
   RefreshCw,
   Save,
@@ -23,6 +25,7 @@ import {
   Table,
   Tag as TagIcon,
   Trash2,
+  Users,
   Wand2,
   Wallet,
   X,
@@ -97,6 +100,11 @@ import type {
   ExportTemplate,
   Transaction,
 } from "@/lib/types";
+import {
+  PDF_TEMPLATES,
+  PDF_TEMPLATE_CATEGORIES,
+  type PdfTemplateId,
+} from "@/lib/pdf-templates";
 
 // ====================== Constants ======================
 type ExportFormat = "PDF" | "EXCEL" | "CSV" | "JSON";
@@ -215,6 +223,26 @@ const FORMAT_LABEL: Record<ExportFormat, string> = {
   JSON: "JSON",
 };
 
+// ====================== PDF Template Picker ======================
+type PdfCategoryFilter = "all" | "style" | "report" | "audience" | "student";
+
+const PDF_CATEGORY_TABS: Array<{
+  id: PdfCategoryFilter;
+  label: string;
+  icon: React.ReactNode;
+}> = [
+  { id: "all", label: "Semua", icon: <LayoutTemplate className="h-3 w-3" /> },
+  { id: "style", label: "Gaya Tampilan", icon: <Palette className="h-3 w-3" /> },
+  { id: "report", label: "Tipe Laporan", icon: <FileText className="h-3 w-3" /> },
+  { id: "audience", label: "Untuk Siapa", icon: <Users className="h-3 w-3" /> },
+  { id: "student", label: "Mahasiswa", icon: <GraduationCap className="h-3 w-3" /> },
+];
+
+const pdfCategoryLabel = (cat: PdfCategoryFilter): string =>
+  cat === "all"
+    ? "Semua"
+    : PDF_TEMPLATE_CATEGORIES.find((c) => c.id === cat)?.label ?? cat;
+
 // ====================== Section ======================
 export function ExportSection() {
   // ---- Config state ----
@@ -230,6 +258,12 @@ export function ExportSection() {
   const [to, setTo] = React.useState("");
   const [fields, setFields] = React.useState<string[]>(DEFAULT_FIELDS);
   const [includeHidden, setIncludeHidden] = React.useState(false);
+
+  // ---- PDF template picker (visible only when format === "PDF") ----
+  const [pdfTemplateId, setPdfTemplateId] =
+    React.useState<PdfTemplateId>("minimal-clean");
+  const [pdfCategory, setPdfCategory] =
+    React.useState<PdfCategoryFilter>("all");
   const [watermark, setWatermark] = React.useState("");
   const [title, setTitle] = React.useState("Laporan Keuangan");
   const [groupBy, setGroupBy] = React.useState<
@@ -305,16 +339,32 @@ export function ExportSection() {
   // ---- Live preview (debounced) ----
   const previewMut = useExportPreview();
 
+  // ---- PDF template picker (computed) ----
+  const filteredPdfTemplates = React.useMemo(
+    () =>
+      pdfCategory === "all"
+        ? PDF_TEMPLATES
+        : PDF_TEMPLATES.filter((t) => t.category === pdfCategory),
+    [pdfCategory]
+  );
+  const selectedPdfTemplate = React.useMemo(
+    () => PDF_TEMPLATES.find((t) => t.id === pdfTemplateId),
+    [pdfTemplateId]
+  );
+
   React.useEffect(() => {
     const handle = window.setTimeout(() => {
       previewMut.mutate({
         scope: scope as unknown as Record<string, unknown>,
         fields,
-        options: options as unknown as Record<string, unknown>,
+        options: {
+          ...options,
+          templateId: pdfTemplateId,
+        } as unknown as Record<string, unknown>,
       });
     }, 500);
     return () => window.clearTimeout(handle);
-  }, [scope, fields, options]);
+  }, [scope, fields, options, pdfTemplateId]);
 
   const preview = previewMut.data;
   const previewLoading = previewMut.isPending;
@@ -406,7 +456,11 @@ export function ExportSection() {
       const res = await fetch(url[fmt], {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope, fields, options }),
+        body: JSON.stringify({
+          scope,
+          fields,
+          options: { ...options, templateId: pdfTemplateId },
+        }),
       });
       if (!res.ok) throw new Error("Export gagal");
       const blob = await res.blob();
@@ -510,6 +564,122 @@ export function ExportSection() {
                   />
                 ))}
               </div>
+
+              {/* Template PDF — only visible when format === "PDF" */}
+              {format === "PDF" && (
+                <div className="mt-5">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+                      <LayoutTemplate className="h-3 w-3" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Template PDF
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Pilih gaya template untuk PDF Anda
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Category filter */}
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {PDF_CATEGORY_TABS.map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setPdfCategory(tab.id)}
+                        aria-pressed={pdfCategory === tab.id}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                          pdfCategory === tab.id
+                            ? "border-emerald-500 bg-emerald-600 text-white"
+                            : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        {tab.icon}
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Template grid */}
+                  <div className="custom-scrollbar mt-3 max-h-96 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {filteredPdfTemplates.map((t) => {
+                        const selected = pdfTemplateId === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setPdfTemplateId(t.id)}
+                            aria-pressed={selected}
+                            title={t.description}
+                            className={cn(
+                              "relative flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition-all",
+                              selected
+                                ? "border-emerald-500 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40"
+                                : "border-border bg-card hover:border-emerald-300 hover:bg-emerald-50/40 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/20"
+                            )}
+                          >
+                            {selected && (
+                              <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-white">
+                                <Check className="h-3 w-3" />
+                              </span>
+                            )}
+                            <span
+                              className="text-lg leading-none"
+                              aria-hidden="true"
+                            >
+                              {t.emoji}
+                            </span>
+                            <span className="line-clamp-1 pr-4 text-xs font-semibold text-foreground">
+                              {t.name}
+                            </span>
+                            <span className="line-clamp-2 text-[10px] leading-snug text-muted-foreground">
+                              {t.description}
+                            </span>
+                            <span className="mt-0.5 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+                              {pdfCategoryLabel(t.category)}
+                            </span>
+                            {/* Mini color preview */}
+                            <div className="mt-1.5 flex items-center gap-1">
+                              <span
+                                className="h-2.5 w-2.5 rounded-full border border-black/5 dark:border-white/10"
+                                style={{ backgroundColor: t.theme.primary }}
+                                aria-hidden="true"
+                              />
+                              <span
+                                className="h-2.5 w-2.5 rounded-full border border-black/5 dark:border-white/10"
+                                style={{ backgroundColor: t.theme.secondary }}
+                                aria-hidden="true"
+                              />
+                              <span
+                                className="h-2.5 w-2.5 rounded-full border border-black/5 dark:border-white/10"
+                                style={{ backgroundColor: t.theme.accent }}
+                                aria-hidden="true"
+                              />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Selected template name */}
+                  <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+                    <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-xs text-muted-foreground">
+                      Template terpilih:
+                    </span>
+                    <span className="truncate text-xs font-semibold text-foreground">
+                      {selectedPdfTemplate
+                        ? `${selectedPdfTemplate.emoji} ${selectedPdfTemplate.name}`
+                        : pdfTemplateId}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* 2. Tipe Laporan */}
               <SectionTitle step={2} label="Tipe Laporan" className="mt-5" />

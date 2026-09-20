@@ -1,0 +1,1835 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import { toast } from "sonner";
+     5→import {
+     6→  AlertCircle,
+     7→  ArrowDownToLine,
+     8→  Check,
+     9→  Database,
+    10→  Eye,
+    11→  FileJson,
+    12→  FileSpreadsheet,
+    13→  FileText,
+    14→  Hash,
+    15→  Layers,
+    16→  LayoutTemplate,
+    17→  Loader2,
+    18→  Receipt,
+    19→  RefreshCw,
+    20→  Save,
+    21→  Sparkles,
+    22→  Store,
+    23→  Table,
+    24→  Tag as TagIcon,
+    25→  Trash2,
+    26→  Wand2,
+    27→  Wallet,
+    28→  X,
+    29→} from "lucide-react";
+    30→
+    31→import { Badge } from "@/components/ui/badge";
+    32→import { Button } from "@/components/ui/button";
+    33→import { Card } from "@/components/ui/card";
+    34→import { Checkbox } from "@/components/ui/checkbox";
+    35→import {
+    36→  AlertDialog,
+    37→  AlertDialogAction,
+    38→  AlertDialogCancel,
+    39→  AlertDialogContent,
+    40→  AlertDialogDescription,
+    41→  AlertDialogFooter,
+    42→  AlertDialogHeader,
+    43→  AlertDialogTitle,
+    44→  AlertDialogTrigger,
+    45→} from "@/components/ui/alert-dialog";
+    46→import {
+    47→  Dialog,
+    48→  DialogClose,
+    49→  DialogContent,
+    50→  DialogDescription,
+    51→  DialogFooter,
+    52→  DialogHeader,
+    53→  DialogTitle,
+    54→} from "@/components/ui/dialog";
+    55→import { Input } from "@/components/ui/input";
+    56→import { Label } from "@/components/ui/label";
+    57→import {
+    58→  Select,
+    59→  SelectContent,
+    60→  SelectItem,
+    61→  SelectTrigger,
+    62→  SelectValue,
+    63→} from "@/components/ui/select";
+    64→import { Skeleton } from "@/components/ui/skeleton";
+    65→import { Switch } from "@/components/ui/switch";
+    66→import {
+    67→  Table as UiTable,
+    68→  TableBody,
+    69→  TableCell,
+    70→  TableHead,
+    71→  TableHeader,
+    72→  TableRow,
+    73→} from "@/components/ui/table";
+    74→
+    75→import { cn } from "@/lib/utils";
+    76→import { api } from "@/lib/api";
+    77→import {
+    78→  formatCurrency,
+    79→  formatCurrencyCompact,
+    80→  formatDate,
+    81→  formatDateLong,
+    82→} from "@/lib/format";
+    83→import {
+    84→  useAccounts,
+    85→  useCategories,
+    86→  useCreateExportTemplate,
+    87→  useDeleteExportTemplate,
+    88→  useExportPreview,
+    89→  useExportTemplates,
+    90→  useGroups,
+    91→  useTags,
+    92→} from "@/lib/hooks";
+    93→import type {
+    94→  ExportOptions,
+    95→  ExportReportType,
+    96→  ExportScope,
+    97→  ExportTemplate,
+    98→  Transaction,
+    99→} from "@/lib/types";
+   100→
+   101→// ====================== Constants ======================
+   102→type ExportFormat = "PDF" | "EXCEL" | "CSV" | "JSON";
+   103→
+   104→const FORMATS: Array<{
+   105→  id: ExportFormat;
+   106→  label: string;
+   107→  desc: string;
+   108→  icon: React.ReactNode;
+   109→  accent: string;
+   110→}> = [
+   111→  {
+   112→    id: "PDF",
+   113→    label: "PDF",
+   114→    desc: "Dokumen cetak",
+   115→    icon: <FileText className="h-5 w-5" />,
+   116→    accent: "text-rose-600 dark:text-rose-400",
+   117→  },
+   118→  {
+   119→    id: "EXCEL",
+   120→    label: "Excel",
+   121→    desc: "Spreadsheet",
+   122→    icon: <FileSpreadsheet className="h-5 w-5" />,
+   123→    accent: "text-emerald-600 dark:text-emerald-400",
+   124→  },
+   125→  {
+   126→    id: "CSV",
+   127→    label: "CSV",
+   128→    desc: "Data terbuka",
+   129→    icon: <Table className="h-5 w-5" />,
+   130→    accent: "text-teal-600 dark:text-teal-400",
+   131→  },
+   132→  {
+   133→    id: "JSON",
+   134→    label: "JSON",
+   135→    desc: "Backup penuh",
+   136→    icon: <FileJson className="h-5 w-5" />,
+   137→    accent: "text-amber-600 dark:text-amber-400",
+   138→  },
+   139→];
+   140→
+   141→const REPORT_TYPES: Array<{ id: ExportReportType; label: string }> = [
+   142→  { id: "TRANSACTIONS", label: "Daftar Transaksi" },
+   143→  { id: "MONTHLY", label: "Ringkasan Bulanan" },
+   144→  { id: "YEARLY", label: "Ringkasan Tahunan" },
+   145→  { id: "TAX", label: "Laporan Pajak" },
+   146→  { id: "BUDGET", label: "Anggaran" },
+   147→  { id: "GOALS", label: "Tujuan Keuangan" },
+   148→  { id: "DEBTS", label: "Utang & Piutang" },
+   149→  { id: "ACCOUNT", label: "Per Akun" },
+   150→  { id: "GROUP", label: "Per Grup" },
+   151→  { id: "CASHFLOW", label: "Arus Kas" },
+   152→  { id: "NETWORTH", label: "Kekayaan Bersih" },
+   153→  { id: "SLIP", label: "Slip Gaji" },
+   154→];
+   155→
+   156→const SCOPE_TYPES: Array<{
+   157→  id: ExportScope["type"];
+   158→  label: string;
+   159→  icon: React.ReactNode;
+   160→}> = [
+   161→  { id: "ALL", label: "Semua", icon: <Database className="h-3.5 w-3.5" /> },
+   162→  { id: "ACCOUNT", label: "Akun", icon: <Wallet className="h-3.5 w-3.5" /> },
+   163→  { id: "CATEGORY", label: "Kategori", icon: <Layers className="h-3.5 w-3.5" /> },
+   164→  { id: "GROUP", label: "Grup", icon: <Sparkles className="h-3.5 w-3.5" /> },
+   165→  { id: "TAG", label: "Tag", icon: <TagIcon className="h-3.5 w-3.5" /> },
+   166→  { id: "DATE_RANGE", label: "Rentang", icon: <Receipt className="h-3.5 w-3.5" /> },
+   167→  { id: "CUSTOM", label: "Custom", icon: <Hash className="h-3.5 w-3.5" /> },
+   168→];
+   169→
+   170→const FIELD_OPTIONS: Array<{ id: string; label: string }> = [
+   171→  { id: "date", label: "Tanggal" },
+   172→  { id: "type", label: "Tipe" },
+   173→  { id: "amount", label: "Jumlah" },
+   174→  { id: "description", label: "Keterangan" },
+   175→  { id: "category", label: "Kategori" },
+   176→  { id: "account", label: "Akun" },
+   177→  { id: "merchant", label: "Merchant" },
+   178→  { id: "note", label: "Catatan" },
+   179→  { id: "tags", label: "Tag" },
+   180→  { id: "mood", label: "Suasana" },
+   181→  { id: "priority", label: "Prioritas" },
+   182→  { id: "paymentMethod", label: "Metode Bayar" },
+   183→];
+   184→
+   185→const DEFAULT_FIELDS = [
+   186→  "date",
+   187→  "type",
+   188→  "amount",
+   189→  "description",
+   190→  "category",
+   191→  "account",
+   192→  "merchant",
+   193→  "note",
+   194→  "tags",
+   195→  "mood",
+   196→  "priority",
+   197→  "paymentMethod",
+   198→];
+   199→
+   200→const GROUP_BY_OPTIONS: Array<{
+   201→  id: NonNullable<ExportOptions["groupBy"]> | "none";
+   202→  label: string;
+   203→}> = [
+   204→  { id: "none", label: "Tidak dikelompokkan" },
+   205→  { id: "date", label: "Tanggal" },
+   206→  { id: "category", label: "Kategori" },
+   207→  { id: "account", label: "Akun" },
+   208→  { id: "merchant", label: "Merchant" },
+   209→];
+   210→
+   211→const FORMAT_LABEL: Record<ExportFormat, string> = {
+   212→  PDF: "PDF",
+   213→  EXCEL: "Excel",
+   214→  CSV: "CSV",
+   215→  JSON: "JSON",
+   216→};
+   217→
+   218→// ====================== Section ======================
+   219→export function ExportSection() {
+   220→  // ---- Config state ----
+   221→  const [format, setFormat] = React.useState<ExportFormat>("PDF");
+   222→  const [reportType, setReportType] =
+   223→    React.useState<ExportReportType>("TRANSACTIONS");
+   224→  const [scopeType, setScopeType] = React.useState<ExportScope["type"]>("ALL");
+   225→  const [accountId, setAccountId] = React.useState("");
+   226→  const [categoryId, setCategoryId] = React.useState("");
+   227→  const [groupId, setGroupId] = React.useState("");
+   228→  const [tag, setTag] = React.useState("");
+   229→  const [from, setFrom] = React.useState("");
+   230→  const [to, setTo] = React.useState("");
+   231→  const [fields, setFields] = React.useState<string[]>(DEFAULT_FIELDS);
+   232→  const [includeHidden, setIncludeHidden] = React.useState(false);
+   233→  const [watermark, setWatermark] = React.useState("");
+   234→  const [title, setTitle] = React.useState("Laporan Keuangan");
+   235→  const [groupBy, setGroupBy] = React.useState<
+   236→    NonNullable<ExportOptions["groupBy"]> | "none"
+   237→  >("none");
+   238→  const [showSummary, setShowSummary] = React.useState(true);
+   239→  const [showCharts, setShowCharts] = React.useState(false);
+   240→
+   241→  // ---- Save-template dialog ----
+   242→  const [saveOpen, setSaveOpen] = React.useState(false);
+   243→  const [templateName, setTemplateName] = React.useState("");
+   244→
+   245→  // ---- Downloading state (which format) ----
+   246→  // Lowercase keys to match the URL record + extension logic.
+   247→  type DownloadFormat = "pdf" | "excel" | "csv" | "json";
+   248→  const [downloading, setDownloading] = React.useState<
+   249→    DownloadFormat | "ALL" | null
+   250→  >(null);
+   251→
+   252→  // ---- Reference data ----
+   253→  const { data: accounts } = useAccounts();
+   254→  const { data: categories } = useCategories();
+   255→  const { data: groups } = useGroups();
+   256→  const { data: tags } = useTags();
+   257→
+   258→  // ---- Templates ----
+   259→  const { data: templates, isLoading: templatesLoading } = useExportTemplates();
+   260→  const createTplMut = useCreateExportTemplate();
+   261→  const deleteTplMut = useDeleteExportTemplate();
+   262→
+   263→  // ---- Computed scope/options payload ----
+   264→  const scope: ExportScope = React.useMemo(() => {
+   265→    const base: ExportScope = { type: scopeType, includeHidden };
+   266→    switch (scopeType) {
+   267→      case "ACCOUNT":
+   268→        return { ...base, accountId: accountId || undefined };
+   269→      case "CATEGORY":
+   270→        return { ...base, categoryId: categoryId || undefined };
+   271→      case "GROUP":
+   272→        return { ...base, groupId: groupId || undefined };
+   273→      case "TAG":
+   274→        return { ...base, tag: tag || undefined };
+   275→      case "DATE_RANGE":
+   276→        return { ...base, from: from || undefined, to: to || undefined };
+   277→      case "CUSTOM":
+   278→        return { ...base, txIds: [] };
+   279→      default:
+   280→        return base;
+   281→    }
+   282→  }, [scopeType, accountId, categoryId, groupId, tag, from, to, includeHidden]);
+   283→
+   284→  const options: ExportOptions = React.useMemo(
+   285→    () => ({
+   286→      includeHidden,
+   287→      watermark: watermark.trim() || undefined,
+   288→      title: title.trim() || "Laporan Keuangan",
+   289→      groupBy: groupBy === "none" ? undefined : groupBy,
+   290→      showSummary,
+   291→      showCharts,
+   292→      language: "id",
+   293→      numberFormat: "id",
+   294→    }),
+   295→    [
+   296→      includeHidden,
+   297→      watermark,
+   298→      title,
+   299→      groupBy,
+   300→      showSummary,
+   301→      showCharts,
+   302→    ]
+   303→  );
+   304→
+   305→  // ---- Live preview (debounced) ----
+   306→  const previewMut = useExportPreview();
+   307→
+   308→  React.useEffect(() => {
+   309→    const handle = window.setTimeout(() => {
+   310→      previewMut.mutate({
+   311→        scope: scope as unknown as Record<string, unknown>,
+   312→        fields,
+   313→        options: options as unknown as Record<string, unknown>,
+   314→      });
+   315→    }, 500);
+   316→    return () => window.clearTimeout(handle);
+   317→  }, [scope, fields, options]);
+   318→
+   319→  const preview = previewMut.data;
+   320→  const previewLoading = previewMut.isPending;
+   321→  const previewError = previewMut.isError;
+   322→
+   323→  // ====================== Actions ======================
+   324→  function toggleField(id: string) {
+   325→    setFields((prev) =>
+   326→      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
+   327→    );
+   328→  }
+   329→
+   330→  function applyTemplate(t: ExportTemplate) {
+   331→    if (t.format !== "IMAGE") setFormat(t.format as ExportFormat);
+   332→    setReportType(t.reportType);
+   333→    if (t.scope) {
+   334→      setScopeType(t.scope.type);
+   335→      setAccountId(t.scope.accountId ?? "");
+   336→      setCategoryId(t.scope.categoryId ?? "");
+   337→      setGroupId(t.scope.groupId ?? "");
+   338→      setTag(t.scope.tag ?? "");
+   339→      setFrom(t.scope.from ?? "");
+   340→      setTo(t.scope.to ?? "");
+   341→      if (typeof t.scope.includeHidden === "boolean") {
+   342→        setIncludeHidden(t.scope.includeHidden);
+   343→      }
+   344→    }
+   345→    if (t.fields && t.fields.length > 0) setFields(t.fields);
+   346→    if (t.options) {
+   347→      if (typeof t.options.includeHidden === "boolean")
+   348→        setIncludeHidden(t.options.includeHidden);
+   349→      if (typeof t.options.watermark === "string")
+   350→        setWatermark(t.options.watermark);
+   351→      if (typeof t.options.title === "string") setTitle(t.options.title);
+   352→      if (t.options.groupBy) setGroupBy(t.options.groupBy);
+   353→      if (typeof t.options.showSummary === "boolean")
+   354→        setShowSummary(t.options.showSummary);
+   355→      if (typeof t.options.showCharts === "boolean")
+   356→        setShowCharts(t.options.showCharts);
+   357→    }
+   358→    toast.success(`Template "${t.name}" diterapkan.`);
+   359→  }
+   360→
+   361→  function handleSaveTemplate(e: React.FormEvent) {
+   362→    e.preventDefault();
+   363→    const name = templateName.trim();
+   364→    if (!name) {
+   365→      toast.error("Nama template tidak boleh kosong.");
+   366→      return;
+   367→    }
+   368→    createTplMut.mutate(
+   369→      {
+   370→        name,
+   371→        format,
+   372→        reportType,
+   373→        scope,
+   374→        fields,
+   375→        options,
+   376→      },
+   377→      {
+   378→        onSuccess: () => {
+   379→          toast.success(`Template "${name}" disimpan.`);
+   380→          setTemplateName("");
+   381→          setSaveOpen(false);
+   382→        },
+   383→        onError: (err) =>
+   384→          toast.error(err.message || "Gagal menyimpan template."),
+   385→      }
+   386→    );
+   387→  }
+   388→
+   389→  function handleDeleteTemplate(id: string, name: string) {
+   390→    deleteTplMut.mutate(id, {
+   391→      onSuccess: () => toast.success(`Template "${name}" dihapus.`),
+   392→      onError: (err) =>
+   393→        toast.error(err.message || "Gagal menghapus template."),
+   394→    });
+   395→  }
+   396→
+   397→  async function downloadExport(fmt: DownloadFormat) {
+   398→    const url: Record<DownloadFormat, string> = {
+   399→      pdf: api.exportPdfUrl(),
+   400→      excel: api.exportExcelUrl(),
+   401→      csv: api.exportCsvUrl(),
+   402→      json: api.exportJsonUrl(),
+   403→    };
+   404→    try {
+   405→      setDownloading(fmt);
+   406→      const res = await fetch(url[fmt], {
+   407→        method: "POST",
+   408→        headers: { "Content-Type": "application/json" },
+   409→        body: JSON.stringify({ scope, fields, options }),
+   410→      });
+   411→      if (!res.ok) throw new Error("Export gagal");
+   412→      const blob = await res.blob();
+   413→      const a = document.createElement("a");
+   414→      a.href = URL.createObjectURL(blob);
+   415→      a.download = `dompetku-export-${new Date()
+   416→        .toISOString()
+   417→        .split("T")[0]}.${fmt === "excel" ? "xlsx" : fmt}`;
+   418→      document.body.appendChild(a);
+   419→      a.click();
+   420→      document.body.removeChild(a);
+   421→      URL.revokeObjectURL(a.href);
+   422→      toast.success(`Export ${fmt.toUpperCase()} berhasil`);
+   423→    } catch (err) {
+   424→      const msg = err instanceof Error ? err.message : "Export gagal";
+   425→      toast.error(msg);
+   426→    } finally {
+   427→      setDownloading(null);
+   428→    }
+   429→  }
+   430→
+   431→  async function downloadAllFormats() {
+   432→    try {
+   433→      setDownloading("ALL");
+   434→      const sequence: DownloadFormat[] = ["pdf", "excel", "csv", "json"];
+   435→      for (const fmt of sequence) {
+   436→        await downloadExportSilent(fmt);
+   437→      }
+   438→      toast.success("Semua format berhasil diunduh.");
+   439→    } catch {
+   440→      toast.error("Sebagian format gagal diunduh.");
+   441→    } finally {
+   442→      setDownloading(null);
+   443→    }
+   444→  }
+   445→
+   446→  async function downloadExportSilent(fmt: DownloadFormat) {
+   447→    const url: Record<DownloadFormat, string> = {
+   448→      pdf: api.exportPdfUrl(),
+   449→      excel: api.exportExcelUrl(),
+   450→      csv: api.exportCsvUrl(),
+   451→      json: api.exportJsonUrl(),
+   452→    };
+   453→    const res = await fetch(url[fmt], {
+   454→      method: "POST",
+   455→      headers: { "Content-Type": "application/json" },
+   456→      body: JSON.stringify({ scope, fields, options }),
+   457→    });
+   458→    if (!res.ok) throw new Error("Export gagal");
+   459→    const blob = await res.blob();
+   460→    const a = document.createElement("a");
+   461→    a.href = URL.createObjectURL(blob);
+   462→    a.download = `dompetku-export-${new Date()
+   463→      .toISOString()
+   464→      .split("T")[0]}.${fmt === "excel" ? "xlsx" : fmt}`;
+   465→    document.body.appendChild(a);
+   466→    a.click();
+   467→    document.body.removeChild(a);
+   468→    URL.revokeObjectURL(a.href);
+   469→  }
+   470→
+   471→  // ====================== Render ======================
+   472→  return (
+   473→    <div className="space-y-6">
+   474→      {/* Header */}
+   475→      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   476→        <div>
+   477→          <h2 className="text-xl font-semibold tracking-tight">Export Data</h2>
+   478→          <p className="mt-0.5 text-sm text-muted-foreground">
+   479→            Export laporan keuangan ke PDF, Excel, CSV, JSON.
+   480→          </p>
+   481→        </div>
+   482→        <Button
+   483→          variant="outline"
+   484→          className="gap-1.5"
+   485→          onClick={() => setSaveOpen(true)}
+   486→        >
+   487→          <Save className="h-4 w-4" />
+   488→          Simpan Template
+   489→        </Button>
+   490→      </div>
+   491→
+   492→      {/* Main grid */}
+   493→      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+   494→        {/* ===== Left: Config Panel ===== */}
+   495→        <div className="lg:col-span-5">
+   496→          <div className="lg:sticky lg:top-4 space-y-4">
+   497→            <Card className="p-5">
+   498→              {/* 1. Pilih Format */}
+   499→              <SectionTitle step={1} label="Pilih Format" />
+   500→              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+   501→                {FORMATS.map((f) => (
+   502→                  <FormatCard
+   503→                    key={f.id}
+   504→                    label={f.label}
+   505→                    desc={f.desc}
+   506→                    icon={f.icon}
+   507→                    accent={f.accent}
+   508→                    selected={format === f.id}
+   509→                    onClick={() => setFormat(f.id)}
+   510→                  />
+   511→                ))}
+   512→              </div>
+   513→
+   514→              {/* 2. Tipe Laporan */}
+   515→              <SectionTitle step={2} label="Tipe Laporan" className="mt-5" />
+   516→              <Select
+   517→                value={reportType}
+   518→                onValueChange={(v) => setReportType(v as ExportReportType)}
+   519→              >
+   520→                <SelectTrigger className="mt-3 w-full">
+   521→                  <SelectValue placeholder="Pilih tipe laporan" />
+   522→                </SelectTrigger>
+   523→                <SelectContent>
+   524→                  {REPORT_TYPES.map((r) => (
+   525→                    <SelectItem key={r.id} value={r.id}>
+   526→                      {r.label}
+   527→                    </SelectItem>
+   528→                  ))}
+   529→                </SelectContent>
+   530→              </Select>
+   531→
+   532→              {/* 3. Cakupan Data */}
+   533→              <SectionTitle step={3} label="Cakupan Data" className="mt-5" />
+   534→              <div className="mt-3 flex flex-wrap gap-1.5">
+   535→                {SCOPE_TYPES.map((s) => (
+   536→                  <ScopeTypeButton
+   537→                    key={s.id}
+   538→                    label={s.label}
+   539→                    icon={s.icon}
+   540→                    selected={scopeType === s.id}
+   541→                    onClick={() => setScopeType(s.id)}
+   542→                  />
+   543→                ))}
+   544→              </div>
+   545→
+   546→              <ScopeDetailEditor
+   547→                scopeType={scopeType}
+   548→                accountId={accountId}
+   549→                setAccountId={setAccountId}
+   550→                categoryId={categoryId}
+   551→                setCategoryId={setCategoryId}
+   552→                groupId={groupId}
+   553→                setGroupId={setGroupId}
+   554→                tag={tag}
+   555→                setTag={setTag}
+   556→                from={from}
+   557→                setFrom={setFrom}
+   558→                to={to}
+   559→                setTo={setTo}
+   560→                accounts={accounts ?? []}
+   561→                categories={categories ?? []}
+   562→                groups={groups ?? []}
+   563→                tags={tags ?? []}
+   564→              />
+   565→
+   566→              {/* 4. Field Selection */}
+   567→              <SectionTitle step={4} label="Pilih Field" className="mt-5" />
+   568→              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+   569→                {FIELD_OPTIONS.map((f) => (
+   570→                  <FieldCheckbox
+   571→                    key={f.id}
+   572→                    id={f.id}
+   573→                    label={f.label}
+   574→                    checked={fields.includes(f.id)}
+   575→                    onToggle={() => toggleField(f.id)}
+   576→                  />
+   577→                ))}
+   578→              </div>
+   579→              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+   580→                <span>
+   581→                  {fields.length}/{FIELD_OPTIONS.length} field dipilih
+   582→                </span>
+   583→                <div className="flex gap-2">
+   584→                  <Button
+   585→                    variant="ghost"
+   586→                    size="sm"
+   587→                    className="h-7 px-2 text-xs"
+   588→                    onClick={() => setFields(FIELD_OPTIONS.map((f) => f.id))}
+   589→                  >
+   590→                    Pilih Semua
+   591→                  </Button>
+   592→                  <Button
+   593→                    variant="ghost"
+   594→                    size="sm"
+   595→                    className="h-7 px-2 text-xs"
+   596→                    onClick={() => setFields([])}
+   597→                  >
+   598→                    Kosongkan
+   599→                  </Button>
+   600→                </div>
+   601→              </div>
+   602→
+   603→              {/* 5. Options */}
+   604→              <SectionTitle step={5} label="Opsi Lanjutan" className="mt-5" />
+   605→              <div className="mt-3 space-y-3">
+   606→                <OptionSwitch
+   607→                  label="Sertakan transaksi tersembunyi"
+   608→                  desc="Tampilkan transaksi yang ditandai isHidden"
+   609→                  checked={includeHidden}
+   610→                  onCheckedChange={setIncludeHidden}
+   611→                />
+   612→                <OptionSwitch
+   613→                  label="Tampilkan Ringkasan"
+   614→                  desc="Sertakan total pemasukan, pengeluaran & saldo"
+   615→                  checked={showSummary}
+   616→                  onCheckedChange={setShowSummary}
+   617→                />
+   618→                <OptionSwitch
+   619→                  label="Tampilkan Grafik"
+   620→                  desc="Tambahkan visualisasi pada laporan"
+   621→                  checked={showCharts}
+   622→                  onCheckedChange={setShowCharts}
+   623→                />
+   624→                <div className="space-y-1.5">
+   625→                  <Label htmlFor="exp-title">Judul Laporan</Label>
+   626→                  <Input
+   627→                    id="exp-title"
+   628→                    value={title}
+   629→                    onChange={(e) => setTitle(e.target.value)}
+   630→                    placeholder="Laporan Keuangan"
+   631→                  />
+   632→                </div>
+   633→                <div className="space-y-1.5">
+   634→                  <Label htmlFor="exp-watermark">Watermark (opsional)</Label>
+   635→                  <Input
+   636→                    id="exp-watermark"
+   637→                    value={watermark}
+   638→                    onChange={(e) => setWatermark(e.target.value)}
+   639→                    placeholder="cth. DRAFT, RAHASIA"
+   640→                  />
+   641→                </div>
+   642→                <div className="space-y-1.5">
+   643→                  <Label htmlFor="exp-groupby">Kelompokkan Berdasarkan</Label>
+   644→                  <Select
+   645→                    value={groupBy}
+   646→                    onValueChange={(v) =>
+   647→                      setGroupBy(
+   648→                        v as NonNullable<ExportOptions["groupBy"]> | "none"
+   649→                      )
+   650→                    }
+   651→                  >
+   652→                    <SelectTrigger id="exp-groupby" className="w-full">
+   653→                      <SelectValue />
+   654→                    </SelectTrigger>
+   655→                    <SelectContent>
+   656→                      {GROUP_BY_OPTIONS.map((g) => (
+   657→                        <SelectItem key={g.id} value={g.id}>
+   658→                          {g.label}
+   659→                        </SelectItem>
+   660→                      ))}
+   661→                    </SelectContent>
+   662→                  </Select>
+   663→                </div>
+   664→              </div>
+   665→
+   666→              {/* 7. Export Buttons */}
+   667→              <SectionTitle step={6} label="Unduh Export" className="mt-5" />
+   668→              <div className="mt-3 grid grid-cols-2 gap-2">
+   669→                <Button
+   670→                  onClick={() => downloadExport("pdf")}
+   671→                  disabled={downloading !== null}
+   672→                  className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+   673→                >
+   674→                  {downloading === "pdf" ? (
+   675→                    <Loader2 className="h-4 w-4 animate-spin" />
+   676→                  ) : (
+   677→                    <FileText className="h-4 w-4" />
+   678→                  )}
+   679→                  Export PDF
+   680→                </Button>
+   681→                <Button
+   682→                  onClick={() => downloadExport("excel")}
+   683→                  disabled={downloading !== null}
+   684→                  variant="outline"
+   685→                  className="gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+   686→                >
+   687→                  {downloading === "excel" ? (
+   688→                    <Loader2 className="h-4 w-4 animate-spin" />
+   689→                  ) : (
+   690→                    <FileSpreadsheet className="h-4 w-4" />
+   691→                  )}
+   692→                  Export Excel
+   693→                </Button>
+   694→                <Button
+   695→                  onClick={() => downloadExport("csv")}
+   696→                  disabled={downloading !== null}
+   697→                  variant="outline"
+   698→                  className="gap-1.5"
+   699→                >
+   700→                  {downloading === "csv" ? (
+   701→                    <Loader2 className="h-4 w-4 animate-spin" />
+   702→                  ) : (
+   703→                    <Table className="h-4 w-4" />
+   704→                  )}
+   705→                  Export CSV
+   706→                </Button>
+   707→                <Button
+   708→                  onClick={() => downloadExport("json")}
+   709→                  disabled={downloading !== null}
+   710→                  variant="outline"
+   711→                  className="gap-1.5"
+   712→                >
+   713→                  {downloading === "json" ? (
+   714→                    <Loader2 className="h-4 w-4 animate-spin" />
+   715→                  ) : (
+   716→                    <FileJson className="h-4 w-4" />
+   717→                  )}
+   718→                  Export JSON
+   719→                </Button>
+   720→                <Button
+   721→                  onClick={downloadAllFormats}
+   722→                  disabled={downloading !== null}
+   723→                  variant="secondary"
+   724→                  className="col-span-2 gap-1.5"
+   725→                >
+   726→                  {downloading === "ALL" ? (
+   727→                    <Loader2 className="h-4 w-4 animate-spin" />
+   728→                  ) : (
+   729→                    <ArrowDownToLine className="h-4 w-4" />
+   730→                  )}
+   731→                  Export Semua Format
+   732→                </Button>
+   733→              </div>
+   734→            </Card>
+   735→          </div>
+   736→        </div>
+   737→
+   738→        {/* ===== Right: Live Preview ===== */}
+   739→        <div className="lg:col-span-7">
+   740→          <div className="lg:sticky lg:top-4">
+   741→            <PreviewPanel
+   742→              loading={previewLoading && !preview}
+   743→              preview={preview}
+   744→              previewError={previewError}
+   745→              fields={fields}
+   746→              onRetry={() => {
+   747→                previewMut.mutate({
+   748→                  scope: scope as unknown as Record<string, unknown>,
+   749→                  fields,
+   750→                  options: options as unknown as Record<string, unknown>,
+   751→                });
+   752→              }}
+   753→            />
+   754→          </div>
+   755→        </div>
+   756→      </div>
+   757→
+   758→      {/* ===== Templates Section ===== */}
+   759→      <Card className="p-5">
+   760→        <div className="flex items-center justify-between gap-3">
+   761→          <div className="flex items-center gap-2">
+   762→            <LayoutTemplate className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   763→            <div>
+   764→              <h3 className="text-sm font-semibold text-foreground">
+   765→                Template Tersimpan
+   766→              </h3>
+   767→              <p className="text-xs text-muted-foreground">
+   768→                Gunakan kembali konfigurasi export yang sudah disimpan.
+   769→              </p>
+   770→            </div>
+   771→          </div>
+   772→          <Button
+   773→            variant="outline"
+   774→            size="sm"
+   775→            className="gap-1.5"
+   776→            onClick={() => setSaveOpen(true)}
+   777→          >
+   778→            <Save className="h-3.5 w-3.5" />
+   779→            Simpan Baru
+   780→          </Button>
+   781→        </div>
+   782→
+   783→        <div className="mt-4">
+   784→          {templatesLoading ? (
+   785→            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+   786→              {Array.from({ length: 2 }).map((_, i) => (
+   787→                <Skeleton key={i} className="h-24 rounded-xl" />
+   788→              ))}
+   789→            </div>
+   790→          ) : (templates ?? []).length === 0 ? (
+   791→            <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border py-10 text-center">
+   792→              <LayoutTemplate className="h-8 w-8 text-muted-foreground/60" />
+   793→              <p className="text-sm font-medium text-foreground">
+   794→                Belum ada template
+   795→              </p>
+   796→              <p className="text-xs text-muted-foreground">
+   797→                Simpan konfigurasi export saat ini untuk digunakan kembali.
+   798→              </p>
+   799→            </div>
+   800→          ) : (
+   801→            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+   802→              {(templates ?? []).map((t) => (
+   803→                <TemplateCard
+   804→                  key={t.id}
+   805→                  template={t}
+   806→                  onUse={() => applyTemplate(t)}
+   807→                  onDelete={() => handleDeleteTemplate(t.id, t.name)}
+   808→                  deleting={deleteTplMut.isPending}
+   809→                />
+   810→              ))}
+   811→            </div>
+   812→          )}
+   813→        </div>
+   814→      </Card>
+   815→
+   816→      {/* ===== Save Template Dialog ===== */}
+   817→      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+   818→        <DialogContent showCloseButton={false} className="max-w-md gap-0 p-0">
+   819→          <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+   820→            <div className="flex items-center justify-between">
+   821→              <div>
+   822→                <DialogTitle className="text-base flex items-center gap-2">
+   823→                  <Save className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   824→                  Simpan Template Export
+   825→                </DialogTitle>
+   826→                <DialogDescription className="text-xs">
+   827→                  Konfigurasi saat ini akan disimpan untuk digunakan kembali.
+   828→                </DialogDescription>
+   829→              </div>
+   830→              <DialogClose asChild>
+   831→                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+   832→                  <X className="h-4 w-4" />
+   833→                </Button>
+   834→              </DialogClose>
+   835→            </div>
+   836→          </DialogHeader>
+   837→          <form onSubmit={handleSaveTemplate} className="flex flex-col">
+   838→            <div className="space-y-4 p-5">
+   839→              <div className="space-y-1.5">
+   840→                <Label htmlFor="tpl-name">Nama Template</Label>
+   841→                <Input
+   842→                  id="tpl-name"
+   843→                  value={templateName}
+   844→                  onChange={(e) => setTemplateName(e.target.value)}
+   845→                  placeholder="cth. Laporan Bulanan PDF"
+   846→                  autoFocus
+   847→                />
+   848→              </div>
+   849→              <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs">
+   850→                <p className="font-medium text-foreground">Ringkasan:</p>
+   851→                <ul className="mt-1 space-y-0.5 text-muted-foreground">
+   852→                  <li>Format: {FORMAT_LABEL[format]}</li>
+   853→                  <li>
+   854→                    Tipe:{" "}
+   855→                    {REPORT_TYPES.find((r) => r.id === reportType)?.label}
+   856→                  </li>
+   857→                  <li>Cakupan: {scopeType}</li>
+   858→                  <li>Field: {fields.length} dipilih</li>
+   859→                </ul>
+   860→              </div>
+   861→            </div>
+   862→            <DialogFooter className="border-t border-border bg-muted/30 p-4">
+   863→              <DialogClose asChild>
+   864→                <Button
+   865→                  type="button"
+   866→                  variant="outline"
+   867→                  disabled={createTplMut.isPending}
+   868→                >
+   869→                  Batal
+   870→                </Button>
+   871→              </DialogClose>
+   872→              <Button
+   873→                type="submit"
+   874→                disabled={createTplMut.isPending}
+   875→                className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
+   876→              >
+   877→                {createTplMut.isPending && (
+   878→                  <Loader2 className="h-4 w-4 animate-spin" />
+   879→                )}
+   880→                Simpan Template
+   881→              </Button>
+   882→            </DialogFooter>
+   883→          </form>
+   884→        </DialogContent>
+   885→      </Dialog>
+   886→    </div>
+   887→  );
+   888→}
+   889→
+   890→// ====================== Sub-components ======================
+   891→function SectionTitle({
+   892→  step,
+   893→  label,
+   894→  className,
+   895→}: {
+   896→  step: number;
+   897→  label: string;
+   898→  className?: string;
+   899→}) {
+   900→  return (
+   901→    <div className={cn("flex items-center gap-2", className)}>
+   902→      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+   903→        {step}
+   904→      </span>
+   905→      <h3 className="text-sm font-semibold text-foreground">{label}</h3>
+   906→    </div>
+   907→  );
+   908→}
+   909→
+   910→function FormatCard({
+   911→  label,
+   912→  desc,
+   913→  icon,
+   914→  accent,
+   915→  selected,
+   916→  onClick,
+   917→}: {
+   918→  label: string;
+   919→  desc: string;
+   920→  icon: React.ReactNode;
+   921→  accent: string;
+   922→  selected: boolean;
+   923→  onClick: () => void;
+   924→}) {
+   925→  return (
+   926→    <button
+   927→      type="button"
+   928→      onClick={onClick}
+   929→      aria-pressed={selected}
+   930→      className={cn(
+   931→        "relative flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all",
+   932→        selected
+   933→          ? "border-emerald-500 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40"
+   934→          : "border-border bg-card hover:border-emerald-300 hover:bg-emerald-50/40 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/20"
+   935→      )}
+   936→    >
+   937→      <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg", accent)}>
+   938→        {icon}
+   939→      </span>
+   940→      <span className="text-sm font-semibold text-foreground">{label}</span>
+   941→      <span className="text-[11px] text-muted-foreground">{desc}</span>
+   942→      {selected && (
+   943→        <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-white">
+   944→          <Check className="h-3 w-3" />
+   945→        </span>
+   946→      )}
+   947→    </button>
+   948→  );
+   949→}
+   950→
+   951→function ScopeTypeButton({
+   952→  label,
+   953→  icon,
+   954→  selected,
+   955→  onClick,
+   956→}: {
+   957→  label: string;
+   958→  icon: React.ReactNode;
+   959→  selected: boolean;
+   960→  onClick: () => void;
+   961→}) {
+   962→  return (
+   963→    <button
+   964→      type="button"
+   965→      onClick={onClick}
+   966→      aria-pressed={selected}
+   967→      className={cn(
+   968→        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+   969→        selected
+   970→          ? "border-emerald-500 bg-emerald-600 text-white"
+   971→          : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+   972→      )}
+   973→    >
+   974→      {icon}
+   975→      {label}
+   976→    </button>
+   977→  );
+   978→}
+   979→
+   980→function FieldCheckbox({
+   981→  id,
+   982→  label,
+   983→  checked,
+   984→  onToggle,
+   985→}: {
+   986→  id: string;
+   987→  label: string;
+   988→  checked: boolean;
+   989→  onToggle: () => void;
+   990→}) {
+   991→  return (
+   992→    <label
+   993→      htmlFor={`fld-${id}`}
+   994→      className={cn(
+   995→        "flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors",
+   996→        checked
+   997→          ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
+   998→          : "border-border bg-card hover:bg-muted/60"
+   999→      )}
+  1000→    >
+  1001→      <Checkbox id={`fld-${id}`} checked={checked} onCheckedChange={onToggle} />
+  1002→      <span className="font-medium">{label}</span>
+  1003→    </label>
+  1004→  );
+  1005→}
+  1006→
+  1007→function OptionSwitch({
+  1008→  label,
+  1009→  desc,
+  1010→  checked,
+  1011→  onCheckedChange,
+  1012→}: {
+  1013→  label: string;
+  1014→  desc: string;
+  1015→  checked: boolean;
+  1016→  onCheckedChange: (v: boolean) => void;
+  1017→}) {
+  1018→  return (
+  1019→    <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+  1020→      <div className="min-w-0">
+  1021→        <p className="text-sm font-medium text-foreground">{label}</p>
+  1022→        <p className="text-[11px] text-muted-foreground">{desc}</p>
+  1023→      </div>
+  1024→      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+  1025→    </div>
+  1026→  );
+  1027→}
+  1028→
+  1029→function ScopeDetailEditor(props: {
+  1030→  scopeType: ExportScope["type"];
+  1031→  accountId: string;
+  1032→  setAccountId: (v: string) => void;
+  1033→  categoryId: string;
+  1034→  setCategoryId: (v: string) => void;
+  1035→  groupId: string;
+  1036→  setGroupId: (v: string) => void;
+  1037→  tag: string;
+  1038→  setTag: (v: string) => void;
+  1039→  from: string;
+  1040→  setFrom: (v: string) => void;
+  1041→  to: string;
+  1042→  setTo: (v: string) => void;
+  1043→  accounts: Array<{ id: string; name: string }>;
+  1044→  categories: Array<{ id: string; name: string }>;
+  1045→  groups: Array<{ id: string; name: string }>;
+  1046→  tags: Array<{ id: string; name: string }>;
+  1047→}) {
+  1048→  const {
+  1049→    scopeType,
+  1050→    accountId,
+  1051→    setAccountId,
+  1052→    categoryId,
+  1053→    setCategoryId,
+  1054→    groupId,
+  1055→    setGroupId,
+  1056→    tag,
+  1057→    setTag,
+  1058→    from,
+  1059→    setFrom,
+  1060→    to,
+  1061→    setTo,
+  1062→    accounts,
+  1063→    categories,
+  1064→    groups,
+  1065→    tags,
+  1066→  } = props;
+  1067→
+  1068→  if (scopeType === "ALL") {
+  1069→    return (
+  1070→      <p className="mt-3 text-xs text-muted-foreground">
+  1071→        Semua transaksi (kecuali tersembunyi) akan diikutsertakan.
+  1072→      </p>
+  1073→    );
+  1074→  }
+  1075→
+  1076→  if (scopeType === "CUSTOM") {
+  1077→    return (
+  1078→      <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
+  1079→        Mode <strong>Custom</strong> memerlukan pemilihan transaksi manual.
+  1080→        Pilih transaksi dari daftar dan gunakan template ini dengan ID yang
+  1081→        spesifik.
+  1082→      </div>
+  1083→    );
+  1084→  }
+  1085→
+  1086→  if (scopeType === "ACCOUNT") {
+  1087→    return (
+  1088→      <div className="mt-3 space-y-1.5">
+  1089→        <Label htmlFor="sc-acc">Pilih Akun</Label>
+  1090→        <Select value={accountId} onValueChange={setAccountId}>
+  1091→          <SelectTrigger id="sc-acc" className="w-full">
+  1092→            <SelectValue placeholder="Semua akun" />
+  1093→          </SelectTrigger>
+  1094→          <SelectContent>
+  1095→            {accounts.length === 0 ? (
+  1096→              <div className="px-3 py-2 text-xs text-muted-foreground">
+  1097→                Tidak ada akun.
+  1098→              </div>
+  1099→            ) : (
+  1100→              accounts.map((a) => (
+  1101→                <SelectItem key={a.id} value={a.id}>
+  1102→                  {a.name}
+  1103→                </SelectItem>
+  1104→              ))
+  1105→            )}
+  1106→          </SelectContent>
+  1107→        </Select>
+  1108→      </div>
+  1109→    );
+  1110→  }
+  1111→
+  1112→  if (scopeType === "CATEGORY") {
+  1113→    return (
+  1114→      <div className="mt-3 space-y-1.5">
+  1115→        <Label htmlFor="sc-cat">Pilih Kategori</Label>
+  1116→        <Select value={categoryId} onValueChange={setCategoryId}>
+  1117→          <SelectTrigger id="sc-cat" className="w-full">
+  1118→            <SelectValue placeholder="Semua kategori" />
+  1119→          </SelectTrigger>
+  1120→          <SelectContent>
+  1121→            {categories.length === 0 ? (
+  1122→              <div className="px-3 py-2 text-xs text-muted-foreground">
+  1123→                Tidak ada kategori.
+  1124→              </div>
+  1125→            ) : (
+  1126→              categories.map((c) => (
+  1127→                <SelectItem key={c.id} value={c.id}>
+  1128→                  {c.name}
+  1129→                </SelectItem>
+  1130→              ))
+  1131→            )}
+  1132→          </SelectContent>
+  1133→        </Select>
+  1134→      </div>
+  1135→    );
+  1136→  }
+  1137→
+  1138→  if (scopeType === "GROUP") {
+  1139→    return (
+  1140→      <div className="mt-3 space-y-1.5">
+  1141→        <Label htmlFor="sc-grp">Pilih Grup</Label>
+  1142→        <Select value={groupId} onValueChange={setGroupId}>
+  1143→          <SelectTrigger id="sc-grp" className="w-full">
+  1144→            <SelectValue placeholder="Semua grup" />
+  1145→          </SelectTrigger>
+  1146→          <SelectContent>
+  1147→            {groups.length === 0 ? (
+  1148→              <div className="px-3 py-2 text-xs text-muted-foreground">
+  1149→                Tidak ada grup.
+  1150→              </div>
+  1151→            ) : (
+  1152→              groups.map((g) => (
+  1153→                <SelectItem key={g.id} value={g.id}>
+  1154→                  {g.name}
+  1155→                </SelectItem>
+  1156→              ))
+  1157→            )}
+  1158→          </SelectContent>
+  1159→        </Select>
+  1160→      </div>
+  1161→    );
+  1162→  }
+  1163→
+  1164→  if (scopeType === "TAG") {
+  1165→    return (
+  1166→      <div className="mt-3 space-y-1.5">
+  1167→        <Label htmlFor="sc-tag">Tag</Label>
+  1168→        <Input
+  1169→          id="sc-tag"
+  1170→          value={tag}
+  1171→          onChange={(e) => setTag(e.target.value)}
+  1172→          placeholder="cth. liburan, rumah"
+  1173→        />
+  1174→        {tags.length > 0 && (
+  1175→          <div className="flex flex-wrap gap-1">
+  1176→            {tags.slice(0, 8).map((t) => (
+  1177→              <button
+  1178→                key={t.id}
+  1179→                type="button"
+  1180→                onClick={() => setTag(t.name)}
+  1181→                className="rounded-full border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+  1182→              >
+  1183→                {t.name}
+  1184→              </button>
+  1185→            ))}
+  1186→          </div>
+  1187→        )}
+  1188→      </div>
+  1189→    );
+  1190→  }
+  1191→
+  1192→  if (scopeType === "DATE_RANGE") {
+  1193→    return (
+  1194→      <div className="mt-3 grid grid-cols-2 gap-2">
+  1195→        <div className="space-y-1.5">
+  1196→          <Label htmlFor="sc-from">Dari Tanggal</Label>
+  1197→          <Input
+  1198→            id="sc-from"
+  1199→            type="date"
+  1200→            value={from}
+  1201→            onChange={(e) => setFrom(e.target.value)}
+  1202→          />
+  1203→        </div>
+  1204→        <div className="space-y-1.5">
+  1205→          <Label htmlFor="sc-to">Sampai Tanggal</Label>
+  1206→          <Input
+  1207→            id="sc-to"
+  1208→            type="date"
+  1209→            value={to}
+  1210→            onChange={(e) => setTo(e.target.value)}
+  1211→          />
+  1212→        </div>
+  1213→      </div>
+  1214→    );
+  1215→  }
+  1216→
+  1217→  return null;
+  1218→}
+  1219→
+  1220→// ====================== Preview Panel ======================
+  1221→function PreviewPanel({
+  1222→  loading,
+  1223→  preview,
+  1224→  previewError,
+  1225→  fields,
+  1226→  onRetry,
+  1227→}: {
+  1228→  loading: boolean;
+  1229→  previewError: boolean;
+  1230→  onRetry: () => void;
+  1231→  preview:
+  1232→    | {
+  1233→        summary: {
+  1234→          totalIncome: number;
+  1235→          totalExpense: number;
+  1236→          balance: number;
+  1237→          transactionCount: number;
+  1238→          dateRange: { from: string | null; to: string | null };
+  1239→        };
+  1240→        categoryBreakdown: Array<{
+  1241→          category: string;
+  1242→          total: number;
+  1243→          count: number;
+  1244→          percentage: number;
+  1245→        }>;
+  1246→        topMerchants: Array<{
+  1247→          merchant: string;
+  1248→          total: number;
+  1249→          count: number;
+  1250→        }>;
+  1251→        transactions: Transaction[];
+  1252→        fields: string[];
+  1253→        estimatedSize: string;
+  1254→      }
+  1255→    | undefined;
+  1256→  fields: string[];
+  1257→}) {
+  1258→  if (loading && !preview) {
+  1259→    return (
+  1260→      <Card className="p-5">
+  1261→        <div className="space-y-4">
+  1262→          <div className="flex items-center justify-between">
+  1263→            <Skeleton className="h-5 w-40" />
+  1264→            <Skeleton className="h-5 w-20" />
+  1265→          </div>
+  1266→          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+  1267→            {Array.from({ length: 4 }).map((_, i) => (
+  1268→              <Skeleton key={i} className="h-20 rounded-xl" />
+  1269→            ))}
+  1270→          </div>
+  1271→          <Skeleton className="h-24 rounded-xl" />
+  1272→          <Skeleton className="h-40 rounded-xl" />
+  1273→        </div>
+  1274→      </Card>
+  1275→    );
+  1276→  }
+  1277→
+  1278→  if (previewError && !preview) {
+  1279→    return (
+  1280→      <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+  1281→        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
+  1282→          <AlertCircle className="h-7 w-7 text-destructive" />
+  1283→        </span>
+  1284→        <div>
+  1285→          <p className="text-sm font-medium text-foreground">
+  1286→            Gagal memuat preview
+  1287→          </p>
+  1288→          <p className="mt-0.5 text-xs text-muted-foreground">
+  1289→            Server mungkin sedang tidak aktif. Coba lagi sebentar.
+  1290→          </p>
+  1291→        </div>
+  1292→        <Button
+  1293→          variant="outline"
+  1294→          size="sm"
+  1295→          className="mt-1 gap-1.5"
+  1296→          onClick={onRetry}
+  1297→        >
+  1298→          <RefreshCw className="h-3.5 w-3.5" />
+  1299→          Coba lagi
+  1300→        </Button>
+  1301→      </Card>
+  1302→    );
+  1303→  }
+  1304→
+  1305→  if (!preview) {
+  1306→    return (
+  1307→      <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+  1308→        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+  1309→          {loading ? (
+  1310→            <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+  1311→          ) : (
+  1312→            <Eye className="h-7 w-7 text-muted-foreground" />
+  1313→          )}
+  1314→        </span>
+  1315→        <div>
+  1316→          <p className="text-sm font-medium text-foreground">
+  1317→            {loading ? "Memuat preview..." : "Menunggu konfigurasi"}
+  1318→          </p>
+  1319→          <p className="mt-0.5 text-xs text-muted-foreground">
+  1320→            {loading
+  1321→              ? "Mengambil data dari server..."
+  1322→              : "Preview akan muncul otomatis saat konfigurasi berubah."}
+  1323→          </p>
+  1324→        </div>
+  1325→      </Card>
+  1326→    );
+  1327→  }
+  1328→
+  1329→  const s = preview.summary;
+  1330→  const hasData = s.transactionCount > 0;
+  1331→  const topCategories = preview.categoryBreakdown.slice(0, 5);
+  1332→  const topMerchants = preview.topMerchants.slice(0, 5);
+  1333→  const previewTxs = preview.transactions.slice(0, 10);
+  1334→
+  1335→  return (
+  1336→    <Card className="p-5">
+  1337→      {/* Header */}
+  1338→      <div className="flex items-center justify-between gap-3">
+  1339→        <div className="flex items-center gap-2">
+  1340→          <Eye className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+  1341→          <h3 className="text-sm font-semibold text-foreground">
+  1342→            Live Preview
+  1343→          </h3>
+  1344→        </div>
+  1345→        <Badge
+  1346→          variant="secondary"
+  1347→          className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+  1348→        >
+  1349→          {preview.estimatedSize}
+  1350→        </Badge>
+  1351→      </div>
+  1352→
+  1353→      {!hasData ? (
+  1354→        <div className="mt-6 flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-10 text-center">
+  1355→          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+  1356→            <Database className="h-6 w-6 text-muted-foreground" />
+  1357→          </span>
+  1358→          <div>
+  1359→            <p className="text-sm font-medium text-foreground">
+  1360→              Tidak ada transaksi
+  1361→            </p>
+  1362→            <p className="mt-0.5 text-xs text-muted-foreground">
+  1363→              Ubah cakupan data atau sertakan transaksi tersembunyi untuk
+  1364→              melihat preview.
+  1365→            </p>
+  1366→          </div>
+  1367→        </div>
+  1368→      ) : (
+  1369→        <div className="mt-4 space-y-4">
+  1370→          {/* Summary cards */}
+  1371→          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+  1372→            <SummaryMini
+  1373→              label="Pemasukan"
+  1374→              value={formatCurrencyCompact(s.totalIncome)}
+  1375→              tone="income"
+  1376→            />
+  1377→            <SummaryMini
+  1378→              label="Pengeluaran"
+  1379→              value={formatCurrencyCompact(s.totalExpense)}
+  1380→              tone="expense"
+  1381→            />
+  1382→            <SummaryMini
+  1383→              label="Saldo"
+  1384→              value={formatCurrencyCompact(s.balance)}
+  1385→              tone={s.balance >= 0 ? "income" : "expense"}
+  1386→            />
+  1387→            <SummaryMini
+  1388→              label="Transaksi"
+  1389→              value={String(s.transactionCount)}
+  1390→              tone="default"
+  1391→            />
+  1392→          </div>
+  1393→
+  1394→          {/* Date range */}
+  1395→          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+  1396→            <span className="text-muted-foreground">Rentang Tanggal</span>
+  1397→            <span className="font-medium text-foreground">
+  1398→              {s.dateRange.from && s.dateRange.to
+  1399→                ? `${formatDate(s.dateRange.from)} — ${formatDate(s.dateRange.to)}`
+  1400→                : s.dateRange.from
+  1401→                ? `mulai ${formatDate(s.dateRange.from)}`
+  1402→                : s.dateRange.to
+  1403→                ? `hingga ${formatDate(s.dateRange.to)}`
+  1404→                : "—"}
+  1405→            </span>
+  1406→          </div>
+  1407→
+  1408→          {/* Category breakdown */}
+  1409→          <div className="rounded-xl border border-border p-3">
+  1410→            <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+  1411→              <Layers className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+  1412→              Top Kategori
+  1413→            </p>
+  1414→            <div className="mt-2 space-y-2">
+  1415→              {topCategories.length === 0 ? (
+  1416→                <p className="text-xs text-muted-foreground">
+  1417→                  Tidak ada pengeluaran.
+  1418→                </p>
+  1419→              ) : (
+  1420→                topCategories.map((c) => (
+  1421→                  <CategoryRow
+  1422→                    key={c.category}
+  1423→                    name={c.category}
+  1424→                    total={c.total}
+  1425→                    percentage={c.percentage}
+  1426→                    count={c.count}
+  1427→                  />
+  1428→                ))
+  1429→              )}
+  1430→            </div>
+  1431→          </div>
+  1432→
+  1433→          {/* Top merchants */}
+  1434→          {topMerchants.length > 0 && (
+  1435→            <div className="rounded-xl border border-border p-3">
+  1436→              <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+  1437→                <Store className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+  1438→                Top Merchant
+  1439→              </p>
+  1440→              <div className="mt-2 space-y-1.5">
+  1441→                {topMerchants.map((m, idx) => (
+  1442→                  <MerchantRow
+  1443→                    key={m.merchant}
+  1444→                    idx={idx + 1}
+  1445→                    name={m.merchant}
+  1446→                    total={m.total}
+  1447→                    count={m.count}
+  1448→                  />
+  1449→                ))}
+  1450→              </div>
+  1451→            </div>
+  1452→          )}
+  1453→
+  1454→          {/* Transaction preview table */}
+  1455→          <div className="rounded-xl border border-border">
+  1456→            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+  1457→              <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+  1458→                <Wand2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+  1459→                Preview Transaksi
+  1460→              </p>
+  1461→              <span className="text-[11px] text-muted-foreground">
+  1462→                Menampilkan {previewTxs.length} dari{" "}
+  1463→                {s.transactionCount} transaksi
+  1464→              </span>
+  1465→            </div>
+  1466→            <div className="max-h-96 overflow-y-auto overflow-x-auto [scrollbar-width:thin]">
+  1467→              <UiTable>
+  1468→                <TableHeader>
+  1469→                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+  1470→                    {fields.includes("date") && (
+  1471→                      <TableHead className="text-[11px]">Tanggal</TableHead>
+  1472→                    )}
+  1473→                    {fields.includes("type") && (
+  1474→                      <TableHead className="text-[11px]">Tipe</TableHead>
+  1475→                    )}
+  1476→                    {fields.includes("description") && (
+  1477→                      <TableHead className="text-[11px]">Keterangan</TableHead>
+  1478→                    )}
+  1479→                    {fields.includes("category") && (
+  1480→                      <TableHead className="text-[11px]">Kategori</TableHead>
+  1481→                    )}
+  1482→                    {fields.includes("account") && (
+  1483→                      <TableHead className="text-[11px]">Akun</TableHead>
+  1484→                    )}
+  1485→                    {fields.includes("merchant") && (
+  1486→                      <TableHead className="text-[11px]">Merchant</TableHead>
+  1487→                    )}
+  1488→                    {fields.includes("amount") && (
+  1489→                      <TableHead className="text-[11px] text-right">Jumlah</TableHead>
+  1490→                    )}
+  1491→                    {fields.includes("note") && (
+  1492→                      <TableHead className="text-[11px]">Catatan</TableHead>
+  1493→                    )}
+  1494→                    {fields.includes("tags") && (
+  1495→                      <TableHead className="text-[11px]">Tag</TableHead>
+  1496→                    )}
+  1497→                    {fields.includes("mood") && (
+  1498→                      <TableHead className="text-[11px]">Suasana</TableHead>
+  1499→                    )}
+  1500→                    {fields.includes("priority") && (
+  1501→                      <TableHead className="text-[11px]">Prioritas</TableHead>
+  1502→                    )}
+  1503→                    {fields.includes("paymentMethod") && (
+  1504→                      <TableHead className="text-[11px]">Metode</TableHead>
+  1505→                    )}
+  1506→                  </TableRow>
+  1507→                </TableHeader>
+  1508→                <TableBody>
+  1509→                  {previewTxs.map((tx) => (
+  1510→                    <PreviewRow
+  1511→                      key={tx.id}
+  1512→                      tx={tx}
+  1513→                      fields={fields}
+  1514→                    />
+  1515→                  ))}
+  1516→                </TableBody>
+  1517→              </UiTable>
+  1518→            </div>
+  1519→          </div>
+  1520→
+  1521→          <p className="text-[11px] text-muted-foreground">
+  1522→            Tanggal panjang: {formatDateLong(preview.transactions[0]?.date ?? new Date())}
+  1523→          </p>
+  1524→        </div>
+  1525→      )}
+  1526→    </Card>
+  1527→  );
+  1528→}
+  1529→
+  1530→function SummaryMini({
+  1531→  label,
+  1532→  value,
+  1533→  tone,
+  1534→}: {
+  1535→  label: string;
+  1536→  value: string;
+  1537→  tone: "default" | "income" | "expense";
+  1538→}) {
+  1539→  return (
+  1540→    <div className="rounded-xl border border-border bg-card p-3">
+  1541→      <p className="text-[11px] text-muted-foreground">{label}</p>
+  1542→      <p
+  1543→        className={cn(
+  1544→          "mt-1 text-base font-bold tabular-nums",
+  1545→          tone === "income" && "text-emerald-600 dark:text-emerald-400",
+  1546→          tone === "expense" && "text-rose-600 dark:text-rose-400"
+  1547→        )}
+  1548→      >
+  1549→        {value}
+  1550→      </p>
+  1551→    </div>
+  1552→  );
+  1553→}
+  1554→
+  1555→function CategoryRow({
+  1556→  name,
+  1557→  total,
+  1558→  percentage,
+  1559→  count,
+  1560→}: {
+  1561→  name: string;
+  1562→  total: number;
+  1563→  percentage: number;
+  1564→  count: number;
+  1565→}) {
+  1566→  const pct = Math.min(Math.max(percentage, 0), 100);
+  1567→  return (
+  1568→    <div>
+  1569→      <div className="flex items-center justify-between text-xs">
+  1570→        <span className="font-medium text-foreground">{name}</span>
+  1571→        <span className="tabular-nums text-muted-foreground">
+  1572→          {formatCurrencyCompact(total)} · {count} tx
+  1573→        </span>
+  1574→      </div>
+  1575→      <div
+  1576→        className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+  1577→        role="progressbar"
+  1578→        aria-valuemin={0}
+  1579→        aria-valuemax={100}
+  1580→        aria-valuenow={Math.round(pct)}
+  1581→      >
+  1582→        <div
+  1583→          className="h-full rounded-full bg-emerald-500"
+  1584→          style={{ width: `${pct}%` }}
+  1585→        />
+  1586→      </div>
+  1587→    </div>
+  1588→  );
+  1589→}
+  1590→
+  1591→function MerchantRow({
+  1592→  idx,
+  1593→  name,
+  1594→  total,
+  1595→  count,
+  1596→}: {
+  1597→  idx: number;
+  1598→  name: string;
+  1599→  total: number;
+  1600→  count: number;
+  1601→}) {
+  1602→  return (
+  1603→    <div className="flex items-center justify-between gap-2 text-xs">
+  1604→      <div className="flex min-w-0 items-center gap-2">
+  1605→        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+  1606→          {idx}
+  1607→        </span>
+  1608→        <span className="truncate font-medium text-foreground">{name}</span>
+  1609→      </div>
+  1610→      <span className="tabular-nums text-muted-foreground">
+  1611→        {formatCurrencyCompact(total)} · {count} tx
+  1612→      </span>
+  1613→    </div>
+  1614→  );
+  1615→}
+  1616→
+  1617→function PreviewRow({
+  1618→  tx,
+  1619→  fields,
+  1620→}: {
+  1621→  tx: Transaction;
+  1622→  fields: string[];
+  1623→}) {
+  1624→  const tags = tx.tags
+  1625→    ? tx.tags.split(",").map((t) => t.trim()).filter(Boolean)
+  1626→    : [];
+  1627→  return (
+  1628→    <TableRow>
+  1629→      {fields.includes("date") && (
+  1630→        <TableCell className="text-xs whitespace-nowrap">
+  1631→          {formatDate(tx.date)}
+  1632→        </TableCell>
+  1633→      )}
+  1634→      {fields.includes("type") && (
+  1635→        <TableCell className="text-xs whitespace-nowrap">
+  1636→          <Badge
+  1637→            variant="secondary"
+  1638→            className={cn(
+  1639→              "border-transparent",
+  1640→              tx.type === "INCOME"
+  1641→                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+  1642→                : "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"
+  1643→            )}
+  1644→          >
+  1645→            {tx.type === "INCOME" ? "Masuk" : "Keluar"}
+  1646→          </Badge>
+  1647→        </TableCell>
+  1648→      )}
+  1649→      {fields.includes("description") && (
+  1650→        <TableCell className="text-xs max-w-[180px] truncate">
+  1651→          {tx.description}
+  1652→        </TableCell>
+  1653→      )}
+  1654→      {fields.includes("category") && (
+  1655→        <TableCell className="text-xs whitespace-nowrap">
+  1656→          {tx.category?.name ?? "—"}
+  1657→        </TableCell>
+  1658→      )}
+  1659→      {fields.includes("account") && (
+  1660→        <TableCell className="text-xs whitespace-nowrap">
+  1661→          {tx.account?.name ?? "—"}
+  1662→        </TableCell>
+  1663→      )}
+  1664→      {fields.includes("merchant") && (
+  1665→        <TableCell className="text-xs whitespace-nowrap">
+  1666→          {tx.merchant ?? "—"}
+  1667→        </TableCell>
+  1668→      )}
+  1669→      {fields.includes("amount") && (
+  1670→        <TableCell
+  1671→          className={cn(
+  1672→            "text-xs text-right tabular-nums whitespace-nowrap",
+  1673→            tx.type === "INCOME"
+  1674→              ? "text-emerald-600 dark:text-emerald-400"
+  1675→              : "text-rose-600 dark:text-rose-400"
+  1676→          )}
+  1677→        >
+  1678→          {tx.type === "INCOME" ? "+" : "-"}
+  1679→          {formatCurrency(tx.amount)}
+  1680→        </TableCell>
+  1681→      )}
+  1682→      {fields.includes("note") && (
+  1683→        <TableCell className="text-xs max-w-[140px] truncate">
+  1684→          {tx.note ?? "—"}
+  1685→        </TableCell>
+  1686→      )}
+  1687→      {fields.includes("tags") && (
+  1688→        <TableCell className="text-xs">
+  1689→          {tags.length === 0 ? (
+  1690→            "—"
+  1691→          ) : (
+  1692→            <div className="flex flex-wrap gap-1">
+  1693→              {tags.slice(0, 3).map((t) => (
+  1694→                <span
+  1695→                  key={t}
+  1696→                  className="rounded-full bg-muted px-1.5 py-0.5 text-[10px]"
+  1697→                >
+  1698→                  {t}
+  1699→                </span>
+  1700→              ))}
+  1701→            </div>
+  1702→          )}
+  1703→        </TableCell>
+  1704→      )}
+  1705→      {fields.includes("mood") && (
+  1706→        <TableCell className="text-xs whitespace-nowrap">
+  1707→          {tx.mood ?? "—"}
+  1708→        </TableCell>
+  1709→      )}
+  1710→      {fields.includes("priority") && (
+  1711→        <TableCell className="text-xs whitespace-nowrap">
+  1712→          {tx.priority ?? "—"}
+  1713→        </TableCell>
+  1714→      )}
+  1715→      {fields.includes("paymentMethod") && (
+  1716→        <TableCell className="text-xs whitespace-nowrap">
+  1717→          {tx.paymentMethod ?? "—"}
+  1718→        </TableCell>
+  1719→      )}
+  1720→    </TableRow>
+  1721→  );
+  1722→}
+  1723→
+  1724→// ====================== Template Card ======================
+  1725→function TemplateCard({
+  1726→  template,
+  1727→  onUse,
+  1728→  onDelete,
+  1729→  deleting,
+  1730→}: {
+  1731→  template: ExportTemplate;
+  1732→  onUse: () => void;
+  1733→  onDelete: () => void;
+  1734→  deleting: boolean;
+  1735→}) {
+  1736→  const fmt =
+  1737→    template.format === "IMAGE" ? "IMG" : template.format;
+  1738→  const reportLabel =
+  1739→    REPORT_TYPES.find((r) => r.id === template.reportType)?.label ??
+  1740→    template.reportType;
+  1741→  return (
+  1742→    <Card className="flex flex-col gap-3 p-4 transition-shadow hover:shadow-md">
+  1743→      <div className="flex items-start justify-between gap-2">
+  1744→        <div className="min-w-0">
+  1745→          <p className="truncate text-sm font-semibold text-foreground">
+  1746→            {template.name}
+  1747→          </p>
+  1748→          <p className="text-[11px] text-muted-foreground">{reportLabel}</p>
+  1749→        </div>
+  1750→        <Badge
+  1751→          variant="secondary"
+  1752→          className={cn(
+  1753→            "border-transparent",
+  1754→            fmt === "PDF" &&
+  1755→              "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400",
+  1756→            fmt === "EXCEL" &&
+  1757→              "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
+  1758→            fmt === "CSV" &&
+  1759→              "bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-400",
+  1760→            fmt === "JSON" &&
+  1761→              "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+  1762→            fmt === "IMG" &&
+  1763→              "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400"
+  1764→          )}
+  1765→        >
+  1766→          {fmt}
+  1767→        </Badge>
+  1768→      </div>
+  1769→      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+  1770→        <span>
+  1771→          Cakupan:{" "}
+  1772→          <span className="font-medium text-foreground">
+  1773→            {template.scope?.type ?? "ALL"}
+  1774→          </span>
+  1775→        </span>
+  1776→        {template.isPreset && (
+  1777→          <Badge
+  1778→            variant="outline"
+  1779→            className="border-emerald-200 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400"
+  1780→          >
+  1781→            Preset
+  1782→          </Badge>
+  1783→        )}
+  1784→      </div>
+  1785→      <div className="flex items-center gap-2">
+  1786→        <Button
+  1787→          size="sm"
+  1788→          variant="outline"
+  1789→          className="flex-1 gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+  1790→          onClick={onUse}
+  1791→        >
+  1792→          <Wand2 className="h-3.5 w-3.5" />
+  1793→          Gunakan
+  1794→        </Button>
+  1795→        {!template.isPreset && (
+  1796→          <AlertDialog>
+  1797→            <AlertDialogTrigger asChild>
+  1798→              <Button
+  1799→                size="icon"
+  1800→                variant="ghost"
+  1801→                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+  1802→                disabled={deleting}
+  1803→                aria-label="Hapus template"
+  1804→              >
+  1805→                <Trash2 className="h-3.5 w-3.5" />
+  1806→              </Button>
+  1807→            </AlertDialogTrigger>
+  1808→            <AlertDialogContent>
+  1809→              <AlertDialogHeader>
+  1810→                <AlertDialogTitle>Hapus template ini?</AlertDialogTitle>
+  1811→                <AlertDialogDescription>
+  1812→                  Template <strong>{template.name}</strong> akan dihapus.
+  1813→                  Tindakan ini tidak dapat dibatalkan.
+  1814→                </AlertDialogDescription>
+  1815→              </AlertDialogHeader>
+  1816→              <AlertDialogFooter>
+  1817→                <AlertDialogCancel>Batal</AlertDialogCancel>
+  1818→                <AlertDialogAction
+  1819→                  onClick={onDelete}
+  1820→                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+  1821→                >
+  1822→                  {deleting && (
+  1823→                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+  1824→                  )}
+  1825→                  Hapus
+  1826→                </AlertDialogAction>
+  1827→              </AlertDialogFooter>
+  1828→            </AlertDialogContent>
+  1829→          </AlertDialog>
+  1830→        )}
+  1831→      </div>
+  1832→    </Card>
+  1833→  );
+  1834→}
+  1835→
