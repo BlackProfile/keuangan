@@ -24,6 +24,9 @@ import { SecuritySection } from "@/components/finance/security-section";
 import { AuditSection } from "@/components/finance/audit-section";
 import { SharesSection } from "@/components/finance/shares-section";
 import { ExportSection } from "@/components/finance/export-section";
+import { StudentSection } from "@/components/finance/student-section";
+import { PatunganSection } from "@/components/finance/patungan-section";
+import { JajanButton } from "@/components/finance/jajan-button";
 import {
   useCategories,
   useCreateTransaction,
@@ -305,6 +308,8 @@ export default function Home() {
               {section === "recurring" && <RecurringSection />}
               {section === "debts" && <DebtsSection />}
               {section === "templates" && <TemplatesSection />}
+              {section === "student" && <StudentSection />}
+              {section === "patungan" && <PatunganSection />}
               {section === "calendar" && <CalendarSection />}
               {section === "analytics" && <AnalyticsSection />}
               {section === "ai" && (
@@ -349,6 +354,9 @@ export default function Home() {
             transaction={editing}
             prefill={prefill}
           />
+
+          {/* Quick Jajan Button (student feature) */}
+          <JajanButton />
         </AppShell>
       </div>
 

@@ -421,3 +421,104 @@ model ExportTemplate {
   @@index([format])
   @@index([reportType])
 }
+
+// ============ STUDENT FEATURES ============
+
+model StudentProfile {
+  id              String   @id @default(cuid())
+  monthlyAllowance Float   @default(0)
+  allowanceDay    Int      @default(1) // day of month allowance arrives
+  semester        String?  // e.g. "Semester 6"
+  academicMode    String   @default("KULIAH") // KULIAH | UTS | UAS | LIBUR | SKRIPSI | MAGANG
+  university      String?
+  major           String?
+  academicYear    String?  // e.g. "2026/2027"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Challenge {
+  id              String   @id @default(cuid())
+  name            String
+  description     String
+  type            String   // SAVINGS | NO_JAJAN | MINIMAL_SPEND | WEEKLY | CUSTOM
+  targetAmount    Float?
+  targetDays      Int?
+  icon            String   @default("Trophy")
+  color           String   @default("#10b981")
+  reward          String?  // e.g. "Unlock tema baru"
+  xpReward        Int      @default(100)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  participations  ChallengeParticipation[]
+}
+
+model ChallengeParticipation {
+  id              String   @id @default(cuid())
+  challengeId     String
+  startDate       DateTime @default(now())
+  endDate         DateTime?
+  status          String   @default("ACTIVE") // ACTIVE | COMPLETED | FAILED | ABANDONED
+  progress        Float    @default(0) // 0-100
+  currentAmount   Float    @default(0)
+  xpEarned        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  challenge       Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@index([challengeId])
+  @@index([status])
+}
+
+model SplitBill {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?
+  totalAmount     Float
+  paidBy          String   // person who paid
+  splitType       String   @default("EQUAL") // EQUAL | CUSTOM | PERCENTAGE
+  category        String   @default("MAKAN") // MAKAN | KOS | EVENT | TRANSPORT | OTHER
+  date            DateTime @default(now())
+  settled         Boolean  @default(false)
+  icon            String   @default("UtensilsCrossed")
+  color           String   @default("#f97316")
+  note            String?
+  participants    SplitBillParticipant[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([settled])
+  @@index([date])
+}
+
+model SplitBillParticipant {
+  id              String   @id @default(cuid())
+  splitBillId     String
+  name            String
+  share           Float    @default(0) // amount this person owes
+  paid            Boolean  @default(false)
+  paidAt          DateTime?
+  splitBill       SplitBill @relation(fields: [splitBillId], references: [id], onDelete: Cascade)
+
+  @@index([splitBillId])
+  @@index([paid])
+}
+
+model FriendDebt {
+  id              String   @id @default(cuid())
+  friendName      String
+  type            String   @default("DEBT") // DEBT (teman berhutang ke saya) | RECEIVABLE (saya berhutang ke teman)
+  amount          Float
+  description     String?
+  date            DateTime @default(now())
+  dueDate         DateTime?
+  settled         Boolean  @default(false)
+  reminderSent    Boolean  @default(false)
+  note            String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type])
+  @@index([settled])
+  @@index([friendName])
+}

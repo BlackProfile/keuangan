@@ -1519,3 +1519,122 @@ Stage Summary:
 - 12 report types, 7 scope types, 12 field selections
 - Options: includeHidden, watermark, title, groupBy, showSummary, showCharts
 - All lint-clean, APIs verified
+
+---
+Task ID: STU-API
+Agent: sub-agent (general-purpose)
+Task: Build API routes for DompetKu student features (14 route files across 6 resource groups)
+
+Work Log:
+- Read worklog.md, db.ts, format.ts, types.ts, student-constants.ts, schema.prisma, and existing routes (transactions, debts, ai/chat) to match codebase conventions (NextResponse, db from "@/lib/db", try/catch, Next.js 16 `params: Promise<{ id: string }>`).
+- Created 14 API route files (all under `/src/app/api/`):
+
+  1. `student-profile/route.ts` — GET (findFirst, return null if none) + PUT (upsert: findFirst → update or create). Validates monthlyAllowance (>=0), allowanceDay (integer 1-31), academicMode (against KULIAH|UTS|UAS|LIBUR|SKRIPSI|MAGANG enum).
+  2. `student-profile/daily/route.ts` — GET computes `DailyAllowanceInfo`. Pulls StudentProfile (defaults allowance=0/day=1 if absent), current-month EXPENSE transactions (isHidden=false), sums spentThisMonth, computes daysInMonth/dayOfMonth/daysRemaining/dailyAllowance/dailySpent/dailyRemaining/remainingThisMonth. Projection: if dailySpent>dailyAllowance, projects willRunOutDay = dayOfMonth + floor(remaining/dailySpent), deficit = dailySpent*daysRemaining - remainingThisMonth, dailyCutNeeded = deficit/daysRemaining. Friendly Indonesian message ("Uang saku aman sampai akhir bulan!" vs "Hati-hati, uang saku habis tanggal X. Kurangi RpY/hari.").
+  3. `challenges/route.ts` — GET seeds DEFAULT_CHALLENGES via createMany if table is empty, then returns active challenges with participations included (ordered by createdAt asc).
+  4. `challenges/join/route.ts` — POST body {challengeId}. Validates challenge exists + active, prevents duplicate ACTIVE participation (409), creates ChallengeParticipation with status="ACTIVE", progress=0, currentAmount=0, xpEarned=0.
+  5. `challenges/participations/route.ts` — GET lists all participations with challenge included, ordered by createdAt desc.
+  6. `challenges/participations/[id]/route.ts` — DELETE soft-abandons (sets status="ABANDONED", endDate=now) keeping history, returns updated participation with challenge.
+  7. `split-bills/route.ts` — GET lists with participants, ordered by settled asc (unsettled first) then date desc. POST creates SplitBill + nested participants.create. Validates title, totalAmount>0, paidBy, participants non-empty. For splitType=EQUAL, share=totalAmount/participants.length is auto-computed; for CUSTOM/PERCENTAGE uses provided share. Validates splitType against EQUAL|CUSTOM|PERCENTAGE and category against MAKAN|KOS|EVENT|TRANSPORT|OTHER (defaults EQUAL / MAKAN). Defaults icon="UtensilsCrossed", color="#f97316", settled=false.
+  8. `split-bills/[id]/route.ts` — DELETE explicitly deletes participants then bill (cascade safety). Returns 204.
+  9. `split-bills/[id]/settle/route.ts` — POST marks all participants paid=true with paidAt=now and bill settled=true via $transaction for atomicity.
+  10. `split-bills/participants/[id]/paid/route.ts` — POST toggles paid status. After toggling, re-fetches all participants of the bill and syncs SplitBill.settled = (every participant paid). This keeps settled flag consistent whether toggling on or off.
+  11. `friend-debts/route.ts` — GET lists ordered by settled asc, date desc, createdAt desc. POST creates FriendDebt. Validates friendName non-empty, type in (DEBT|RECEIVABLE), amount>0. Parses date & dueDate via parseDateLocal. Defaults settled=false, reminderSent=false.
+  12. `friend-debts/[id]/settle/route.ts` — POST sets settled=true (404 if not found).
+  13. `friend-debts/[id]/route.ts` — DELETE hard-deletes (404 if not found, returns 204).
+  14. `ai/jajan-check/route.ts` — POST body {amount}. Validates amount>0. Fetches StudentProfile + current-month EXPENSE transactions, computes monthlyAllowance, spentThisMonth, remainingThisMonth, dailyAllowance, dailySpent, dailyRemaining, daysRemaining. canAfford = remainingThisMonth>=amount && dailyRemaining>=amount (returns true if no allowance configured). Builds Indonesian system prompt per spec with allowance/remaining/daily/budget context, calls ZAI via `ZAI.create()` → `zai.chat.completions.create({messages:[system,user], thinking:{type:'disabled'}})`. Returns {reply, canAfford, remaining}. AI errors fall back to deterministic friendly Indonesian reply (formatCurrency based). All other errors return fallback reply with canAfford=false, remaining=0 (status 200, graceful).
+
+Pattern consistency: every route uses `import { NextResponse } from "next/server"`, `import { db } from "@/lib/db"`, try/catch with `console.error("[METHOD /path]", err)` and Indonesian error message JSON `{error: "..."}`. All dynamic [id] routes use `params: Promise<{ id: string }>` and `const { id } = await params;` per Next.js 16.
+
+Verification:
+- `bun run lint` → **0 errors, 0 warnings in my 14 files** (1 unrelated pre-existing warning in `jajan-button.tsx` from another sub-agent, out of scope).
+- All 14 files follow existing codebase conventions (no new dependencies introduced; z-ai-web-dev-sdk already in package.json).
+- Files created:
+  - /src/app/api/student-profile/route.ts
+  - /src/app/api/student-profile/daily/route.ts
+  - /src/app/api/challenges/route.ts
+  - /src/app/api/challenges/join/route.ts
+  - /src/app/api/challenges/participations/route.ts
+  - /src/app/api/challenges/participations/[id]/route.ts
+  - /src/app/api/split-bills/route.ts
+  - /src/app/api/split-bills/[id]/route.ts
+  - /src/app/api/split-bills/[id]/settle/route.ts
+  - /src/app/api/split-bills/participants/[id]/paid/route.ts
+  - /src/app/api/friend-debts/route.ts
+  - /src/app/api/friend-debts/[id]/settle/route.ts
+  - /src/app/api/friend-debts/[id]/route.ts
+  - /src/app/api/ai/jajan-check/route.ts
+
+Stage Summary:
+- 14 new API route files implementing the full student-features backend: profile upsert, daily allowance projection with friendly Indonesian messaging, gamified challenges (with default-seed fallback), split-bill CRUD with auto-equal-share computation + settle/toggle-paid, friend-debt CRUD + settle, and ZAI-powered "jajan check" affordability AI with graceful fallback.
+- Schema models utilized: StudentProfile, Challenge, ChallengeParticipation, SplitBill, SplitBillParticipant, FriendDebt, Transaction (existing).
+- Helpers/constants used: parseDateLocal, getMonthKey, getMonthLabel, formatDateInput, formatCurrency from "@/lib/format"; DEFAULT_CHALLENGES from "@/lib/student-constants"; types from "@/lib/types".
+- Lint-clean (0 errors). Ready for frontend wiring (student-section component, hooks, etc.) in a follow-up task.
+
+---
+Task ID: STU-UI
+Agent: student-ui-builder
+Task: Build 3 production-quality React components for DompetKu student features (Mode Mahasiswa).
+
+Work Log:
+- Baca references: budgets-section.tsx (card+dialog patterns), goals-section.tsx (progress patterns), hooks.ts (student/split/debt hooks), types.ts (StudentProfile, Challenge, SplitBill, FriendDebt, DailyAllowanceInfo), student-constants.ts (JAJAN_PRESETS, ACADEMIC_MODES, LEVEL_MILESTONES, FUN_FACTS, SPLIT_BILL_CATEGORIES, XP_PER_LEVEL), format.ts (formatCurrency, formatDateInput, formatDateLong).
+- Buat `src/components/finance/jajan-button.tsx`:
+  - Floating emerald button (Coffee icon) posisi `fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-30` (di atas FAB mobile yg z-50).
+  - Klik → bottom Sheet dengan grid JAJAN_PRESETS (2/3 col) + form jajan manual (amount + description).
+  - Tiap preset → useCreateTransaction(EXPENSE) dengan date today + time now, toast sukses, auto-close sheet.
+  - Form manual pakai useJajanCheck utk verdict AI inline (canAfford/reply).
+  - Helper resolveCategoryId: cari by nama (case-insensitive), fallback "Makanan".
+- Buat `src/components/finance/student-section.tsx`:
+  - Hero Uang Saku card (gradient emerald): jika blm ada profile → empty state "Atur Uang Saku"; jika ada → monthly allowance besar, mini-card harian (dailyRemaining/dailySpent/dailyAllowance + progress bar), mini-card bulanan (remainingThisMonth/spentThisMonth/monthlyAllowance + progress bar), footer projection message (hijau jika aman, amber jika willRunOutDay != null), badge academic mode (ACADEMIC_MODES icon/color).
+  - StudentProfileDialog: form monthlyAllowance, allowanceDay (select 1-28), academicMode (ACADEMIC_MODES), semester, university, major, academicYear → useUpdateStudentProfile.
+  - QuickJajanGrid: grid 2-col mobile / 4-col desktop JAJAN_PRESETS + tombol "Jangan lain" (dashed) → CustomJajanDialog. Pakai useCreateTransaction + fallback category "Makanan".
+  - GamificationStats: totalXP = sum(participations.xpEarned) + transactionCount*10; level = floor(totalXP/XP_PER_LEVEL)+1; progress bar XP; title dari LEVEL_MILESTONES; streak + transactionCount dari useDashboard; fun fact dari FUN_FACTS berdasarkan remainingThisMonth.
+  - Challenges: useChallenges + useChallengeParticipations. Available grid dgn tombol "Gabung" (atau progress bar jika sudah joined). Active participations card dgn progress, days remaining, tombol "Tinggalkan" (AlertDialog). Completed shown as badge dgn checkmark + XP.
+- Buat `src/components/finance/patungan-section.tsx`:
+  - Header dgn "Tambah Hutang" + "Buat Patungan" buttons.
+  - Stats strip 3 card: total saya berhutang (DEBT !settled), total teman berhutang (RECEIVABLE !settled), total patungan belum settle.
+  - Split Bills: card per bill dgn icon (by category), title, total, paidBy, date, badge kategori + lunas, list participants dgn checkbox paid + tombol "Tandai Lunas" (useMarkParticipantPaid), "Settle Semua" (useSettleSplitBill), delete (AlertDialog). Empty state.
+  - SplitBillFormDialog: title, totalAmount, paidBy, splitType (EQUAL/CUSTOM), category select (SPLIT_BILL_CATEGORIES), participants dinamis (add/remove, share auto-compute utk EQUAL), note. Validasi min 2 peserta + share sum == total utk CUSTOM.
+  - Friend Debts dgn Tabs ("Saya Berhutang" / "Teman Berhutang"). Card per debt dgn friendName, amount (warna by type), description, date, dueDate dgn overdue badge, tombol settle + delete. Per-tab empty state.
+  - FriendDebtFormDialog: type (DEBT/RECEIVABLE), friendName, amount, description, dueDate (date input min today), note.
+- Run `bun run lint` → 0 errors, 0 warnings (setelah hapus 2 unused eslint-disable directive).
+- Tulis agent-ctx record di `/home/z/my-project/agent-ctx/STU-UI-student-ui-builder.md`.
+
+Stage Summary:
+- 3 file React components production-ready dibuat: jajan-button.tsx (floating quick-jajan), student-section.tsx (Uang Saku hero + Jajan Quick Add + Gamification + Challenges), patungan-section.tsx (Split Bills + Friend Debts).
+- Semua komponen: "use client", shadcn/ui, LucideIcon, cn(), Indonesian, emerald theme, toast from sonner.
+- Hook yg dipakai: useStudentProfile, useUpdateStudentProfile, useDailyAllowance, useChallenges, useJoinChallenge, useChallengeParticipations, useAbandonChallenge, useSplitBills, useCreateSplitBill, useDeleteSplitBill, useSettleSplitBill, useMarkParticipantPaid, useFriendDebts, useCreateFriendDebt, useSettleFriendDebt, useDeleteFriendDebt, useJajanCheck, useCategories, useCreateTransaction, useDashboard.
+- useDailyAllowance auto-refetch 60s (sesuai spek).
+- Pattern konsisten dgn budgets-section.tsx & goals-section.tsx (dialog header w/ X close, scrollable body, sticky footer).
+- Note: komponen BELUM di-wire ke AppShell/page.tsx (di luar scope task). Utk surface, tambahkan <StudentSection/>, <PatunganSection/> ke section switcher dan render <JajanButton/> di root.
+
+---
+Task ID: STU-ALL (Student Features)
+Agent: main + 2 subagents (STU-API, STU-UI)
+Task: Implement ALL student-focused features for college students
+
+Work Log:
+- Schema: Added StudentProfile, Challenge, ChallengeParticipation, SplitBill, SplitBillParticipant, FriendDebt models. db:push synced.
+- Lib: types.ts (StudentProfile, Challenge, SplitBill, FriendDebt, DailyAllowanceInfo, etc), student-constants.ts (JAJAN_PRESETS, STUDENT_BUDGET_TEMPLATE, ACADEMIC_MODES, DEFAULT_CHALLENGES, SPLIT_BILL_CATEGORIES, FUN_FACTS, LEVEL_MILESTONES), api.ts (student-profile, challenges, split-bills, friend-debts, ai/jajan-check endpoints), hooks.ts (useStudentProfile, useDailyAllowance, useChallenges, useJoinChallenge, useChallengeParticipations, useSplitBills, useCreateSplitBill, useSettleSplitBill, useMarkParticipantPaid, useFriendDebts, useCreateFriendDebt, useSettleFriendDebt, useJajanCheck).
+- API Routes (subagent STU-API, 14 files): student-profile (GET/PUT upsert), student-profile/daily (GET compute daily allowance info with projection), challenges (GET + seed DEFAULT_CHALLENGES), challenges/join (POST), challenges/participations (GET), challenges/participations/[id] (DELETE abandon), split-bills (GET + POST with auto EQUAL share), split-bills/[id] (DELETE cascade), split-bills/[id]/settle (POST mark all paid), split-bills/participants/[id]/paid (POST toggle), friend-debts (GET + POST), friend-debts/[id]/settle (POST), friend-debts/[id] (DELETE), ai/jajan-check (POST ZAI LLM with allowance context + canAfford boolean + fallback).
+- UI Components (subagent STU-UI, 3 files):
+  * student-section.tsx: hero uang saku card with daily/monthly remaining + progress bars + projection message + academic mode badge + StudentProfileDialog setup form, QuickJajanGrid (18 presets), GamificationStats (level/XP/streak/fun facts), Challenges (available + active + completed)
+  * patungan-section.tsx: stats strip (3 cards), split bills list with participants + settle + create dialog (EQUAL/CUSTOM split), friend debts tabs (Saya Berhutang / Teman Berhutang) with overdue + settle + create dialog
+  * jajan-button.tsx: floating button (coffee icon) above FAB, Sheet with preset grid + custom jajan form with AI jajan-check
+- AppShell: added "Mahasiswa" group with "Uang Saku" (GraduationCap) + "Patungan" (Users) nav items.
+- page.tsx: wired StudentSection, PatunganSection, JajanButton.
+- Verification: lint 0 errors. All 6 student API endpoints return 200 (student-profile, daily, challenges, split-bills, friend-debts, ai/jajan-check). Page renders "DompetKu". Sidebar shows "Uang Saku" + "Patungan" nav items. No browser errors.
+
+Stage Summary:
+- ~100 student-focused features implemented across 3 sections + 1 floating button
+- 6 new DB models (StudentProfile, Challenge, ChallengeParticipation, SplitBill, SplitBillParticipant, FriendDebt)
+- 14 new API route files
+- 3 new UI components (student-section, patungan-section, jajan-button)
+- AI "Boleh jajan?" with ZAI LLM (friendly student-focused advice)
+- Gamification (level/XP/streak/challenges/achievements)
+- Quick jajan presets (18 items: kopi, mie, es teh, bakso, etc)
+- Split bill with EQUAL/CUSTOM split + settle up
+- Friend debt tracking with overdue detection
+- Daily allowance projection (will run out day + daily cut needed)
+- Academic mode toggle (KULIAH/UTS/UAS/LIBUR/SKRIPSI/MAGANG)
+- All lint-clean, APIs verified

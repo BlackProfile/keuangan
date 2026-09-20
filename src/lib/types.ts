@@ -639,3 +639,139 @@ export interface ExportPreview {
   fields: string[];
   estimatedSize: string;
 }
+
+// ============ STUDENT FEATURES ============
+export type AcademicMode = "KULIAH" | "UTS" | "UAS" | "LIBUR" | "SKRIPSI" | "MAGANG";
+
+export interface StudentProfile {
+  id: string;
+  monthlyAllowance: number;
+  allowanceDay: number;
+  semester: string | null;
+  academicMode: AcademicMode;
+  university: string | null;
+  major: string | null;
+  academicYear: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentProfileInput {
+  monthlyAllowance?: number;
+  allowanceDay?: number;
+  semester?: string;
+  academicMode?: AcademicMode;
+  university?: string;
+  major?: string;
+  academicYear?: string;
+}
+
+export interface Challenge {
+  id: string;
+  name: string;
+  description: string;
+  type: "SAVINGS" | "NO_JAJAN" | "MINIMAL_SPEND" | "WEEKLY" | "CUSTOM";
+  targetAmount: number | null;
+  targetDays: number | null;
+  icon: string;
+  color: string;
+  reward: string | null;
+  xpReward: number;
+  active: boolean;
+  createdAt: string;
+  participations?: ChallengeParticipation[];
+}
+
+export interface ChallengeParticipation {
+  id: string;
+  challengeId: string;
+  startDate: string;
+  endDate: string | null;
+  status: "ACTIVE" | "COMPLETED" | "FAILED" | "ABANDONED";
+  progress: number;
+  currentAmount: number;
+  xpEarned: number;
+  challenge?: Challenge;
+}
+
+export interface SplitBill {
+  id: string;
+  title: string;
+  description: string | null;
+  totalAmount: number;
+  paidBy: string;
+  splitType: "EQUAL" | "CUSTOM" | "PERCENTAGE";
+  category: "MAKAN" | "KOS" | "EVENT" | "TRANSPORT" | "OTHER";
+  date: string;
+  settled: boolean;
+  icon: string;
+  color: string;
+  note: string | null;
+  participants: SplitBillParticipant[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SplitBillParticipant {
+  id: string;
+  splitBillId: string;
+  name: string;
+  share: number;
+  paid: boolean;
+  paidAt: string | null;
+}
+
+export interface SplitBillInput {
+  title: string;
+  description?: string;
+  totalAmount: number;
+  paidBy: string;
+  splitType?: "EQUAL" | "CUSTOM" | "PERCENTAGE";
+  category?: "MAKAN" | "KOS" | "EVENT" | "TRANSPORT" | "OTHER";
+  icon?: string;
+  color?: string;
+  note?: string;
+  participants: Array<{ name: string; share: number }>;
+}
+
+export interface FriendDebt {
+  id: string;
+  friendName: string;
+  type: "DEBT" | "RECEIVABLE";
+  amount: number;
+  description: string | null;
+  date: string;
+  dueDate: string | null;
+  settled: boolean;
+  reminderSent: boolean;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FriendDebtInput {
+  friendName: string;
+  type: "DEBT" | "RECEIVABLE";
+  amount: number;
+  description?: string;
+  dueDate?: string;
+  note?: string;
+}
+
+export interface DailyAllowanceInfo {
+  monthlyAllowance: number;
+  dayOfMonth: number;
+  daysInMonth: number;
+  daysRemaining: number;
+  spentThisMonth: number;
+  remainingThisMonth: number;
+  dailyAllowance: number;
+  dailyRemaining: number;
+  dailySpent: number;
+  projection: {
+    willRunOutDay: number | null;
+    surplusOrDeficit: number;
+    dailyCutNeeded: number | null;
+    message: string;
+  };
+}

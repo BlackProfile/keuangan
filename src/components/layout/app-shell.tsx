@@ -24,6 +24,8 @@ import {
   Activity,
   Share2,
   Download,
+  GraduationCap,
+  Users,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -46,6 +48,8 @@ export type SectionId =
   | "recurring"
   | "debts"
   | "templates"
+  | "student"
+  | "patungan"
   | "calendar"
   | "analytics"
   | "ai"
@@ -83,6 +87,13 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "recurring", label: "Berulang", icon: <RefreshCw className="h-4 w-4" /> },
       { id: "debts", label: "Hutang & Piutang", icon: <HandCoins className="h-4 w-4" /> },
       { id: "templates", label: "Template", icon: <Zap className="h-4 w-4" /> },
+    ],
+  },
+  {
+    title: "Mahasiswa",
+    items: [
+      { id: "student", label: "Uang Saku", icon: <GraduationCap className="h-4 w-4" /> },
+      { id: "patungan", label: "Patungan", icon: <Users className="h-4 w-4" /> },
     ],
   },
   {

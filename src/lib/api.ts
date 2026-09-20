@@ -9,12 +9,17 @@ import type {
   Category,
   CategoryInput,
   ChatMessage,
+  Challenge,
+  ChallengeParticipation,
+  DailyAllowanceInfo,
   DashboardData,
   Debt,
   DebtInput,
   ExportPreview,
   ExportTemplate,
   ExportTemplateInput,
+  FriendDebt,
+  FriendDebtInput,
   Goal,
   GoalInput,
   Installment,
@@ -23,6 +28,10 @@ import type {
   RecurringTransaction,
   ShareLink,
   ShareLinkInput,
+  SplitBill,
+  SplitBillInput,
+  StudentProfile,
+  StudentProfileInput,
   Tag,
   Transaction,
   TransactionGroup,
@@ -423,4 +432,65 @@ export const api = {
     request<ShareLink>(`/api/shares/${token}/clone`, {
       method: "POST",
     }),
+
+  // Student Profile
+  getStudentProfile: () => request<StudentProfile | null>("/api/student-profile"),
+  updateStudentProfile: (data: StudentProfileInput) =>
+    request<StudentProfile>("/api/student-profile", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  // Daily Allowance Info
+  getDailyAllowance: () =>
+    request<DailyAllowanceInfo>("/api/student-profile/daily"),
+
+  // Challenges
+  listChallenges: () => request<Challenge[]>("/api/challenges"),
+  joinChallenge: (challengeId: string) =>
+    request<ChallengeParticipation>("/api/challenges/join", {
+      method: "POST",
+      body: JSON.stringify({ challengeId }),
+    }),
+  listChallengeParticipations: () =>
+    request<ChallengeParticipation[]>("/api/challenges/participations"),
+  abandonChallenge: (participationId: string) =>
+    request<void>(`/api/challenges/participations/${participationId}`, {
+      method: "DELETE",
+    }),
+
+  // Split Bills
+  listSplitBills: () => request<SplitBill[]>("/api/split-bills"),
+  createSplitBill: (data: SplitBillInput) =>
+    request<SplitBill>("/api/split-bills", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteSplitBill: (id: string) =>
+    request<void>(`/api/split-bills/${id}`, { method: "DELETE" }),
+  settleSplitBill: (id: string) =>
+    request<SplitBill>(`/api/split-bills/${id}/settle`, { method: "POST" }),
+  markParticipantPaid: (participantId: string) =>
+    request<void>(`/api/split-bills/participants/${participantId}/paid`, {
+      method: "POST",
+    }),
+
+  // Friend Debts
+  listFriendDebts: () => request<FriendDebt[]>("/api/friend-debts"),
+  createFriendDebt: (data: FriendDebtInput) =>
+    request<FriendDebt>("/api/friend-debts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  settleFriendDebt: (id: string) =>
+    request<FriendDebt>(`/api/friend-debts/${id}/settle`, { method: "POST" }),
+  deleteFriendDebt: (id: string) =>
+    request<void>(`/api/friend-debts/${id}`, { method: "DELETE" }),
+
+  // AI Jajan Check
+  jajanCheck: (amount: number) =>
+    request<{ reply: string; canAfford: boolean; remaining: number }>(
+      "/api/ai/jajan-check",
+      { method: "POST", body: JSON.stringify({ amount }) }
+    ),
 };

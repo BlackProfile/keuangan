@@ -10,12 +10,16 @@ import type {
   AccountInput,
   BudgetInput,
   CategoryInput,
+  ChallengeParticipation,
   DebtInput,
   ExportTemplateInput,
+  FriendDebtInput,
   GoalInput,
   InstallmentInput,
   RecurringInput,
   ShareLinkInput,
+  SplitBillInput,
+  StudentProfileInput,
   Transaction,
   TransactionGroupInput,
   TransactionInput,
@@ -849,5 +853,150 @@ export function useDeleteExportTemplate() {
   return useMutation({
     mutationFn: (id: string) => api.deleteExportTemplate(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["export-templates"] }),
+  });
+}
+
+// ---------- Student Profile ----------
+export function useStudentProfile() {
+  return useQuery({
+    queryKey: ["student-profile"] as const,
+    queryFn: async () => {
+      const r = await api.getStudentProfile();
+      return r;
+    },
+  });
+}
+
+export function useUpdateStudentProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: StudentProfileInput) => api.updateStudentProfile(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["student-profile"] });
+      qc.invalidateQueries({ queryKey: ["daily-allowance"] });
+    },
+  });
+}
+
+export function useDailyAllowance() {
+  return useQuery({
+    queryKey: ["daily-allowance"] as const,
+    queryFn: () => api.getDailyAllowance(),
+    refetchInterval: 60_000, // refresh every minute
+  });
+}
+
+// ---------- Challenges ----------
+export function useChallenges() {
+  return useQuery({
+    queryKey: ["challenges"] as const,
+    queryFn: () => api.listChallenges(),
+  });
+}
+
+export function useJoinChallenge() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (challengeId: string) => api.joinChallenge(challengeId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["challenges"] });
+      qc.invalidateQueries({ queryKey: ["challenge-participations"] });
+    },
+  });
+}
+
+export function useChallengeParticipations() {
+  return useQuery({
+    queryKey: ["challenge-participations"] as const,
+    queryFn: () => api.listChallengeParticipations(),
+  });
+}
+
+export function useAbandonChallenge() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (participationId: string) => api.abandonChallenge(participationId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["challenge-participations"] });
+    },
+  });
+}
+
+// ---------- Split Bills ----------
+export function useSplitBills() {
+  return useQuery({
+    queryKey: ["split-bills"] as const,
+    queryFn: () => api.listSplitBills(),
+  });
+}
+
+export function useCreateSplitBill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: SplitBillInput) => api.createSplitBill(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["split-bills"] }),
+  });
+}
+
+export function useDeleteSplitBill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteSplitBill(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["split-bills"] }),
+  });
+}
+
+export function useSettleSplitBill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.settleSplitBill(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["split-bills"] }),
+  });
+}
+
+export function useMarkParticipantPaid() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (participantId: string) => api.markParticipantPaid(participantId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["split-bills"] }),
+  });
+}
+
+// ---------- Friend Debts ----------
+export function useFriendDebts() {
+  return useQuery({
+    queryKey: ["friend-debts"] as const,
+    queryFn: () => api.listFriendDebts(),
+  });
+}
+
+export function useCreateFriendDebt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: FriendDebtInput) => api.createFriendDebt(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["friend-debts"] }),
+  });
+}
+
+export function useSettleFriendDebt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.settleFriendDebt(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["friend-debts"] }),
+  });
+}
+
+export function useDeleteFriendDebt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteFriendDebt(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["friend-debts"] }),
+  });
+}
+
+// ---------- AI Jajan Check ----------
+export function useJajanCheck() {
+  return useMutation({
+    mutationFn: (amount: number) => api.jajanCheck(amount),
   });
 }
