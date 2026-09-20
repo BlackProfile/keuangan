@@ -1,81 +1,82 @@
 #!/bin/bash
-# DompetKu Server Keep-Alive Supervisor
-# Checks every 10s, restarts if server is down
+# DompetKu Keep-Alive Supervisor
+# Restarts dev server + realtime service automatically when they die
 
 LOG="/home/z/my-project/dev.log"
-PIDFILE="/tmp/dompetku-dev.pid"
-CRASH_FILE="/tmp/dompetku-crashes"
+RT_LOG="/tmp/rt.log"
+PID_FILE="/tmp/dompetku.pid"
 
 cd /home/z/my-project
 
-# Kill any existing next processes
-pkill -f "next dev" 2>/dev/null
-sleep 1
+start_dev() {
+  pkill -f "next dev" 2>/dev/null
+  sleep 1
+  bun run dev >> "$LOG" 2>&1 &
+  echo $!
+}
 
-start_server() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting dev server..." >> "$LOG"
-  nohup bun run dev >> "$LOG" 2>&1 &
-  local pid=$!
-  echo "$pid" > "$PIDFILE"
-  
-  # Wait for ready (up to 90s)
+start_realtime() {
+  pkill -f "run.js" 2>/dev/null
+  sleep 1
+  cd /home/z/my-project/mini-services/realtime-sync
+  node run.js >> "$RT_LOG" 2>&1 &
+  cd /home/z/my-project
+  echo $!
+}
+
+wait_dev() {
+  local pid=$1
   for i in $(seq 1 90); do
-    local code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "http://localhost:3000/" 2>/dev/null)
-    if [ "$code" = "200" ]; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Server ready (HTTP 200) after ${i}s, pid=$pid" >> "$LOG"
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "http://localhost:3000/" 2>/dev/null)
+    if [ "$CODE" = "200" ]; then
+      echo "[$(date '+%H:%M:%S')] dev ready (HTTP 200) pid=$pid" >> "$LOG"
       return 0
     fi
     if ! kill -0 "$pid" 2>/dev/null; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Process died during startup after ${i}s" >> "$LOG"
+      echo "[$(date '+%H:%M:%S')] dev process died during startup" >> "$LOG"
       return 1
     fi
     sleep 1
   done
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Timeout waiting for server" >> "$LOG"
   return 1
 }
 
-# Initial start
-start_server
+# Kill stale
+pkill -f "next dev" 2>/dev/null
+pkill -f "run.js" 2>/dev/null
+sleep 2
 
-# Supervisor loop — runs forever, checks every 10s
+# Start both
+DEV_PID=$(start_dev)
+RT_PID=$(start_realtime)
+echo "$DEV_PID $RT_PID" > "$PID_FILE"
+echo "[$(date '+%H:%M:%S')] supervisor started: dev=$DEV_PID realtime=$RT_PID" >> "$LOG"
+
+wait_dev "$DEV_PID"
+
+# Supervisor loop
 while true; do
   sleep 10
   
-  # Check if process is alive
-  PID=$(cat "$PIDFILE" 2>/dev/null)
-  if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Process dead, restarting..." >> "$LOG"
-    
-    # Crash count for cache clearing
-    CRASHES=$(cat "$CRASH_FILE" 2>/dev/null || echo "0")
-    CRASHES=$((CRASHES + 1))
-    echo "$CRASHES" > "$CRASH_FILE"
-    if [ "$CRASHES" -ge 3 ]; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] 3+ crashes, clearing .next cache" >> "$LOG"
-      rm -rf /home/z/my-project/.next
-      echo "0" > "$CRASH_FILE"
-    fi
-    
-    pkill -f "next dev" 2>/dev/null
-    sleep 2
-    start_server
+  # Check dev server
+  if ! kill -0 "$DEV_PID" 2>/dev/null; then
+    echo "[$(date '+%H:%M:%S')] dev died, restarting..." >> "$LOG"
+    DEV_PID=$(start_dev)
+    wait_dev "$DEV_PID"
   else
-    # Process alive, check HTTP health
     CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "http://localhost:3000/" 2>/dev/null)
-    if [ "$CODE" = "000" ]; then
-      # Maybe still compiling, check again in a bit
-      sleep 5
-      CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "http://localhost:3000/" 2>/dev/null)
-    fi
     if [ "$CODE" != "200" ] && [ "$CODE" != "000" ]; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Unhealthy (HTTP=$CODE), restarting..." >> "$LOG"
-      kill "$PID" 2>/dev/null
+      echo "[$(date '+%H:%M:%S')] dev unhealthy ($CODE), restarting..." >> "$LOG"
+      kill "$DEV_PID" 2>/dev/null
       sleep 2
-      start_server
-    else
-      # Healthy — reset crash count
-      echo "0" > "$CRASH_FILE"
+      DEV_PID=$(start_dev)
+      wait_dev "$DEV_PID"
     fi
+  fi
+  
+  # Check realtime
+  if ! kill -0 "$RT_PID" 2>/dev/null; then
+    echo "[$(date '+%H:%M:%S')] realtime died, restarting..." >> "$LOG"
+    RT_PID=$(start_realtime)
   fi
 done
