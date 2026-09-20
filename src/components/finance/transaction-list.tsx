@@ -51,7 +51,6 @@ import {
   parseTags,
   relativeDay,
 } from "@/lib/format";
-import { api } from "@/lib/api";
 import {
   useCategories,
   useDuplicateTransaction,
@@ -220,18 +219,33 @@ export function TransactionList({
     setOnlySubscription(false);
   }
 
-  function handleExport() {
-    const url = api.exportTransactionsUrl({
-      type: type === "ALL" ? undefined : type,
-      from: from || undefined,
-      to: to || undefined,
-    });
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  async function handleExport() {
+    try {
+      const scope: Record<string, unknown> = { type: "ALL" };
+      if (type !== "ALL") scope.type = type;
+      if (categoryId !== "ALL") scope.categoryId = categoryId;
+      if (from) scope.from = from;
+      if (to) scope.to = to;
+      if (showHidden) scope.includeHidden = true;
+
+      const res = await fetch("/api/export/csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope, options: { includeHidden: showHidden } }),
+      });
+      if (!res.ok) throw new Error("Export gagal");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `transaksi-dompetku-${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast.success("CSV berhasil diunduh");
+    } catch {
+      toast.error("Gagal export CSV");
+    }
   }
 
   return (

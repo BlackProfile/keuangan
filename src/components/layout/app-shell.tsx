@@ -110,9 +110,8 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "categories", label: "Kategori", icon: <Tags className="h-4 w-4" /> },
       { id: "shares", label: "Link Berbagi", icon: <Share2 className="h-4 w-4" /> },
       { id: "export", label: "Export Data", icon: <Download className="h-4 w-4" /> },
-      { id: "security", label: "Keamanan", icon: <ShieldCheck className="h-4 w-4" /> },
+      { id: "security", label: "Pengaturan", icon: <Settings className="h-4 w-4" /> },
       { id: "audit", label: "Audit Log", icon: <Activity className="h-4 w-4" /> },
-      { id: "settings", label: "Pengaturan", icon: <Settings className="h-4 w-4" /> },
     ],
   },
 ];

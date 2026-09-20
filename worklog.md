@@ -1739,3 +1739,32 @@ Stage Summary:
 - Custom page sizes (receipt 280x600, slip jajan 280x400)
 - Template picker UI with category filter + color preview
 - All lint-clean, verified end-to-end
+
+---
+Task ID: CLEANUP (Simplifikasi & Bug Fix)
+Agent: main (orchestrator)
+Task: Merge double features, remove unnecessary code, fix bugs
+
+Work Log:
+- Merged Settings + Security sections:
+  * Removed "Pengaturan" as separate nav item (was duplicate of "Keamanan")
+  * Renamed "Keamanan" to "Pengaturan" in sidebar (covers both settings + security)
+  * page.tsx: section "settings" now renders SecuritySection (which already has all settings: PIN, password, biometric, theme, reminders, import/export/backup, seed, auto-lock, privacy, etc.)
+  * Removed SettingsSection import from page.tsx
+- Removed duplicate export API routes:
+  * Deleted /api/export/transactions (old simple CSV) — replaced by /api/export/csv (enhanced with field selection)
+  * Deleted /api/export/backup (old JSON) — replaced by /api/export/json (enhanced with scope filter)
+  * Old routes now return 404 (confirmed)
+- Fixed transaction-list CSV export:
+  * Changed from old GET-based api.exportTransactionsUrl() to new POST-based /api/export/csv
+  * Now sends scope + options in POST body (consistent with Export section)
+  * Removed unused `api` import from transaction-list.tsx
+  * Added toast feedback on success/error
+- Verified: lint 0 errors. All 16 API endpoints return 200. Old routes return 404. Page renders "DompetKu". Settings page shows comprehensive security settings (PIN, password, pattern, biometric, auto-lock) with toast "Pengaturan disimpan" visible. No browser errors.
+
+Stage Summary:
+- Merged Settings + Security → 1 section "Pengaturan" (was 2 separate, redundant)
+- Deleted 2 duplicate API routes (export/transactions, export/backup)
+- Fixed CSV export in TransactionList to use new endpoint
+- Removed unused imports
+- All lint-clean, verified end-to-end

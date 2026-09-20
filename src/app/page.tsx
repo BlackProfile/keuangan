@@ -16,7 +16,6 @@ import { RecurringSection } from "@/components/finance/recurring-section";
 import { CalendarSection } from "@/components/finance/calendar-section";
 import { AnalyticsSection } from "@/components/finance/analytics-section";
 import { AiSection } from "@/components/finance/ai-section";
-import { SettingsSection } from "@/components/finance/settings-section";
 import { DebtsSection } from "@/components/finance/debts-section";
 import { TemplatesSection } from "@/components/finance/templates-section";
 import { LockScreen } from "@/components/finance/lock-screen";
@@ -333,7 +332,7 @@ export default function Home() {
               {section === "audit" && <AuditSection />}
               {section === "shares" && <SharesSection />}
               {section === "export" && <ExportSection />}
-              {section === "settings" && <SettingsSection />}
+              {section === "settings" && <SecuritySection />}
             </motion.div>
           </AnimatePresence>
 
