@@ -1035,3 +1035,47 @@ export function useDeleteNotification() {
 }
 
 export type { NotificationItem, NotificationPayload };
+
+// ---------- Installment Payments ----------
+export function useInstallmentPayments(params?: { entityType?: string; entityId?: string }) {
+  return useQuery({
+    queryKey: ["installment-payments", params] as const,
+    queryFn: () => api.listInstallmentPayments(params),
+    enabled: !!params?.entityId,
+  });
+}
+
+export function useCreateInstallmentPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      entityType: string;
+      entityId: string;
+      amount: number;
+      date?: string;
+      note?: string;
+      participantId?: string;
+    }) => api.createInstallmentPayment(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["installment-payments"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+      qc.invalidateQueries({ queryKey: ["friend-debts"] });
+      qc.invalidateQueries({ queryKey: ["split-bills"] });
+      qc.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function useDeleteInstallmentPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteInstallmentPayment(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["installment-payments"] });
+      qc.invalidateQueries({ queryKey: ["debts"] });
+      qc.invalidateQueries({ queryKey: ["friend-debts"] });
+      qc.invalidateQueries({ queryKey: ["split-bills"] });
+      qc.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}

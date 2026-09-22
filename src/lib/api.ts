@@ -508,22 +508,35 @@ export const api = {
     }),
   deleteNotification: (id: string) =>
     request<void>(`/api/notifications/${id}`, { method: "DELETE" }),
+
+  // Installment Payments (cicilan/partial payments)
+  listInstallmentPayments: (params?: { entityType?: string; entityId?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.entityType) sp.set("entityType", params.entityType);
+    if (params?.entityId) sp.set("entityId", params.entityId);
+    const qs = sp.toString();
+    return request<Array<{
+      id: string;
+      entityType: string;
+      entityId: string;
+      amount: number;
+      date: string;
+      note: string | null;
+      createdAt: string;
+    }>>(`/api/installment-payments${qs ? `?${qs}` : ""}`);
+  },
+  createInstallmentPayment: (data: {
+    entityType: string;
+    entityId: string;
+    amount: number;
+    date?: string;
+    note?: string;
+    participantId?: string;
+  }) =>
+    request("/api/installment-payments", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteInstallmentPayment: (id: string) =>
+    request<void>(`/api/installment-payments/${id}`, { method: "DELETE" }),
 };
-
-// ---------- Notification types (kept local for tight coupling with API) ----------
-export interface NotificationPayload {
-  type: string;
-  title: string;
-  body: string;
-  icon?: string;
-}
-
-export interface NotificationItem {
-  id: string;
-  type: string;
-  title: string;
-  body: string;
-  icon: string;
-  read: boolean;
-  createdAt: string;
-}

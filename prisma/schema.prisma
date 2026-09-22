@@ -538,3 +538,16 @@ model Notification {
   @@index([read])
   @@index([type])
 }
+
+model InstallmentPayment {
+  id              String   @id @default(cuid())
+  entityType      String   // "DEBT" | "FRIEND_DEBT" | "SPLIT_BILL" | "GOAL"
+  entityId        String   // ID of the debt/friend-debt/split-bill/goal
+  amount          Float
+  date            DateTime @default(now())
+  note            String?
+  createdAt       DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([date])
+}
