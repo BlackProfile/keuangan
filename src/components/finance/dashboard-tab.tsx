@@ -484,7 +484,7 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full rounded-xl" />
+              <Skeleton key={i} className="h-11 w-full rounded-xl" />
             ))}
           </div>
         ) : recent.length === 0 ? (
@@ -498,7 +498,7 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
                 <button
                   key={t.id}
                   onClick={() => onEdit(t)}
-                  className="group flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left transition-colors hover:bg-muted/50"
+                  className="group flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors hover:bg-muted/50"
                 >
                   <span
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"

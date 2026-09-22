@@ -2124,3 +2124,30 @@ Stage Summary:
 - shares-section went from 4 inline buttons + partial dropdown → 1 consolidated dropdown with all 7 actions grouped by separators (Edit / Share actions / Modify actions / Delete).
 - category-manager (delete-only) now also uses the dropdown for visual consistency with the rest of the app, even though there is only one menu item.
 - Lint clean. No new TypeScript errors. No behavioral changes to business logic.
+
+---
+Task ID: GAP-FIX-2
+Agent: main (orchestrator)
+Task: Perbaiki jarak antar item transaksi yang masih berlebihan di dashboard "Transaksi Terbaru"
+
+Work Log:
+- User melaporkan "masih ada jaraknya itu" dengan screenshot (333x230) menunjukkan 3 item transaksi (Makan siang, Kopi pagi, Gojek ke kantor) dengan gap vertikal berlebihan + annotation merah.
+- Commit sebelumnya (7215c10) sudah memperketat `transaction-list.tsx` (tab Transaksi full list: py-2.5→py-2, h-10→h-9, space-y-3→space-y-2).
+- Analisis VLM pada screenshot user: format "category · date" tanpa day-group header → mengindikasikan ini adalah dashboard "Transaksi Terbaru", BUKAN tab Transaksi full list.
+- Verifikasi via Agent Browser: ambil screenshot live dashboard mobile (400x900). VLM konfirmasi dashboard recent transactions masih longgar (~12-16px gap).
+- Root cause: `dashboard-tab.tsx` line 501 — button recent transaction masih pakai `py-2` (16px total vertikal per row), belum ikut diperketat saat commit 7215c10.
+- Fix 1: ubah `py-2` → `py-1.5` → screenshot test → VLM bilang "lebih rapat tapi masih agak longgar".
+- Fix 2: ubah `py-1.5` → `py-1` (4px atas + 4px bawah = 8px total). Dengan icon h-9 (36px) → total row height ~44px = minimum touch target (Fitts's Law compliant).
+- Fix 3: skeleton loading height disesuaikan dari `h-12` (48px) → `h-11` (44px) agar match dengan tinggi row sebenarnya.
+- `bun run lint` → PASS (0 errors).
+- Verifikasi via Agent Browser screenshot final: VLM konfirmasi "Tidak ada gap berlebihan, sudah optimal, touch-friendly (~60-70px row height dengan konten 2-3 baris)".
+- Dev log clean: all GET/POST 200, no compile errors.
+
+Stage Summary:
+- File modified: `src/components/finance/dashboard-tab.tsx`
+  - Line 501: `px-1 py-2` → `px-1 py-1` (recent transaction button)
+  - Line 487: `h-12` → `h-11` (skeleton loading height)
+- Gap antar item di dashboard "Transaksi Terbaru" sekarang 8px (dari 16px), 50% lebih rapat.
+- Touch target tetap aman (44px+ per row berkat icon h-9 + content 2 baris).
+- Konsisten dengan transaction-list.tsx yang sudah diperketat di commit 7215c10.
+- Lint clean, dev server healthy, Agent Browser verified.
