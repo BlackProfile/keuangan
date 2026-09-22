@@ -536,7 +536,7 @@ export function TransactionList({
       ) : grouped.length === 0 ? (
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <AnimatePresence mode="popLayout">
             {grouped.map(([day, items]) => {
               const dayIncome = items
@@ -549,11 +549,11 @@ export function TransactionList({
               return (
                 <motion.div
                   key={day}
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-2"
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="space-y-1"
                 >
                   <div className="flex items-center justify-between px-1">
                     <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -760,15 +760,15 @@ function TransactionRow({
   }
 
   return (
-    <div className="group flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40 sm:px-4">
+    <div className="group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/40 sm:px-4">
       {/* Category icon (with optional pinned ring) */}
       <span
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
         style={{ backgroundColor: cat ? `${cat.color}1a` : undefined }}
       >
         <LucideIcon
           name={cat?.icon ?? "Circle"}
-          className="h-5 w-5"
+          className="h-4.5 w-4.5"
           style={{ color: cat?.color }}
         />
       </span>
@@ -816,18 +816,7 @@ function TransactionRow({
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
           {cat?.name ?? "Tanpa kategori"}
           <span className="mx-1 text-border">·</span>
-          {formatDateLong(transaction.date)}
-          {transaction.account && (
-            <>
-              <span className="mx-1 text-border">·</span>
-              <LucideIcon
-                name={transaction.account.icon}
-                className="-mt-0.5 mr-0.5 inline h-3 w-3"
-                style={{ color: transaction.account.color }}
-              />
-              {transaction.account.name}
-            </>
-          )}
+          {relativeDay(transaction.date)}
         </p>
 
         {/* Flags row */}
