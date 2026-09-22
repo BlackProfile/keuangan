@@ -5,9 +5,12 @@ import { toast } from "sonner";
 import {
   CalendarIcon,
   Check,
+  Flame,
   Loader2,
+  MoreVertical,
   Pencil,
   Plus,
+  Sparkles,
   Target,
   Trash2,
   X,
@@ -45,9 +48,17 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LucideIcon } from "@/components/lucide-icon";
 import { cn } from "@/lib/utils";
 import {
+  calculateStreak,
   formatCurrency,
   formatCurrencyCompact,
   formatDate,
@@ -55,20 +66,196 @@ import {
   parseDateLocal,
 } from "@/lib/format";
 import { GOAL_COLORS, GOAL_ICONS } from "@/lib/constants";
+import { FUN_FACTS } from "@/lib/student-constants";
 import {
   useCreateGoal,
   useDeleteGoal,
   useGoals,
+  useTransactions,
   useUpdateGoal,
 } from "@/lib/hooks";
 import type { Goal, GoalInput } from "@/lib/types";
 
+/* ------------------------------------------------------------------ */
+/*  Round-up + milestone helpers (localStorage-backed, client-only)    */
+/* ------------------------------------------------------------------ */
+
+const ROUNDUP_KEY = "dompetku:roundup-goal-id";
+const PROCESSED_TX_KEY = "dompetku:roundup-processed-tx-ids";
+const MILESTONE_SEEN_KEY = "dompetku:goal-milestones-seen";
+
+function getRoundUpGoalId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(ROUNDUP_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setRoundUpGoalId(id: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (id) window.localStorage.setItem(ROUNDUP_KEY, id);
+    else window.localStorage.removeItem(ROUNDUP_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function getProcessedTxIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(PROCESSED_TX_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(arr);
+  } catch {
+    return new Set();
+  }
+}
+
+function markTxProcessed(id: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const set = getProcessedTxIds();
+    if (set.has(id)) return;
+    set.add(id);
+    // Cap to last 500 ids
+    const arr = Array.from(set).slice(-500);
+    window.localStorage.setItem(PROCESSED_TX_KEY, JSON.stringify(arr));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Returns milestones (25/50/75/100) already seen (celebrated) for this goal. */
+function getSeenMilestones(goalId: string): Set<number> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(MILESTONE_SEEN_KEY);
+    if (!raw) return new Set();
+    const map = JSON.parse(raw) as Record<string, number[]>;
+    return new Set(map[goalId] ?? []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markMilestoneSeen(goalId: string, milestone: number) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(MILESTONE_SEEN_KEY);
+    const map: Record<string, number[]> = raw
+      ? (JSON.parse(raw) as Record<string, number[]>)
+      : {};
+    const arr = Array.from(new Set([...(map[goalId] ?? []), milestone]));
+    map[goalId] = arr;
+    window.localStorage.setItem(MILESTONE_SEEN_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Find fun-fact comparison for the given amount (closest match below). */
+function findFunFact(amount: number): string | null {
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  // pick the largest FUN_FACTS amount <= given, otherwise smallest
+  const sorted = [...FUN_FACTS].sort((a, b) => a.amount - b.amount);
+  let match = sorted[0];
+  for (const f of sorted) {
+    if (f.amount <= amount) match = f;
+  }
+  if (!match) return null;
+  return match.comparisons[0] ?? null;
+}
+
+const MILESTONES = [25, 50, 75, 100];
+
 export function GoalsSection() {
   const { data: goals, isLoading } = useGoals();
+  const { data: transactions } = useTransactions();
+  const updateGoalMut = useUpdateGoal();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editGoal, setEditGoal] = React.useState<Goal | null>(null);
   const [contributionGoal, setContributionGoal] =
     React.useState<Goal | null>(null);
+  const [confettiActive, setConfettiActive] = React.useState(false);
+
+  // Round-up processor: for each new EXPENSE transaction, if a round-up goal is
+  // active and not yet processed, round amount up to nearest Rp1000 and add the
+  // difference to that goal.
+  React.useEffect(() => {
+    if (!transactions || transactions.length === 0) return;
+    const roundUpGoalId = getRoundUpGoalId();
+    if (!roundUpGoalId) return;
+    const targetGoal = (goals ?? []).find((g) => g.id === roundUpGoalId);
+    if (!targetGoal || targetGoal.completed) return;
+
+    const processed = getProcessedTxIds();
+    const newOnes = transactions.filter(
+      (t) =>
+        t.type === "EXPENSE" &&
+        !processed.has(t.id) &&
+        !t.id.startsWith("temp-") &&
+        !t.isRecurringGenerated
+    );
+    if (newOnes.length === 0) return;
+
+    let totalDiff = 0;
+    for (const t of newOnes) {
+      const rounded = Math.ceil(t.amount / 1000) * 1000;
+      const diff = rounded - t.amount;
+      if (diff > 0) totalDiff += diff;
+      markTxProcessed(t.id);
+    }
+    // Mark temp/skipped transactions as processed too so they don't reprocess
+    for (const t of transactions) {
+      if (t.id.startsWith("temp-") || t.isRecurringGenerated) {
+        markTxProcessed(t.id);
+      }
+    }
+    if (totalDiff <= 0) return;
+    const newAmount = targetGoal.currentAmount + totalDiff;
+    updateGoalMut.mutate(
+      { id: targetGoal.id, data: { currentAmount: newAmount } },
+      {
+        onSuccess: () => {
+          toast.success(
+            `Round-up +${formatCurrency(totalDiff)} masuk ke "${targetGoal.name}".`
+          );
+        },
+      }
+    );
+  }, [transactions, goals, updateGoalMut]);
+
+  // Milestone celebration: detect 25/50/75/100% crossings.
+  React.useEffect(() => {
+    if (!goals || goals.length === 0) return;
+    let triggered: { goal: Goal; milestone: number } | null = null;
+    for (const g of goals) {
+      if (g.targetAmount <= 0) continue;
+      const pct = (g.currentAmount / g.targetAmount) * 100;
+      const seen = getSeenMilestones(g.id);
+      for (const m of MILESTONES) {
+        if (pct >= m && !seen.has(m)) {
+          markMilestoneSeen(g.id, m);
+          triggered = { goal: g, milestone: m };
+          break;
+        }
+      }
+      if (triggered) break;
+    }
+    if (triggered) {
+      const { goal, milestone } = triggered;
+      toast.success(
+        `🎉 Target "${goal.name}" sudah ${milestone}%!`
+      );
+      setConfettiActive(true);
+      const t = setTimeout(() => setConfettiActive(false), 3500);
+      return () => clearTimeout(t);
+    }
+  }, [goals]);
 
   function openCreate() {
     setEditGoal(null);
@@ -82,6 +269,31 @@ export function GoalsSection() {
 
   function openContribution(g: Goal) {
     setContributionGoal(g);
+  }
+
+  // Round-up state (which goal is currently active)
+  const [roundUpGoalId, setRoundUpGoalIdState] = React.useState<string | null>(
+    null
+  );
+  React.useEffect(() => {
+    setRoundUpGoalIdState(getRoundUpGoalId());
+  }, []);
+
+  function toggleRoundUp(goalId: string) {
+    const current = getRoundUpGoalId();
+    const next = current === goalId ? null : goalId;
+    setRoundUpGoalId(next);
+    setRoundUpGoalIdState(next);
+    if (next) {
+      const g = (goals ?? []).find((x) => x.id === next);
+      if (g) {
+        toast.success(
+          `Round-up aktif untuk "${g.name}". Setiap transaksi dibulatkan ke atas.`
+        );
+      }
+    } else {
+      toast.info("Round-up dimatikan.");
+    }
   }
 
   return (
@@ -117,6 +329,11 @@ export function GoalsSection() {
             <GoalCard
               key={g.id}
               goal={g}
+              transactions={(transactions ?? []).filter(
+                (t) => t.goalId === g.id
+              )}
+              roundUpActive={roundUpGoalId === g.id}
+              onToggleRoundUp={() => toggleRoundUp(g.id)}
               onEdit={() => openEdit(g)}
               onContribute={() => openContribution(g)}
             />
@@ -134,6 +351,65 @@ export function GoalsSection() {
         goal={contributionGoal}
         onOpenChange={(o) => !o && setContributionGoal(null)}
       />
+
+      {confettiActive && <ConfettiOverlay />}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Confetti overlay — pure CSS                                         */
+/* ------------------------------------------------------------------ */
+
+function ConfettiOverlay() {
+  const pieces = React.useMemo(
+    () =>
+      Array.from({ length: 36 }).map((_, i) => {
+        const colors = [
+          "#10b981",
+          "#f59e0b",
+          "#ef4444",
+          "#a855f7",
+          "#06b6d4",
+          "#ec4899",
+        ];
+        const color = colors[i % colors.length];
+        const left = Math.random() * 100;
+        const delay = Math.random() * 0.6;
+        const duration = 1.8 + Math.random() * 1.2;
+        const size = 6 + Math.random() * 8;
+        const rotate = Math.random() * 360;
+        return { id: i, color, left, delay, duration, size, rotate };
+      }),
+    []
+  );
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-[80] overflow-hidden"
+    >
+      {pieces.map((p) => (
+        <span
+          key={p.id}
+          style={{
+            position: "absolute",
+            top: "-10%",
+            left: `${p.left}%`,
+            width: p.size,
+            height: p.size * 0.6,
+            backgroundColor: p.color,
+            transform: `rotate(${p.rotate}deg)`,
+            animation: `confetti-fall ${p.duration}s linear ${p.delay}s forwards`,
+            borderRadius: 1,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes confetti-fall {
+          0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -195,10 +471,16 @@ function ProgressRing({
 
 function GoalCard({
   goal,
+  transactions,
+  roundUpActive,
+  onToggleRoundUp,
   onEdit,
   onContribute,
 }: {
   goal: Goal;
+  transactions: Array<{ id: string; date: string | Date }>;
+  roundUpActive: boolean;
+  onToggleRoundUp: () => void;
   onEdit: () => void;
   onContribute: () => void;
 }) {
@@ -208,6 +490,17 @@ function GoalCard({
       ? (goal.currentAmount / goal.targetAmount) * 100
       : 0;
   const remaining = Math.max(goal.targetAmount - goal.currentAmount, 0);
+
+  // Streak: consecutive days with a contribution (transaction) for this goal.
+  const streak = React.useMemo(() => {
+    if (!transactions || transactions.length === 0) return 0;
+    return calculateStreak(transactions.map((t) => t.date));
+  }, [transactions]);
+
+  const funFact = React.useMemo(() => {
+    if (remaining <= 0) return null;
+    return findFunFact(remaining);
+  }, [remaining]);
 
   function handleDelete() {
     deleteMut.mutate(goal.id, {
@@ -245,6 +538,16 @@ function GoalCard({
                 ? `Target: ${formatDate(goal.targetDate)}`
                 : "Tanpa tanggal target"}
             </p>
+            {streak > 0 && (
+              <Badge
+                variant="secondary"
+                className="mt-1.5 gap-0.5 border-transparent bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400"
+                title={`${streak} hari berturut-turut menabung`}
+              >
+                <Flame className="h-3 w-3" />
+                {streak} hari nabung berturut
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -297,7 +600,62 @@ function GoalCard({
             ? "Target tercapai. Kerja bagus!"
             : `Sisa ${formatCurrencyCompact(remaining)} lagi`}
         </p>
+
+        {/* Fun fact comparison */}
+        {funFact && !goal.completed && (
+          <p className="flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+            <Sparkles className="h-3 w-3 shrink-0" />
+            <span>
+              <span className="font-semibold">{formatCurrencyCompact(remaining)}</span>
+              {" = "}
+              {funFact}
+            </span>
+          </p>
+        )}
       </div>
+
+      {/* Round-up toggle */}
+      {!goal.completed && (
+        <button
+          type="button"
+          onClick={onToggleRoundUp}
+          className={cn(
+            "mt-3 flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs transition-colors",
+            roundUpActive
+              ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-400"
+              : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+          )}
+          aria-pressed={roundUpActive}
+          aria-label="Aktifkan round-up untuk target ini"
+        >
+          <span className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                roundUpActive
+                  ? "bg-emerald-500 text-white"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {roundUpActive ? <Check className="h-3 w-3" /> : "↑"}
+            </span>
+            Round-up ke target ini
+          </span>
+          <span
+            className={cn(
+              "relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors",
+              roundUpActive ? "bg-emerald-500" : "bg-muted-foreground/30"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform",
+                roundUpActive ? "translate-x-3.5" : "translate-x-0.5"
+              )}
+            />
+          </span>
+        </button>
+      )}
 
       {/* Contribute button */}
       {!goal.completed && (
@@ -313,50 +671,59 @@ function GoalCard({
       )}
 
       {/* Hover actions */}
-      <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={onEdit}
-          aria-label="Ubah target"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
+      <div className="absolute right-3 top-3 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              disabled={deleteMut.isPending}
-              aria-label="Hapus target"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              aria-label="Aksi target"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <MoreVertical className="h-3.5 w-3.5" />
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Hapus target ini?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Target <strong>{goal.name}</strong> akan dihapus. Tindakan
-                ini tidak dapat dibatalkan.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Batal</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDelete}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {deleteMut.isPending && (
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                )}
-                Hapus
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={onEdit} className="gap-2">
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <DropdownMenuItem
+                  className="gap-2 text-destructive"
+                  onSelect={(e) => e.preventDefault()}
+                  disabled={deleteMut.isPending}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Hapus
+                </DropdownMenuItem>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Hapus target ini?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Target <strong>{goal.name}</strong> akan dihapus. Tindakan
+                    ini tidak dapat dibatalkan.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDelete}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {deleteMut.isPending && (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    )}
+                    Hapus
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </Card>
   );

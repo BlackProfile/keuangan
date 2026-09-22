@@ -8,6 +8,7 @@ import {
   Bot,
   Calendar,
   Check,
+  CheckCircle2,
   ImagePlus,
   Loader2,
   Plus,
@@ -19,7 +20,9 @@ import {
   Store,
   Tag as TagIcon,
   Trash2,
+  Wallet,
   X,
+  XCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -39,6 +42,7 @@ import {
   useAiChat,
   useCategories,
   useInsights,
+  useJajanCheck,
   useReceiptScan,
 } from "@/lib/hooks";
 import type { ChatMessage, TransactionType } from "@/lib/types";
@@ -73,7 +77,9 @@ type ReceiptResult = {
 };
 
 export function AiSection({ onCreateTransaction, onNavigateToAdd }: Props) {
-  const [tab, setTab] = React.useState<"chat" | "scan" | "insights">("chat");
+  const [tab, setTab] = React.useState<
+    "chat" | "boleh" | "scan" | "insights"
+  >("chat");
 
   return (
     <div className="space-y-4">
@@ -90,20 +96,28 @@ export function AiSection({ onCreateTransaction, onNavigateToAdd }: Props) {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-        <TabsList className="grid h-auto w-full grid-cols-3">
+        <TabsList className="grid h-auto w-full grid-cols-4">
           <TabsTrigger
             value="chat"
             className="gap-1.5 py-2 text-xs sm:text-sm"
           >
             <Bot className="h-4 w-4" />
-            Chat
+            <span className="hidden sm:inline">Chat</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="boleh"
+            className="gap-1.5 py-2 text-xs sm:text-sm"
+          >
+            <Wallet className="h-4 w-4" />
+            <span className="hidden sm:inline">Boleh?</span>
+            <span className="sm:hidden">Jajan?</span>
           </TabsTrigger>
           <TabsTrigger
             value="scan"
             className="gap-1.5 py-2 text-xs sm:text-sm"
           >
             <ScanLine className="h-4 w-4" />
-            <span className="hidden sm:inline">Pindai Struk</span>
+            <span className="hidden sm:inline">Struk</span>
             <span className="sm:hidden">Struk</span>
           </TabsTrigger>
           <TabsTrigger
@@ -111,12 +125,16 @@ export function AiSection({ onCreateTransaction, onNavigateToAdd }: Props) {
             className="gap-1.5 py-2 text-xs sm:text-sm"
           >
             <Sparkles className="h-4 w-4" />
-            Insight
+            <span className="hidden sm:inline">Insight</span>
+            <span className="sm:hidden">Insight</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="chat" className="mt-4">
           <ChatAsisten />
+        </TabsContent>
+        <TabsContent value="boleh" className="mt-4">
+          <BolehJajanCard />
         </TabsContent>
         <TabsContent value="scan" className="mt-4">
           <PindaiStruk onCreateTransaction={onCreateTransaction} />
@@ -320,7 +338,172 @@ function TypingIndicator() {
 }
 
 // ============================================================
-// B. Pindai Struk
+// B. Boleh Jajan? — quick affordability check
+// ============================================================
+
+function BolehJajanCard() {
+  const jajanCheck = useJajanCheck();
+  const [amount, setAmount] = React.useState("");
+  const [submitted, setSubmitted] = React.useState(false);
+
+  const amountNum = Number(amount);
+  const data = jajanCheck.data;
+  const canAfford = data?.canAfford ?? null;
+  const remaining = data?.remaining ?? null;
+
+  function handleCheck(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      toast.error("Masukkan jumlah yang valid.");
+      return;
+    }
+    if (!submitted) setSubmitted(true);
+    jajanCheck.mutate(Math.round(amountNum), {
+      onError: (err) =>
+        toast.error(err.message || "Gagal mengecek. Coba lagi."),
+    });
+  }
+
+  function reset() {
+    setAmount("");
+    setSubmitted(false);
+    jajanCheck.reset();
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+          <Wallet className="h-5 w-5" />
+        </span>
+        <div>
+          <h3 className="text-base font-semibold">Boleh Jajan?</h3>
+          <p className="text-xs text-muted-foreground">
+            Cek dulu apakah aman jajan sekali ini tanpa bikin uang saku bocor.
+          </p>
+        </div>
+      </div>
+
+      <form onSubmit={handleCheck} className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+              Rp
+            </span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={500}
+              placeholder="cth. 25000"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="pl-9"
+              aria-label="Jumlah jajan"
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={
+              jajanCheck.isPending || !Number.isFinite(amountNum) || amountNum <= 0
+            }
+            className="gap-1.5"
+          >
+            {jajanCheck.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            Check
+          </Button>
+        </div>
+
+        {/* Quick chips */}
+        <div className="flex flex-wrap gap-1.5">
+          {[5000, 10000, 20000, 50000].map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setAmount(String(v))}
+              className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted/70"
+            >
+              {formatCurrency(v)}
+            </button>
+          ))}
+        </div>
+      </form>
+
+      {/* Result bubble */}
+      <AnimatePresence mode="wait">
+        {submitted && data && (
+          <motion.div
+            key="reply"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4 space-y-3"
+          >
+            {/* Chat bubble style reply */}
+            <div className="flex items-end gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+                <Bot className="h-4 w-4" />
+              </span>
+              <div className="rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2 text-sm leading-relaxed text-foreground">
+                {data.reply}
+              </div>
+            </div>
+
+            {/* Affordability badge */}
+            <div className="flex flex-wrap items-center gap-2">
+              {canAfford !== null && (
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "gap-1 border-transparent",
+                    canAfford
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+                      : "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"
+                  )}
+                >
+                  {canAfford ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5" />
+                  )}
+                  {canAfford ? "Boleh jajan" : "Sebaiknya tahan dulu"}
+                </Badge>
+              )}
+              {remaining !== null && Number.isFinite(remaining) && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 text-muted-foreground"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  Sisa budget: {formatCurrency(remaining)}
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={reset}
+                className="h-7 px-2 text-xs text-muted-foreground"
+              >
+                Reset
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
+  );
+}
+
+// ============================================================
+// C. Pindai Struk
 // ============================================================
 
 function PindaiStruk({
@@ -646,7 +829,7 @@ function ResultField({
 }
 
 // ============================================================
-// C. Insight Otomatis
+// D. Insight Otomatis
 // ============================================================
 
 function InsightOtomatis({

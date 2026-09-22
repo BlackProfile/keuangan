@@ -10,6 +10,7 @@ import {
   Inbox,
   Landmark,
   Loader2,
+  MoreVertical,
   Pencil,
   Plus,
   Trash2,
@@ -52,6 +53,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LucideIcon } from "@/components/lucide-icon";
 import { cn } from "@/lib/utils";
 import {
@@ -324,56 +332,65 @@ function AccountCard({
         </button>
 
         {/* Hover actions: edit & delete */}
-        <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={onEdit}
-            aria-label="Edit akun"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
+        <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                disabled={deleteMut.isPending}
-                aria-label="Hapus akun"
+                className="h-7 w-7 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Aksi akun"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <MoreVertical className="h-3.5 w-3.5" />
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Hapus akun ini?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Akun <strong>{account.name}</strong> akan dihapus. Jika masih
-                  ada transaksi terkait, penghapusan akan ditolak.
-                  {account.isDefault && (
-                    <span className="mt-2 block text-destructive">
-                      Akun default tidak dapat dihapus. Ubah default ke akun
-                      lain terlebih dahulu.
-                    </span>
-                  )}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Batal</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDelete}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {deleteMut.isPending && (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  )}
-                  Hapus
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={onEdit} className="gap-2">
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <DropdownMenuItem
+                    className="gap-2 text-destructive"
+                    onSelect={(e) => e.preventDefault()}
+                    disabled={deleteMut.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Hapus
+                  </DropdownMenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Hapus akun ini?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Akun <strong>{account.name}</strong> akan dihapus. Jika masih
+                      ada transaksi terkait, penghapusan akan ditolak.
+                      {account.isDefault && (
+                        <span className="mt-2 block text-destructive">
+                          Akun default tidak dapat dihapus. Ubah default ke akun
+                          lain terlebih dahulu.
+                        </span>
+                      )}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteMut.isPending && (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      )}
+                      Hapus
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </Card>
 

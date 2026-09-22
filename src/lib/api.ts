@@ -493,4 +493,37 @@ export const api = {
       "/api/ai/jajan-check",
       { method: "POST", body: JSON.stringify({ amount }) }
     ),
+
+  // Notifications
+  listNotifications: () =>
+    request<NotificationItem[]>("/api/notifications"),
+  createNotification: (data: NotificationPayload) =>
+    request<NotificationItem>("/api/notifications", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  markNotificationRead: (id: string) =>
+    request<NotificationItem>(`/api/notifications/${id}/read`, {
+      method: "POST",
+    }),
+  deleteNotification: (id: string) =>
+    request<void>(`/api/notifications/${id}`, { method: "DELETE" }),
 };
+
+// ---------- Notification types (kept local for tight coupling with API) ----------
+export interface NotificationPayload {
+  type: string;
+  title: string;
+  body: string;
+  icon?: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  icon: string;
+  read: boolean;
+  createdAt: string;
+}

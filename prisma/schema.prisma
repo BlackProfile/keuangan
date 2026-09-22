@@ -522,3 +522,17 @@ model FriendDebt {
   @@index([settled])
   @@index([friendName])
 }
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   // DAILY_REMINDER | BILL_DUE | BUDGET_ALERT | GOAL_MILESTONE | ANOMALY
+  title     String
+  body      String
+  icon      String   @default("Bell")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([read])
+  @@index([type])
+}

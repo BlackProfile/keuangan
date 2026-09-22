@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type NotificationItem, type NotificationPayload } from "@/lib/api";
 import type {
   AccountInput,
   BudgetInput,
@@ -1000,3 +1000,38 @@ export function useJajanCheck() {
     mutationFn: (amount: number) => api.jajanCheck(amount),
   });
 }
+
+// ---------- Notifications ----------
+export function useNotifications() {
+  return useQuery({
+    queryKey: ["notifications"] as const,
+    queryFn: () => api.listNotifications(),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: NotificationPayload) => api.createNotification(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.markNotificationRead(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
+
+export function useDeleteNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteNotification(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
+
+export type { NotificationItem, NotificationPayload };

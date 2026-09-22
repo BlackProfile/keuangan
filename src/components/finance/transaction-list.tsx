@@ -536,7 +536,7 @@ export function TransactionList({
       ) : grouped.length === 0 ? (
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-3">
           <AnimatePresence mode="popLayout">
             {grouped.map(([day, items]) => {
               const dayIncome = items
@@ -760,7 +760,7 @@ function TransactionRow({
   }
 
   return (
-    <div className="group flex items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4">
+    <div className="group flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40 sm:px-4">
       {/* Category icon (with optional pinned ring) */}
       <span
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"

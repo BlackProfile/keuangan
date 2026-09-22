@@ -1,0 +1,2000 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import { toast } from "sonner";
+     5→import {
+     6→  ArrowDownLeft,
+     7→  ArrowUpRight,
+     8→  ImageOff,
+     9→  Loader2,
+    10→  Plus,
+    11→  ScanLine,
+    12→  Trash2,
+    13→  X,
+    14→} from "lucide-react";
+    15→
+    16→import { Button } from "@/components/ui/button";
+    17→import {
+    18→  Dialog,
+    19→  DialogClose,
+    20→  DialogContent,
+    21→  DialogDescription,
+    22→  DialogFooter,
+    23→  DialogHeader,
+    24→  DialogTitle,
+    25→} from "@/components/ui/dialog";
+    26→import { Input } from "@/components/ui/input";
+    27→import { Label } from "@/components/ui/label";
+    28→import { Textarea } from "@/components/ui/textarea";
+    29→import {
+    30→  Select,
+    31→  SelectContent,
+    32→  SelectItem,
+    33→  SelectTrigger,
+    34→  SelectValue,
+    35→} from "@/components/ui/select";
+    36→import {
+    37→  AlertDialog,
+    38→  AlertDialogAction,
+    39→  AlertDialogCancel,
+    40→  AlertDialogContent,
+    41→  AlertDialogDescription,
+    42→  AlertDialogFooter,
+    43→  AlertDialogHeader,
+    44→  AlertDialogTitle,
+    45→  AlertDialogTrigger,
+    46→} from "@/components/ui/alert-dialog";
+    47→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    48→import { Checkbox } from "@/components/ui/checkbox";
+    49→import { Switch } from "@/components/ui/switch";
+    50→import { Badge } from "@/components/ui/badge";
+    51→import { LucideIcon } from "@/components/lucide-icon";
+    52→import { cn } from "@/lib/utils";
+    53→import { formatCurrency, formatDateInput } from "@/lib/format";
+    54→import {
+    55→  useAccounts,
+    56→  useCategories,
+    57→  useCreateGroup,
+    58→  useCreateTransaction,
+    59→  useDeleteTransaction,
+    60→  useGoals,
+    61→  useGroups,
+    62→  useUpdateTransaction,
+    63→} from "@/lib/hooks";
+    64→import type {
+    65→  Mood,
+    66→  PaymentMethod,
+    67→  PaymentStatus,
+    68→  Priority,
+    69→  Transaction,
+    70→  TransactionInput,
+    71→  TransactionType,
+    72→} from "@/lib/types";
+    73→import {
+    74→  COMMON_MERCHANTS,
+    75→  CURRENCIES,
+    76→  FALLBACK_EXCHANGE_RATES,
+    77→  GROUP_COLORS,
+    78→  GROUP_ICONS,
+    79→  MOOD_OPTIONS,
+    80→  PAYMENT_METHOD_OPTIONS,
+    81→  PAYMENT_STATUS_OPTIONS,
+    82→  PRIORITY_OPTIONS,
+    83→  QUICK_ADD_PRESETS,
+    84→} from "@/lib/constants";
+    85→import { ReceiptScanner, type ScannedReceiptData } from "@/components/finance/receipt-scanner";
+    86→
+    87→interface Props {
+    88→  open: boolean;
+    89→  onOpenChange: (open: boolean) => void;
+    90→  transaction?: Transaction | null;
+    91→  prefill?: {
+    92→    type?: TransactionType;
+    93→    amount?: number;
+    94→    description?: string;
+    95→    date?: string;
+    96→    categoryId?: string;
+    97→    merchant?: string;
+    98→  } | null;
+    99→}
+   100→
+   101→type TabValue = "utama" | "detail" | "lainnya";
+   102→
+   103→interface SplitRow {
+   104→  amount: string;
+   105→  categoryId: string;
+   106→  note: string;
+   107→}
+   108→
+   109→interface ReceiptRow {
+   110→  name: string;
+   111→  qty: string;
+   112→  price: string;
+   113→}
+   114→
+   115→const EMPTY_SPLIT: SplitRow = { amount: "", categoryId: "", note: "" };
+   116→const EMPTY_RECEIPT: ReceiptRow = { name: "", qty: "1", price: "" };
+   117→
+   118→function isImageUrl(value: string): boolean {
+   119→  return value.startsWith("data:image") || /^https?:\/\//i.test(value);
+   120→}
+   121→
+   122→export function TransactionForm({
+   123→  open,
+   124→  onOpenChange,
+   125→  transaction,
+   126→  prefill,
+   127→}: Props) {
+   128→  const isEdit = !!transaction;
+   129→
+   130→  // --- core fields ---
+   131→  const [type, setType] = React.useState<TransactionType>("EXPENSE");
+   132→  const [amount, setAmount] = React.useState("");
+   133→  const [description, setDescription] = React.useState("");
+   134→  const [categoryId, setCategoryId] = React.useState("");
+   135→  const [accountId, setAccountId] = React.useState("");
+   136→  const [date, setDate] = React.useState(formatDateInput(new Date()));
+   137→  const [note, setNote] = React.useState("");
+   138→  const [merchant, setMerchant] = React.useState("");
+   139→  const [tags, setTags] = React.useState("");
+   140→
+   141→  // --- detail fields ---
+   142→  const [time, setTime] = React.useState("");
+   143→  const [mood, setMood] = React.useState<Mood | "">("");
+   144→  const [priority, setPriority] = React.useState<Priority | "">("");
+   145→  const [paymentStatus, setPaymentStatus] = React.useState<PaymentStatus | "">("");
+   146→  const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod | "">("");
+   147→  const [recipient, setRecipient] = React.useState("");
+   148→  const [currency, setCurrency] = React.useState("IDR");
+   149→  const [originalAmount, setOriginalAmount] = React.useState("");
+   150→  const [exchangeRate, setExchangeRate] = React.useState("");
+   151→  const [photoUrl, setPhotoUrl] = React.useState("");
+   152→  const [linkUrl, setLinkUrl] = React.useState("");
+   153→
+   154→  // --- "lainnya" toggles ---
+   155→  const [isSplit, setIsSplit] = React.useState(false);
+   156→  const [splits, setSplits] = React.useState<SplitRow[]>([{ ...EMPTY_SPLIT }]);
+   157→  const [isDebt, setIsDebt] = React.useState(false);
+   158→  const [debtDueDate, setDebtDueDate] = React.useState("");
+   159→  const [creditor, setCreditor] = React.useState("");
+   160→  const [isReimbursable, setIsReimbursable] = React.useState(false);
+   161→  const [isSubscription, setIsSubscription] = React.useState(false);
+   162→  const [isTaxDeductible, setIsTaxDeductible] = React.useState(false);
+   163→  const [isBusinessExpense, setIsBusinessExpense] = React.useState(false);
+   164→  const [excludeFromBudget, setExcludeFromBudget] = React.useState(false);
+   165→  const [excludeFromStats, setExcludeFromStats] = React.useState(false);
+   166→  const [isHidden, setIsHidden] = React.useState(false);
+   167→  const [goalId, setGoalId] = React.useState("");
+   168→  const [assignedTo, setAssignedTo] = React.useState("");
+   169→  const [cashbackAmount, setCashbackAmount] = React.useState("");
+   170→  const [originalPrice, setOriginalPrice] = React.useState("");
+   171→  const [discountAmount, setDiscountAmount] = React.useState("");
+   172→  const [groupId, setGroupId] = React.useState("");
+   173→  const [receiptItems, setReceiptItems] = React.useState<ReceiptRow[]>([]);
+   174→
+   175→  // --- inline new group creation ---
+   176→  const [showNewGroup, setShowNewGroup] = React.useState(false);
+   177→  const [newGroupName, setNewGroupName] = React.useState("");
+   178→  const [newGroupColor, setNewGroupColor] = React.useState(GROUP_COLORS[0]);
+   179→  const [newGroupIcon, setNewGroupIcon] = React.useState(GROUP_ICONS[0]);
+   180→
+   181→  const [activeTab, setActiveTab] = React.useState<TabValue>("utama");
+   182→  const [error, setError] = React.useState<string | null>(null);
+   183→  const [scannerOpen, setScannerOpen] = React.useState(false);
+   184→
+   185→  // Handle scan result — auto-fill form fields from scanned receipt
+   186→  function handleScanResult(data: ScannedReceiptData) {
+   187→    if (data.total && data.total > 0) {
+   188→      setAmount(String(data.total));
+   189→      setType("EXPENSE"); // receipts are expenses
+   190→    }
+   191→    if (data.merchant) {
+   192→      setDescription(data.merchant);
+   193→      setMerchant(data.merchant);
+   194→    }
+   195→    if (data.date) {
+   196→      setDate(data.date);
+   197→    }
+   198→    if (data.categoryId) {
+   199→      setCategoryId(data.categoryId);
+   200→    }
+   201→    if (data.photoUrl) {
+   202→      setPhotoUrl(data.photoUrl);
+   203→    }
+   204→    if (data.items && data.items.length > 0) {
+   205→      // Convert items to receipt items format
+   206→      const newItems = data.items.map((name) => ({
+   207→        name,
+   208→        qty: 1,
+   209→        price: 0,
+   210→        total: 0,
+   211→      }));
+   212→      setReceiptItems(newItems);
+   213→      // Enable split-like note with items
+   214→      if (!note) {
+   215→        setNote(`Item: ${data.items.join(", ")}`);
+   216→      }
+   217→    }
+   218→    toast.success("Data struk diterapkan ke form.");
+   219→  }
+   220→
+   221→  const { data: categories, isLoading: catsLoading } = useCategories();
+   222→  const { data: accounts } = useAccounts();
+   223→  const { data: groups } = useGroups();
+   224→  const { data: goals } = useGoals();
+   225→  const createMut = useCreateTransaction();
+   226→  const updateMut = useUpdateTransaction();
+   227→  const deleteMut = useDeleteTransaction();
+   228→  const createGroupMut = useCreateGroup();
+   229→
+   230→  // Filter categories by selected type
+   231→  const filteredCategories = React.useMemo(
+   232→    () => (categories ?? []).filter((c) => c.type === type),
+   233→    [categories, type]
+   234→  );
+   235→
+   236→  // Reset category if it doesn't match the new type
+   237→  React.useEffect(() => {
+   238→    if (!categoryId) return;
+   239→    const cat = categories?.find((c) => c.id === categoryId);
+   240→    if (cat && cat.type !== type) setCategoryId("");
+   241→  }, [type, categories, categoryId]);
+   242→
+   243→  // Auto-compute IDR amount when using a foreign currency
+   244→  React.useEffect(() => {
+   245→    if (currency === "IDR") return;
+   246→    const oa = Number(originalAmount);
+   247→    const er = Number(exchangeRate);
+   248→    if (Number.isFinite(oa) && oa > 0 && Number.isFinite(er) && er > 0) {
+   249→      setAmount(String(Math.round(oa * er)));
+   250→    }
+   251→  }, [currency, originalAmount, exchangeRate]);
+   252→
+   253→  // Sync form state when opening
+   254→  React.useEffect(() => {
+   255→    if (!open) return;
+   256→
+   257→    setActiveTab("utama");
+   258→    setError(null);
+   259→    setShowNewGroup(false);
+   260→    setNewGroupName("");
+   261→
+   262→    if (transaction) {
+   263→      setType(transaction.type);
+   264→      setAmount(String(transaction.amount));
+   265→      setDescription(transaction.description);
+   266→      setCategoryId(transaction.categoryId);
+   267→      setAccountId(transaction.accountId ?? "");
+   268→      setDate(formatDateInput(transaction.date));
+   269→      setNote(transaction.note ?? "");
+   270→      setMerchant(transaction.merchant ?? "");
+   271→      setTags(transaction.tags ?? "");
+   272→
+   273→      setTime(transaction.time ?? "");
+   274→      setMood(transaction.mood ?? "");
+   275→      setPriority(transaction.priority ?? "");
+   276→      setPaymentStatus(transaction.paymentStatus ?? "");
+   277→      setPaymentMethod(transaction.paymentMethod ?? "");
+   278→      setRecipient(transaction.recipient ?? "");
+   279→      setCurrency(transaction.currency ?? "IDR");
+   280→      setOriginalAmount(
+   281→        transaction.originalAmount != null
+   282→          ? String(transaction.originalAmount)
+   283→          : ""
+   284→      );
+   285→      setExchangeRate(
+   286→        transaction.exchangeRate != null
+   287→          ? String(transaction.exchangeRate)
+   288→          : ""
+   289→      );
+   290→      setPhotoUrl(transaction.photoUrl ?? "");
+   291→      setLinkUrl(transaction.linkUrl ?? "");
+   292→
+   293→      setIsSplit(transaction.isSplit);
+   294→      setSplits(
+   295→        transaction.splits && transaction.splits.length > 0
+   296→          ? transaction.splits.map((s) => ({
+   297→              amount: String(s.amount),
+   298→              categoryId: s.categoryId,
+   299→              note: s.note ?? "",
+   300→            }))
+   301→          : [{ ...EMPTY_SPLIT }]
+   302→      );
+   303→      setIsDebt(transaction.isDebt);
+   304→      setDebtDueDate(transaction.debtDueDate ?? "");
+   305→      setCreditor(transaction.creditor ?? "");
+   306→      setIsReimbursable(transaction.isReimbursable);
+   307→      setIsSubscription(transaction.isSubscription);
+   308→      setIsTaxDeductible(transaction.isTaxDeductible);
+   309→      setIsBusinessExpense(transaction.isBusinessExpense);
+   310→      setExcludeFromBudget(transaction.excludeFromBudget);
+   311→      setExcludeFromStats(transaction.excludeFromStats);
+   312→      setIsHidden(transaction.isHidden);
+   313→      setGoalId(transaction.goalId ?? "");
+   314→      setAssignedTo(transaction.assignedTo ?? "");
+   315→      setCashbackAmount(
+   316→        transaction.cashbackAmount != null
+   317→          ? String(transaction.cashbackAmount)
+   318→          : ""
+   319→      );
+   320→      setOriginalPrice(
+   321→        transaction.originalPrice != null
+   322→          ? String(transaction.originalPrice)
+   323→          : ""
+   324→      );
+   325→      setDiscountAmount(
+   326→        transaction.discountAmount != null
+   327→          ? String(transaction.discountAmount)
+   328→          : ""
+   329→      );
+   330→      setGroupId(transaction.groupId ?? "");
+   331→      setReceiptItems(
+   332→        transaction.receiptItems && transaction.receiptItems.length > 0
+   333→          ? transaction.receiptItems.map((r) => ({
+   334→              name: r.name,
+   335→              qty: String(r.qty),
+   336→              price: String(r.price),
+   337→            }))
+   338→          : []
+   339→      );
+   340→    } else if (prefill) {
+   341→      setType(prefill.type ?? "EXPENSE");
+   342→      setAmount(prefill.amount ? String(prefill.amount) : "");
+   343→      setDescription(prefill.description ?? "");
+   344→      setCategoryId(prefill.categoryId ?? "");
+   345→      setAccountId("");
+   346→      setDate(prefill.date ?? formatDateInput(new Date()));
+   347→      setNote("");
+   348→      setMerchant(prefill.merchant ?? "");
+   349→      setTags("");
+   350→
+   351→      setTime("");
+   352→      setMood("");
+   353→      setPriority("");
+   354→      setPaymentStatus("");
+   355→      setPaymentMethod("");
+   356→      setRecipient("");
+   357→      setCurrency("IDR");
+   358→      setOriginalAmount("");
+   359→      setExchangeRate("");
+   360→      setPhotoUrl("");
+   361→      setLinkUrl("");
+   362→
+   363→      setIsSplit(false);
+   364→      setSplits([{ ...EMPTY_SPLIT }]);
+   365→      setIsDebt(false);
+   366→      setDebtDueDate("");
+   367→      setCreditor("");
+   368→      setIsReimbursable(false);
+   369→      setIsSubscription(false);
+   370→      setIsTaxDeductible(false);
+   371→      setIsBusinessExpense(false);
+   372→      setExcludeFromBudget(false);
+   373→      setExcludeFromStats(false);
+   374→      setIsHidden(false);
+   375→      setGoalId("");
+   376→      setAssignedTo("");
+   377→      setCashbackAmount("");
+   378→      setOriginalPrice("");
+   379→      setDiscountAmount("");
+   380→      setGroupId("");
+   381→      setReceiptItems([]);
+   382→    } else {
+   383→      setType("EXPENSE");
+   384→      setAmount("");
+   385→      setDescription("");
+   386→      setCategoryId("");
+   387→      setAccountId("");
+   388→      setDate(formatDateInput(new Date()));
+   389→      setNote("");
+   390→      setMerchant("");
+   391→      setTags("");
+   392→
+   393→      setTime("");
+   394→      setMood("");
+   395→      setPriority("");
+   396→      setPaymentStatus("");
+   397→      setPaymentMethod("");
+   398→      setRecipient("");
+   399→      setCurrency("IDR");
+   400→      setOriginalAmount("");
+   401→      setExchangeRate("");
+   402→      setPhotoUrl("");
+   403→      setLinkUrl("");
+   404→
+   405→      setIsSplit(false);
+   406→      setSplits([{ ...EMPTY_SPLIT }]);
+   407→      setIsDebt(false);
+   408→      setDebtDueDate("");
+   409→      setCreditor("");
+   410→      setIsReimbursable(false);
+   411→      setIsSubscription(false);
+   412→      setIsTaxDeductible(false);
+   413→      setIsBusinessExpense(false);
+   414→      setExcludeFromBudget(false);
+   415→      setExcludeFromStats(false);
+   416→      setIsHidden(false);
+   417→      setGoalId("");
+   418→      setAssignedTo("");
+   419→      setCashbackAmount("");
+   420→      setOriginalPrice("");
+   421→      setDiscountAmount("");
+   422→      setGroupId("");
+   423→      setReceiptItems([]);
+   424→    }
+   425→  }, [open, transaction, prefill]);
+   426→
+   427→  const submitting =
+   428→    createMut.isPending || updateMut.isPending || deleteMut.isPending;
+   429→
+   430→  // --- derived values for splits & receipt items ---
+   431→  const splitsTotal = React.useMemo(
+   432→    () =>
+   433→      splits.reduce((sum, s) => {
+   434→        const v = Number(s.amount.replace(/[^\d.-]/g, ""));
+   435→        return sum + (Number.isFinite(v) ? v : 0);
+   436→      }, 0),
+   437→    [splits]
+   438→  );
+   439→
+   440→  const receiptSubtotal = React.useMemo(
+   441→    () =>
+   442→      receiptItems.reduce((sum, r) => {
+   443→        const qty = Number(r.qty.replace(/[^\d.-]/g, ""));
+   444→        const price = Number(r.price.replace(/[^\d.-]/g, ""));
+   445→        const t =
+   446→          Number.isFinite(qty) && Number.isFinite(price) ? qty * price : 0;
+   447→        return sum + t;
+   448→      }, 0),
+   449→    [receiptItems]
+   450→  );
+   451→
+   452→  const computedForeignAmount = React.useMemo(() => {
+   453→    if (currency === "IDR") return null;
+   454→    const oa = Number(originalAmount);
+   455→    const er = Number(exchangeRate);
+   456→    if (Number.isFinite(oa) && Number.isFinite(er) && oa > 0 && er > 0) {
+   457→      return Math.round(oa * er);
+   458→    }
+   459→    return null;
+   460→  }, [currency, originalAmount, exchangeRate]);
+   461→
+   462→  // --- handlers ---
+   463→  function handleCurrencyChange(code: string) {
+   464→    setCurrency(code);
+   465→    if (code === "IDR") {
+   466→      setExchangeRate("");
+   467→      setOriginalAmount("");
+   468→    } else {
+   469→      const rate = FALLBACK_EXCHANGE_RATES[code];
+   470→      if (rate) setExchangeRate(String(rate));
+   471→    }
+   472→  }
+   473→
+   474→  function addSplit() {
+   475→    setSplits((prev) => [...prev, { ...EMPTY_SPLIT }]);
+   476→  }
+   477→
+   478→  function updateSplit(idx: number, patch: Partial<SplitRow>) {
+   479→    setSplits((prev) =>
+   480→      prev.map((s, i) => (i === idx ? { ...s, ...patch } : s))
+   481→    );
+   482→  }
+   483→
+   484→  function removeSplit(idx: number) {
+   485→    setSplits((prev) =>
+   486→      prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
+   487→    );
+   488→  }
+   489→
+   490→  function addReceiptItem() {
+   491→    setReceiptItems((prev) => [...prev, { ...EMPTY_RECEIPT }]);
+   492→  }
+   493→
+   494→  function updateReceipt(idx: number, patch: Partial<ReceiptRow>) {
+   495→    setReceiptItems((prev) =>
+   496→      prev.map((r, i) => (i === idx ? { ...r, ...patch } : r))
+   497→    );
+   498→  }
+   499→
+   500→  function removeReceipt(idx: number) {
+   501→    setReceiptItems((prev) => prev.filter((_, i) => i !== idx));
+   502→  }
+   503→
+   504→  async function handleCreateGroup() {
+   505→    const name = newGroupName.trim();
+   506→    if (!name) {
+   507→      toast.error("Nama grup tidak boleh kosong.");
+   508→      return;
+   509→    }
+   510→    try {
+   511→      const created = await createGroupMut.mutateAsync({
+   512→        name,
+   513→        color: newGroupColor,
+   514→        icon: newGroupIcon,
+   515→      });
+   516→      setGroupId(created.id);
+   517→      setShowNewGroup(false);
+   518→      setNewGroupName("");
+   519→      toast.success("Grup baru berhasil dibuat.");
+   520→    } catch (err) {
+   521→      toast.error(
+   522→        err instanceof Error ? err.message : "Gagal membuat grup baru."
+   523→      );
+   524→    }
+   525→  }
+   526→
+   527→  function fail(msg: string, tab: TabValue) {
+   528→    setError(msg);
+   529→    setActiveTab(tab);
+   530→  }
+   531→
+   532→  function handleSubmit(e: React.FormEvent) {
+   533→    e.preventDefault();
+   534→    setError(null);
+   535→
+   536→    const amt = Number(amount.replace(/[^\d.-]/g, ""));
+   537→    if (!Number.isFinite(amt) || amt <= 0) {
+   538→      fail("Masukkan jumlah yang valid (lebih dari 0).", "utama");
+   539→      return;
+   540→    }
+   541→    if (!description.trim()) {
+   542→      fail("Keterangan transaksi wajib diisi.", "utama");
+   543→      return;
+   544→    }
+   545→    if (!categoryId) {
+   546→      fail("Pilih kategori terlebih dahulu.", "utama");
+   547→      return;
+   548→    }
+   549→    if (!date) {
+   550→      fail("Tanggal wajib diisi.", "utama");
+   551→      return;
+   552→    }
+   553→
+   554→    let finalSplits: Array<{ amount: number; categoryId: string; note?: string }> | undefined;
+   555→    if (isSplit) {
+   556→      const built: Array<{ amount: number; categoryId: string; note?: string }> = [];
+   557→      for (let i = 0; i < splits.length; i++) {
+   558→        const s = splits[i];
+   559→        const sAmt = Number(s.amount.replace(/[^\d.-]/g, ""));
+   560→        if (!Number.isFinite(sAmt) || sAmt <= 0) {
+   561→          fail(`Split #${i + 1}: jumlah tidak valid.`, "lainnya");
+   562→          return;
+   563→        }
+   564→        if (!s.categoryId) {
+   565→          fail(`Split #${i + 1}: pilih kategori terlebih dahulu.`, "lainnya");
+   566→          return;
+   567→        }
+   568→        built.push({
+   569→          amount: sAmt,
+   570→          categoryId: s.categoryId,
+   571→          note: s.note.trim() || undefined,
+   572→        });
+   573→      }
+   574→      const total = built.reduce((sum, s) => sum + s.amount, 0);
+   575→      if (Math.abs(total - amt) > 0.01) {
+   576→        fail(
+   577→          `Total split (${formatCurrency(total)}) harus sama dengan jumlah transaksi (${formatCurrency(amt)}).`,
+   578→          "lainnya"
+   579→        );
+   580→        return;
+   581→      }
+   582→      finalSplits = built;
+   583→    }
+   584→
+   585→    if (isDebt && !creditor.trim()) {
+   586→      fail("Nama pemberi/piutang wajib diisi saat menandai hutang.", "lainnya");
+   587→      return;
+   588→    }
+   589→
+   590→    let finalReceiptItems:
+   591→      | Array<{ name: string; qty: number; price: number; total: number }>
+   592→      | undefined;
+   593→    if (receiptItems.length > 0) {
+   594→      const built: Array<{
+   595→        name: string;
+   596→        qty: number;
+   597→        price: number;
+   598→        total: number;
+   599→      }> = [];
+   600→      for (let i = 0; i < receiptItems.length; i++) {
+   601→        const r = receiptItems[i];
+   602→        if (!r.name.trim()) {
+   603→          fail(`Item struk #${i + 1}: nama wajib diisi.`, "lainnya");
+   604→          return;
+   605→        }
+   606→        const qty = Number(r.qty.replace(/[^\d.-]/g, ""));
+   607→        const price = Number(r.price.replace(/[^\d.-]/g, ""));
+   608→        if (!Number.isFinite(qty) || qty <= 0) {
+   609→          fail(`Item struk #${i + 1}: qty tidak valid.`, "lainnya");
+   610→          return;
+   611→        }
+   612→        if (!Number.isFinite(price) || price < 0) {
+   613→          fail(`Item struk #${i + 1}: harga tidak valid.`, "lainnya");
+   614→          return;
+   615→        }
+   616→        built.push({
+   617→          name: r.name.trim(),
+   618→          qty,
+   619→          price,
+   620→          total: qty * price,
+   621→        });
+   622→      }
+   623→      finalReceiptItems = built;
+   624→    }
+   625→
+   626→    const payload: TransactionInput = {
+   627→      type,
+   628→      amount: amt,
+   629→      description: description.trim(),
+   630→      categoryId,
+   631→      accountId: accountId || undefined,
+   632→      date,
+   633→      note: note.trim() || undefined,
+   634→      tags: tags.trim() || undefined,
+   635→      merchant: merchant.trim() || undefined,
+   636→      time: time || undefined,
+   637→      photoUrl: photoUrl.trim() || undefined,
+   638→      mood: (mood || null) as Mood | null,
+   639→      priority: (priority || null) as Priority | null,
+   640→      paymentStatus: (paymentStatus || undefined) as PaymentStatus | undefined,
+   641→      paymentMethod: (paymentMethod || null) as PaymentMethod | null,
+   642→      recipient: recipient.trim() || undefined,
+   643→      currency,
+   644→      originalAmount:
+   645→        currency !== "IDR" && originalAmount
+   646→          ? Number(originalAmount)
+   647→          : undefined,
+   648→      exchangeRate:
+   649→        currency !== "IDR" && exchangeRate
+   650→          ? Number(exchangeRate)
+   651→          : undefined,
+   652→      groupId: groupId || undefined,
+   653→      isSplit,
+   654→      isDebt,
+   655→      isReimbursable,
+   656→      isSubscription,
+   657→      isTaxDeductible,
+   658→      isBusinessExpense,
+   659→      excludeFromBudget,
+   660→      excludeFromStats,
+   661→      isHidden,
+   662→      cashbackAmount: cashbackAmount
+   663→        ? Number(cashbackAmount.replace(/[^\d.-]/g, ""))
+   664→        : undefined,
+   665→      originalPrice: originalPrice
+   666→        ? Number(originalPrice.replace(/[^\d.-]/g, ""))
+   667→        : undefined,
+   668→      discountAmount: discountAmount
+   669→        ? Number(discountAmount.replace(/[^\d.-]/g, ""))
+   670→        : undefined,
+   671→      debtDueDate: isDebt && debtDueDate ? debtDueDate : undefined,
+   672→      creditor: isDebt && creditor.trim() ? creditor.trim() : undefined,
+   673→      goalId: goalId || undefined,
+   674→      assignedTo: assignedTo.trim() || undefined,
+   675→      linkUrl: linkUrl.trim() || undefined,
+   676→      splits: finalSplits,
+   677→      receiptItems: finalReceiptItems,
+   678→    };
+   679→
+   680→    if (isEdit && transaction) {
+   681→      updateMut.mutate(
+   682→        { id: transaction.id, data: payload },
+   683→        {
+   684→          onSuccess: () => {
+   685→            toast.success("Transaksi berhasil diperbarui.");
+   686→            onOpenChange(false);
+   687→          },
+   688→          onError: (err) => {
+   689→            setError(err.message || "Gagal memperbarui transaksi.");
+   690→          },
+   691→        }
+   692→      );
+   693→    } else {
+   694→      createMut.mutate(payload, {
+   695→        onSuccess: () => {
+   696→          toast.success("Transaksi berhasil ditambahkan.");
+   697→          onOpenChange(false);
+   698→        },
+   699→        onError: (err) => {
+   700→          setError(err.message || "Gagal menambah transaksi.");
+   701→        },
+   702→      });
+   703→    }
+   704→  }
+   705→
+   706→  function handleDelete() {
+   707→    if (!transaction) return;
+   708→    deleteMut.mutate(transaction.id, {
+   709→      onSuccess: () => {
+   710→        toast.success("Transaksi berhasil dihapus.");
+   711→        onOpenChange(false);
+   712→      },
+   713→      onError: (err) => {
+   714→        toast.error(err.message || "Gagal menghapus transaksi.");
+   715→      },
+   716→    });
+   717→  }
+   718→
+   719→  return (
+   720→    <Dialog open={open} onOpenChange={onOpenChange}>
+   721→      <DialogContent
+   722→        showCloseButton={false}
+   723→        className="max-w-2xl gap-0 overflow-hidden p-0 sm:rounded-2xl"
+   724→      >
+   725→        <DialogHeader className="space-y-0 border-b border-border bg-muted/30 p-5 pb-4">
+   726→          <div className="flex items-center justify-between">
+   727→            <div className="flex items-center gap-3">
+   728→              <span
+   729→                className={cn(
+   730→                  "flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-sm",
+   731→                  type === "INCOME" ? "bg-income" : "bg-expense"
+   732→                )}
+   733→              >
+   734→                {type === "INCOME" ? (
+   735→                  <ArrowDownLeft className="h-5 w-5" />
+   736→                ) : (
+   737→                  <ArrowUpRight className="h-5 w-5" />
+   738→                )}
+   739→              </span>
+   740→              <div>
+   741→                <DialogTitle className="text-base">
+   742→                  {isEdit ? "Edit Transaksi" : "Tambah Transaksi"}
+   743→                </DialogTitle>
+   744→                <DialogDescription className="text-xs">
+   745→                  {isEdit
+   746→                    ? "Ubah detail transaksi Anda."
+   747→                    : "Catat pemasukan atau pengeluaran baru."}
+   748→                </DialogDescription>
+   749→              </div>
+   750→            </div>
+   751→            <DialogClose asChild>
+   752→              <Button
+   753→                variant="ghost"
+   754→                size="icon"
+   755→                className="h-8 w-8 shrink-0"
+   756→                aria-label="Tutup"
+   757→              >
+   758→                <X className="h-4 w-4" />
+   759→              </Button>
+   760→            </DialogClose>
+   761→          </div>
+   762→          {/* Selected badges */}
+   763→          {(mood || priority || paymentStatus || paymentMethod || isDebt || isSplit) && (
+   764→            <div className="mt-3 flex flex-wrap gap-1.5">
+   765→              {mood && (
+   766→                <Badge variant="secondary" className="gap-1">
+   767→                  {MOOD_OPTIONS.find((m) => m.value === mood)?.emoji}
+   768→                  {MOOD_OPTIONS.find((m) => m.value === mood)?.label}
+   769→                </Badge>
+   770→              )}
+   771→              {priority && (
+   772→                <Badge
+   773→                  variant="secondary"
+   774→                  className="gap-1"
+   775→                  style={{
+   776→                    backgroundColor: `${PRIORITY_OPTIONS.find((p) => p.value === priority)?.color}1A`,
+   777→                    color: PRIORITY_OPTIONS.find((p) => p.value === priority)?.color,
+   778→                  }}
+   779→                >
+   780→                  {PRIORITY_OPTIONS.find((p) => p.value === priority)?.label}
+   781→                </Badge>
+   782→              )}
+   783→              {paymentStatus && (
+   784→                <Badge
+   785→                  variant="secondary"
+   786→                  className="gap-1"
+   787→                  style={{
+   788→                    backgroundColor: `${PAYMENT_STATUS_OPTIONS.find((p) => p.value === paymentStatus)?.color}1A`,
+   789→                    color: PAYMENT_STATUS_OPTIONS.find((p) => p.value === paymentStatus)?.color,
+   790→                  }}
+   791→                >
+   792→                  {PAYMENT_STATUS_OPTIONS.find((p) => p.value === paymentStatus)?.label}
+   793→                </Badge>
+   794→              )}
+   795→              {paymentMethod && (
+   796→                <Badge variant="secondary" className="gap-1">
+   797→                  <LucideIcon
+   798→                    name={PAYMENT_METHOD_OPTIONS.find((p) => p.value === paymentMethod)?.icon ?? "CreditCard"}
+   799→                    className="h-3 w-3"
+   800→                  />
+   801→                  {PAYMENT_METHOD_OPTIONS.find((p) => p.value === paymentMethod)?.label}
+   802→                </Badge>
+   803→              )}
+   804→              {isSplit && <Badge variant="secondary">Split</Badge>}
+   805→              {isDebt && <Badge variant="secondary">Hutang/Piutang</Badge>}
+   806→            </div>
+   807→          )}
+   808→        </DialogHeader>
+   809→
+   810→        <form onSubmit={handleSubmit} className="flex flex-col">
+   811→          <Tabs
+   812→            value={activeTab}
+   813→            onValueChange={(v) => {
+   814→              setActiveTab(v as TabValue);
+   815→            }}
+   816→            className="gap-0"
+   817→          >
+   818→            <div className="border-b border-border bg-background px-3 pt-3">
+   819→              <TabsList className="grid w-full grid-cols-3">
+   820→                <TabsTrigger value="utama">Utama</TabsTrigger>
+   821→                <TabsTrigger value="detail">Detail</TabsTrigger>
+   822→                <TabsTrigger value="lainnya">Lainnya</TabsTrigger>
+   823→              </TabsList>
+   824→            </div>
+   825→
+   826→            <div className="max-h-[62vh] overflow-y-auto custom-scrollbar p-5">
+   827→              {/* ============ TAB UTAMA ============ */}
+   828→              <TabsContent value="utama" className="space-y-4 outline-none">
+   829→                {/* Scan Struk button — quick AI receipt scan */}
+   830→                {!isEdit && (
+   831→                  <button
+   832→                    type="button"
+   833→                    onClick={() => setScannerOpen(true)}
+   834→                    className="flex w-full items-center gap-3 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-3 text-left transition-colors hover:border-primary hover:bg-primary/10"
+   835→                  >
+   836→                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+   837→                      <ScanLine className="h-5 w-5" />
+   838→                    </span>
+   839→                    <div className="min-w-0 flex-1">
+   840→                      <p className="text-sm font-medium text-foreground">
+   841→                        Pindai Struk
+   842→                      </p>
+   843→                      <p className="text-xs text-muted-foreground">
+   844→                        Foto struk → AI isi form otomatis
+   845→                      </p>
+   846→                    </div>
+   847→                    <span className="text-xs font-medium text-primary">
+   848→                      Buka
+   849→                    </span>
+   850→                  </button>
+   851→                )}
+   852→
+   853→                {/* Type toggle */}
+   854→                <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
+   855→                  <button
+   856→                    type="button"
+   857→                    onClick={() => setType("INCOME")}
+   858→                    className={cn(
+   859→                      "flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+   860→                      type === "INCOME"
+   861→                        ? "bg-income text-white shadow-sm"
+   862→                        : "text-muted-foreground hover:text-foreground"
+   863→                    )}
+   864→                  >
+   865→                    <ArrowDownLeft className="h-4 w-4" />
+   866→                    Pemasukan
+   867→                  </button>
+   868→                  <button
+   869→                    type="button"
+   870→                    onClick={() => setType("EXPENSE")}
+   871→                    className={cn(
+   872→                      "flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+   873→                      type === "EXPENSE"
+   874→                        ? "bg-expense text-white shadow-sm"
+   875→                        : "text-muted-foreground hover:text-foreground"
+   876→                    )}
+   877→                  >
+   878→                    <ArrowUpRight className="h-4 w-4" />
+   879→                    Pengeluaran
+   880→                  </button>
+   881→                </div>
+   882→
+   883→                {/* Amount */}
+   884→                <div className="space-y-1.5">
+   885→                  <Label htmlFor="amount">Jumlah</Label>
+   886→                  <div className="relative">
+   887→                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+   888→                      Rp
+   889→                    </span>
+   890→                    <Input
+   891→                      id="amount"
+   892→                      inputMode="decimal"
+   893→                      type="number"
+   894→                      step="0.01"
+   895→                      min="0"
+   896→                      placeholder="0"
+   897→                      value={amount}
+   898→                      onChange={(e) => setAmount(e.target.value)}
+   899→                      className="pl-9 text-lg font-semibold"
+   900→                      disabled={currency !== "IDR"}
+   901→                      autoFocus
+   902→                    />
+   903→                  </div>
+   904→                  {currency !== "IDR" && (
+   905→                    <p className="text-xs text-muted-foreground">
+   906→                      Jumlah IDR dihitung otomatis dari mata uang asing di tab
+   907→                      Detail.
+   908→                    </p>
+   909→                  )}
+   910→                  {currency === "IDR" && (
+   911→                    <div className="flex flex-wrap gap-1.5 pt-1">
+   912→                      {QUICK_ADD_PRESETS.map((p) => (
+   913→                        <button
+   914→                          key={p.label}
+   915→                          type="button"
+   916→                          onClick={() =>
+   917→                            setAmount((prev) => String(Number(prev || 0) + p.amount))
+   918→                          }
+   919→                          className="rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+   920→                        >
+   921→                          +{p.label}
+   922→                        </button>
+   923→                      ))}
+   924→                    </div>
+   925→                  )}
+   926→                </div>
+   927→
+   928→                {/* Description */}
+   929→                <div className="space-y-1.5">
+   930→                  <Label htmlFor="description">Keterangan</Label>
+   931→                  <Input
+   932→                    id="description"
+   933→                    placeholder={
+   934→                      type === "INCOME"
+   935→                        ? "cth. Gaji bulan ini"
+   936→                        : "cth. Makan siang"
+   937→                    }
+   938→                    value={description}
+   939→                    onChange={(e) => setDescription(e.target.value)}
+   940→                    maxLength={80}
+   941→                  />
+   942→                </div>
+   943→
+   944→                {/* Merchant with datalist */}
+   945→                <div className="space-y-1.5">
+   946→                  <Label htmlFor="merchant">
+   947→                    Merchant{" "}
+   948→                    <span className="text-muted-foreground">(opsional)</span>
+   949→                  </Label>
+   950→                  <Input
+   951→                    id="merchant"
+   952→                    list="common-merchants"
+   953→                    placeholder="cth. Indomaret, Gojek"
+   954→                    value={merchant}
+   955→                    onChange={(e) => setMerchant(e.target.value)}
+   956→                    maxLength={50}
+   957→                  />
+   958→                  <datalist id="common-merchants">
+   959→                    {COMMON_MERCHANTS.map((m) => (
+   960→                      <option key={m} value={m} />
+   961→                    ))}
+   962→                  </datalist>
+   963→                </div>
+   964→
+   965→                {/* Category */}
+   966→                <div className="space-y-1.5">
+   967→                  <Label>Kategori</Label>
+   968→                  {catsLoading ? (
+   969→                    <div className="h-10 w-full animate-pulse rounded-md bg-muted" />
+   970→                  ) : filteredCategories.length === 0 ? (
+   971→                    <div className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+   972→                      Belum ada kategori untuk tipe ini. Tambahkan di tab Kategori.
+   973→                    </div>
+   974→                  ) : (
+   975→                    <Select value={categoryId} onValueChange={setCategoryId}>
+   976→                      <SelectTrigger className="w-full">
+   977→                        <SelectValue placeholder="Pilih kategori" />
+   978→                      </SelectTrigger>
+   979→                      <SelectContent className="max-h-72">
+   980→                        {filteredCategories.map((c) => (
+   981→                          <SelectItem key={c.id} value={c.id}>
+   982→                            <span className="flex items-center gap-2">
+   983→                              <LucideIcon
+   984→                                name={c.icon}
+   985→                                className="h-4 w-4"
+   986→                                style={{ color: c.color }}
+   987→                              />
+   988→                              {c.name}
+   989→                            </span>
+   990→                          </SelectItem>
+   991→                        ))}
+   992→                      </SelectContent>
+   993→                    </Select>
+   994→                  )}
+   995→                </div>
+   996→
+   997→                {/* Account */}
+   998→                {accounts && accounts.length > 0 && (
+   999→                  <div className="space-y-1.5">
+  1000→                    <Label>
+  1001→                      Akun{" "}
+  1002→                      <span className="text-muted-foreground">(opsional)</span>
+  1003→                    </Label>
+  1004→                    <Select value={accountId} onValueChange={setAccountId}>
+  1005→                      <SelectTrigger className="w-full">
+  1006→                        <SelectValue placeholder="Pilih akun" />
+  1007→                      </SelectTrigger>
+  1008→                      <SelectContent>
+  1009→                        {accounts.map((a) => (
+  1010→                          <SelectItem key={a.id} value={a.id}>
+  1011→                            <span className="flex items-center gap-2">
+  1012→                              <LucideIcon
+  1013→                                name={a.icon}
+  1014→                                className="h-4 w-4"
+  1015→                                style={{ color: a.color }}
+  1016→                              />
+  1017→                              {a.name}
+  1018→                            </span>
+  1019→                          </SelectItem>
+  1020→                        ))}
+  1021→                      </SelectContent>
+  1022→                    </Select>
+  1023→                  </div>
+  1024→                )}
+  1025→
+  1026→                {/* Date + Time */}
+  1027→                <div className="grid grid-cols-2 gap-3">
+  1028→                  <div className="space-y-1.5">
+  1029→                    <Label htmlFor="date">Tanggal</Label>
+  1030→                    <Input
+  1031→                      id="date"
+  1032→                      type="date"
+  1033→                      value={date}
+  1034→                      onChange={(e) => setDate(e.target.value)}
+  1035→                      max={formatDateInput(new Date())}
+  1036→                    />
+  1037→                  </div>
+  1038→                  <div className="space-y-1.5">
+  1039→                    <Label htmlFor="time">
+  1040→                      Waktu{" "}
+  1041→                      <span className="text-muted-foreground">(opsional)</span>
+  1042→                    </Label>
+  1043→                    <Input
+  1044→                      id="time"
+  1045→                      type="time"
+  1046→                      value={time}
+  1047→                      onChange={(e) => setTime(e.target.value)}
+  1048→                    />
+  1049→                  </div>
+  1050→                </div>
+  1051→
+  1052→                {/* Note */}
+  1053→                <div className="space-y-1.5">
+  1054→                  <Label htmlFor="note">
+  1055→                    Catatan{" "}
+  1056→                    <span className="text-muted-foreground">(opsional)</span>
+  1057→                  </Label>
+  1058→                  <Textarea
+  1059→                    id="note"
+  1060→                    placeholder="Tambah catatan..."
+  1061→                    value={note}
+  1062→                    onChange={(e) => setNote(e.target.value)}
+  1063→                    rows={2}
+  1064→                    maxLength={200}
+  1065→                  />
+  1066→                </div>
+  1067→
+  1068→                {/* Tags */}
+  1069→                <div className="space-y-1.5">
+  1070→                  <Label htmlFor="tags">
+  1071→                    Tag{" "}
+  1072→                    <span className="text-muted-foreground">
+  1073→                      (opsional, pisahkan koma)
+  1074→                    </span>
+  1075→                  </Label>
+  1076→                  <Input
+  1077→                    id="tags"
+  1078→                    placeholder="cth. liburan, urgent, reimburse"
+  1079→                    value={tags}
+  1080→                    onChange={(e) => setTags(e.target.value)}
+  1081→                    maxLength={100}
+  1082→                  />
+  1083→                </div>
+  1084→              </TabsContent>
+  1085→
+  1086→              {/* ============ TAB DETAIL ============ */}
+  1087→              <TabsContent value="detail" className="space-y-4 outline-none">
+  1088→                {/* Mood */}
+  1089→                <div className="space-y-1.5">
+  1090→                  <Label>Mood</Label>
+  1091→                  <div className="grid grid-cols-5 gap-2">
+  1092→                    {MOOD_OPTIONS.map((m) => {
+  1093→                      const selected = mood === m.value;
+  1094→                      return (
+  1095→                        <button
+  1096→                          key={m.value}
+  1097→                          type="button"
+  1098→                          onClick={() =>
+  1099→                            setMood(selected ? "" : (m.value as Mood))
+  1100→                          }
+  1101→                          className={cn(
+  1102→                            "flex flex-col items-center gap-1 rounded-lg border p-2 text-xs transition-colors",
+  1103→                            selected
+  1104→                              ? "border-foreground bg-muted"
+  1105→                              : "border-border hover:bg-muted/60"
+  1106→                          )}
+  1107→                          style={
+  1108→                            selected
+  1109→                              ? { borderColor: m.color, color: m.color }
+  1110→                              : undefined
+  1111→                          }
+  1112→                        >
+  1113→                          <span className="text-lg leading-none">{m.emoji}</span>
+  1114→                          <span className="font-medium">{m.label}</span>
+  1115→                        </button>
+  1116→                      );
+  1117→                    })}
+  1118→                  </div>
+  1119→                </div>
+  1120→
+  1121→                {/* Priority */}
+  1122→                <div className="space-y-1.5">
+  1123→                  <Label>Prioritas</Label>
+  1124→                  <div className="grid grid-cols-3 gap-2">
+  1125→                    {PRIORITY_OPTIONS.map((p) => {
+  1126→                      const selected = priority === p.value;
+  1127→                      return (
+  1128→                        <button
+  1129→                          key={p.value}
+  1130→                          type="button"
+  1131→                          onClick={() =>
+  1132→                            setPriority(selected ? "" : (p.value as Priority))
+  1133→                          }
+  1134→                          className={cn(
+  1135→                            "flex flex-col items-center gap-0.5 rounded-lg border px-2 py-2 text-xs transition-colors",
+  1136→                            selected
+  1137→                              ? "text-white"
+  1138→                              : "border-border hover:bg-muted/60"
+  1139→                          )}
+  1140→                          style={
+  1141→                            selected ? { backgroundColor: p.color, borderColor: p.color } : undefined
+  1142→                          }
+  1143→                        >
+  1144→                          <span className="font-semibold">{p.label}</span>
+  1145→                          <span
+  1146→                            className={cn(
+  1147→                              "text-[10px] leading-tight",
+  1148→                              selected ? "text-white/80" : "text-muted-foreground"
+  1149→                            )}
+  1150→                          >
+  1151→                            {p.description}
+  1152→                          </span>
+  1153→                        </button>
+  1154→                      );
+  1155→                    })}
+  1156→                  </div>
+  1157→                </div>
+  1158→
+  1159→                {/* Payment method */}
+  1160→                <div className="space-y-1.5">
+  1161→                  <Label>Metode Pembayaran</Label>
+  1162→                  <Select
+  1163→                    value={paymentMethod}
+  1164→                    onValueChange={(v) =>
+  1165→                      setPaymentMethod((v || "") as PaymentMethod | "")
+  1166→                    }
+  1167→                  >
+  1168→                    <SelectTrigger className="w-full">
+  1169→                      <SelectValue placeholder="Pilih metode" />
+  1170→                    </SelectTrigger>
+  1171→                    <SelectContent>
+  1172→                      {PAYMENT_METHOD_OPTIONS.map((m) => (
+  1173→                        <SelectItem key={m.value} value={m.value}>
+  1174→                          <span className="flex items-center gap-2">
+  1175→                            <LucideIcon name={m.icon} className="h-4 w-4" />
+  1176→                            {m.label}
+  1177→                          </span>
+  1178→                        </SelectItem>
+  1179→                      ))}
+  1180→                    </SelectContent>
+  1181→                  </Select>
+  1182→                </div>
+  1183→
+  1184→                {/* Payment status */}
+  1185→                <div className="space-y-1.5">
+  1186→                  <Label>Status Pembayaran</Label>
+  1187→                  <Select
+  1188→                    value={paymentStatus}
+  1189→                    onValueChange={(v) =>
+  1190→                      setPaymentStatus((v || "") as PaymentStatus | "")
+  1191→                    }
+  1192→                  >
+  1193→                    <SelectTrigger className="w-full">
+  1194→                      <SelectValue placeholder="Pilih status" />
+  1195→                    </SelectTrigger>
+  1196→                    <SelectContent>
+  1197→                      {PAYMENT_STATUS_OPTIONS.map((s) => (
+  1198→                        <SelectItem key={s.value} value={s.value}>
+  1199→                          <span className="flex items-center gap-2">
+  1200→                            <span
+  1201→                              className="h-2 w-2 rounded-full"
+  1202→                              style={{ backgroundColor: s.color }}
+  1203→                            />
+  1204→                            {s.label}
+  1205→                          </span>
+  1206→                        </SelectItem>
+  1207→                      ))}
+  1208→                    </SelectContent>
+  1209→                  </Select>
+  1210→                </div>
+  1211→
+  1212→                {/* Recipient */}
+  1213→                <div className="space-y-1.5">
+  1214→                  <Label htmlFor="recipient">
+  1215→                    {type === "INCOME" ? "Dari Siapa" : "Untuk Siapa"}{" "}
+  1216→                    <span className="text-muted-foreground">(opsional)</span>
+  1217→                  </Label>
+  1218→                  <Input
+  1219→                    id="recipient"
+  1220→                    placeholder={
+  1221→                      type === "INCOME"
+  1222→                        ? "cth. PT Maju Jaya"
+  1223→                        : "cth. Teman, Keluarga"
+  1224→                    }
+  1225→                    value={recipient}
+  1226→                    onChange={(e) => setRecipient(e.target.value)}
+  1227→                    maxLength={50}
+  1228→                  />
+  1229→                </div>
+  1230→
+  1231→                {/* Currency */}
+  1232→                <div className="space-y-1.5">
+  1233→                  <Label>Mata Uang</Label>
+  1234→                  <Select value={currency} onValueChange={handleCurrencyChange}>
+  1235→                    <SelectTrigger className="w-full">
+  1236→                      <SelectValue placeholder="Pilih mata uang" />
+  1237→                    </SelectTrigger>
+  1238→                    <SelectContent>
+  1239→                      {CURRENCIES.map((c) => (
+  1240→                        <SelectItem key={c.code} value={c.code}>
+  1241→                          <span className="flex items-center gap-2">
+  1242→                            <span>{c.flag}</span>
+  1243→                            {c.code} — {c.label}
+  1244→                          </span>
+  1245→                        </SelectItem>
+  1246→                      ))}
+  1247→                    </SelectContent>
+  1248→                  </Select>
+  1249→                </div>
+  1250→
+  1251→                {currency !== "IDR" && (
+  1252→                  <div className="grid grid-cols-2 gap-3">
+  1253→                    <div className="space-y-1.5">
+  1254→                      <Label htmlFor="original-amount">Jumlah Asli</Label>
+  1255→                      <div className="relative">
+  1256→                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+  1257→                          {CURRENCIES.find((c) => c.code === currency)?.symbol}
+  1258→                        </span>
+  1259→                        <Input
+  1260→                          id="original-amount"
+  1261→                          inputMode="decimal"
+  1262→                          type="number"
+  1263→                          step="0.01"
+  1264→                          min="0"
+  1265→                          placeholder="0"
+  1266→                          value={originalAmount}
+  1267→                          onChange={(e) => setOriginalAmount(e.target.value)}
+  1268→                          className="pl-9"
+  1269→                        />
+  1270→                      </div>
+  1271→                    </div>
+  1272→                    <div className="space-y-1.5">
+  1273→                      <Label htmlFor="exchange-rate">Kurs (ke IDR)</Label>
+  1274→                      <Input
+  1275→                        id="exchange-rate"
+  1276→                        inputMode="decimal"
+  1277→                        type="number"
+  1278→                        step="0.01"
+  1279→                        min="0"
+  1280→                        placeholder="0"
+  1281→                        value={exchangeRate}
+  1282→                        onChange={(e) => setExchangeRate(e.target.value)}
+  1283→                      />
+  1284→                    </div>
+  1285→                    {computedForeignAmount != null && (
+  1286→                      <div className="col-span-2 rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+  1287→                        ≈ {formatCurrency(computedForeignAmount)} (IDR) —
+  1288→                        diisi otomatis ke jumlah transaksi.
+  1289→                      </div>
+  1290→                    )}
+  1291→                  </div>
+  1292→                )}
+  1293→
+  1294→                {/* Photo URL */}
+  1295→                <div className="space-y-1.5">
+  1296→                  <Label htmlFor="photo-url">
+  1297→                    URL / Base64 Foto Struk{" "}
+  1298→                    <span className="text-muted-foreground">(opsional)</span>
+  1299→                  </Label>
+  1300→                  <div className="flex gap-2">
+  1301→                    <Input
+  1302→                      id="photo-url"
+  1303→                      placeholder="https://... atau data:image/..."
+  1304→                      value={photoUrl}
+  1305→                      onChange={(e) => setPhotoUrl(e.target.value)}
+  1306→                    />
+  1307→                    {photoUrl && isImageUrl(photoUrl) && (
+  1308→                      <img
+  1309→                        src={photoUrl}
+  1310→                        alt="Preview struk"
+  1311→                        className="h-10 w-10 shrink-0 rounded-md border border-border object-cover"
+  1312→                        onError={(e) => {
+  1313→                          (e.currentTarget as HTMLImageElement).style.display =
+  1314→                            "none";
+  1315→                        }}
+  1316→                      />
+  1317→                    )}
+  1318→                    {photoUrl && !isImageUrl(photoUrl) && (
+  1319→                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
+  1320→                        <ImageOff className="h-4 w-4" />
+  1321→                      </div>
+  1322→                    )}
+  1323→                  </div>
+  1324→                </div>
+  1325→
+  1326→                {/* Link URL */}
+  1327→                <div className="space-y-1.5">
+  1328→                  <Label htmlFor="link-url">
+  1329→                    Tautan{" "}
+  1330→                    <span className="text-muted-foreground">(opsional)</span>
+  1331→                  </Label>
+  1332→                  <Input
+  1333→                    id="link-url"
+  1334→                    type="url"
+  1335→                    placeholder="https://..."
+  1336→                    value={linkUrl}
+  1337→                    onChange={(e) => setLinkUrl(e.target.value)}
+  1338→                  />
+  1339→                </div>
+  1340→              </TabsContent>
+  1341→
+  1342→              {/* ============ TAB LAINNYA ============ */}
+  1343→              <TabsContent value="lainnya" className="space-y-4 outline-none">
+  1344→                {/* Split toggle */}
+  1345→                <ToggleSection
+  1346→                  checked={isSplit}
+  1347→                  onCheckedChange={setIsSplit}
+  1348→                  title="Split ke Multiple Kategori"
+  1349→                  description="Bagi jumlah transaksi ke beberapa kategori."
+  1350→                >
+  1351→                  <div className="space-y-2">
+  1352→                    {splits.map((s, idx) => (
+  1353→                      <div
+  1354→                        key={idx}
+  1355→                        className="rounded-lg border border-border bg-muted/30 p-2.5"
+  1356→                      >
+  1357→                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[120px_1fr]">
+  1358→                          <div className="relative">
+  1359→                            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+  1360→                              Rp
+  1361→                            </span>
+  1362→                            <Input
+  1363→                              inputMode="decimal"
+  1364→                              type="number"
+  1365→                              min="0"
+  1366→                              step="0.01"
+  1367→                              placeholder="0"
+  1368→                              value={s.amount}
+  1369→                              onChange={(e) =>
+  1370→                                updateSplit(idx, { amount: e.target.value })
+  1371→                              }
+  1372→                              className="h-9 pl-8 text-sm"
+  1373→                            />
+  1374→                          </div>
+  1375→                          <Select
+  1376→                            value={s.categoryId}
+  1377→                            onValueChange={(v) =>
+  1378→                              updateSplit(idx, { categoryId: v })
+  1379→                            }
+  1380→                          >
+  1381→                            <SelectTrigger className="h-9 text-sm">
+  1382→                              <SelectValue placeholder="Pilih kategori" />
+  1383→                            </SelectTrigger>
+  1384→                            <SelectContent className="max-h-72">
+  1385→                              {filteredCategories.map((c) => (
+  1386→                                <SelectItem key={c.id} value={c.id}>
+  1387→                                  <span className="flex items-center gap-2">
+  1388→                                    <LucideIcon
+  1389→                                      name={c.icon}
+  1390→                                      className="h-4 w-4"
+  1391→                                      style={{ color: c.color }}
+  1392→                                    />
+  1393→                                    {c.name}
+  1394→                                  </span>
+  1395→                                </SelectItem>
+  1396→                              ))}
+  1397→                            </SelectContent>
+  1398→                          </Select>
+  1399→                        </div>
+  1400→                        <div className="mt-2 flex gap-2">
+  1401→                          <Input
+  1402→                            placeholder="Catatan split (opsional)"
+  1403→                            value={s.note}
+  1404→                            onChange={(e) =>
+  1405→                              updateSplit(idx, { note: e.target.value })
+  1406→                            }
+  1407→                            className="h-8 text-xs"
+  1408→                            maxLength={80}
+  1409→                          />
+  1410→                          <Button
+  1411→                            type="button"
+  1412→                            variant="ghost"
+  1413→                            size="icon"
+  1414→                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+  1415→                            onClick={() => removeSplit(idx)}
+  1416→                            disabled={splits.length === 1}
+  1417→                            aria-label="Hapus split"
+  1418→                          >
+  1419→                            <Trash2 className="h-3.5 w-3.5" />
+  1420→                          </Button>
+  1421→                        </div>
+  1422→                      </div>
+  1423→                    ))}
+  1424→                    <Button
+  1425→                      type="button"
+  1426→                      variant="outline"
+  1427→                      size="sm"
+  1428→                      onClick={addSplit}
+  1429→                      className="w-full"
+  1430→                    >
+  1431→                      <Plus className="mr-1 h-4 w-4" />
+  1432→                      Tambah split
+  1433→                    </Button>
+  1434→                    <SplitTotalRow
+  1435→                      total={splitsTotal}
+  1436→                      target={Number(amount.replace(/[^\d.-]/g, "")) || 0}
+  1437→                    />
+  1438→                  </div>
+  1439→                </ToggleSection>
+  1440→
+  1441→                {/* Debt toggle */}
+  1442→                <ToggleSection
+  1443→                  checked={isDebt}
+  1444→                  onCheckedChange={setIsDebt}
+  1445→                  title="Tandai sebagai Hutang/Piutang"
+  1446→                  description="Catat jatuh tempo & nama pemberi/penerima."
+  1447→                >
+  1448→                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+  1449→                    <div className="space-y-1.5">
+  1450→                      <Label htmlFor="debt-due-date">Jatuh Tempo</Label>
+  1451→                      <Input
+  1452→                        id="debt-due-date"
+  1453→                        type="date"
+  1454→                        value={debtDueDate}
+  1455→                        onChange={(e) => setDebtDueDate(e.target.value)}
+  1456→                      />
+  1457→                    </div>
+  1458→                    <div className="space-y-1.5">
+  1459→                      <Label htmlFor="creditor">
+  1460→                        {type === "INCOME" ? "Dari" : "Kepada"}
+  1461→                      </Label>
+  1462→                      <Input
+  1463→                        id="creditor"
+  1464→                        placeholder="Nama orang"
+  1465→                        value={creditor}
+  1466→                        onChange={(e) => setCreditor(e.target.value)}
+  1467→                        maxLength={50}
+  1468→                      />
+  1469→                    </div>
+  1470→                  </div>
+  1471→                </ToggleSection>
+  1472→
+  1473→                {/* Simple toggles */}
+  1474→                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+  1475→                  <ToggleRow
+  1476→                    checked={isReimbursable}
+  1477→                    onCheckedChange={setIsReimbursable}
+  1478→                    title="Reimbursable"
+  1479→                    description="Akan diganti"
+  1480→                  />
+  1481→                  <ToggleRow
+  1482→                    checked={isSubscription}
+  1483→                    onCheckedChange={setIsSubscription}
+  1484→                    title="Langganan"
+  1485→                    description="Subscription berulang"
+  1486→                  />
+  1487→                  <ToggleRow
+  1488→                    checked={isTaxDeductible}
+  1489→                    onCheckedChange={setIsTaxDeductible}
+  1490→                    title="Tax Deductible"
+  1491→                    description="Pengurang pajak"
+  1492→                  />
+  1493→                  <ToggleRow
+  1494→                    checked={isBusinessExpense}
+  1495→                    onCheckedChange={setIsBusinessExpense}
+  1496→                    title="Business Expense"
+  1497→                    description="Pengeluaran usaha"
+  1498→                  />
+  1499→                  <ToggleRow
+  1500→                    checked={excludeFromBudget}
+  1501→                    onCheckedChange={setExcludeFromBudget}
+  1502→                    title="Exclude from Budget"
+  1503→                    description="Tidak dihitung di anggaran"
+  1504→                  />
+  1505→                  <ToggleRow
+  1506→                    checked={excludeFromStats}
+  1507→                    onCheckedChange={setExcludeFromStats}
+  1508→                    title="Exclude from Stats"
+  1509→                    description="Tidak dihitung di statistik"
+  1510→                  />
+  1511→                  <ToggleRow
+  1512→                    checked={isHidden}
+  1513→                    onCheckedChange={setIsHidden}
+  1514→                    title="Sembunyikan Transaksi"
+  1515→                    description="Tidak tampil di daftar utama (privasi)"
+  1516→                  />
+  1517→                </div>
+  1518→
+  1519→                {/* Goal allocation */}
+  1520→                {goals && goals.length > 0 && (
+  1521→                  <div className="space-y-1.5">
+  1522→                    <Label>Allocasi ke Goal</Label>
+  1523→                    <Select
+  1524→                      value={goalId}
+  1525→                      onValueChange={(v) => setGoalId(v === "__none__" ? "" : v)}
+  1526→                    >
+  1527→                      <SelectTrigger className="w-full">
+  1528→                        <SelectValue placeholder="Pilih goal" />
+  1529→                      </SelectTrigger>
+  1530→                      <SelectContent>
+  1531→                        <SelectItem value="__none__">— Tidak ada —</SelectItem>
+  1532→                        {goals.map((g) => (
+  1533→                          <SelectItem key={g.id} value={g.id}>
+  1534→                            <span className="flex items-center gap-2">
+  1535→                              <LucideIcon
+  1536→                                name={g.icon}
+  1537→                                className="h-4 w-4"
+  1538→                                style={{ color: g.color }}
+  1539→                              />
+  1540→                              {g.name}
+  1541→                            </span>
+  1542→                          </SelectItem>
+  1543→                        ))}
+  1544→                      </SelectContent>
+  1545→                    </Select>
+  1546→                  </div>
+  1547→                )}
+  1548→
+  1549→                {/* Assigned to */}
+  1550→                <div className="space-y-1.5">
+  1551→                  <Label htmlFor="assigned-to">
+  1552→                    Assigned To{" "}
+  1553→                    <span className="text-muted-foreground">(opsional)</span>
+  1554→                  </Label>
+  1555→                  <Input
+  1556→                    id="assigned-to"
+  1557→                    placeholder="Nama orang / tim"
+  1558→                    value={assignedTo}
+  1559→                    onChange={(e) => setAssignedTo(e.target.value)}
+  1560→                    maxLength={50}
+  1561→                  />
+  1562→                </div>
+  1563→
+  1564→                {/* Cashback / Original price / Discount */}
+  1565→                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+  1566→                  <div className="space-y-1.5">
+  1567→                    <Label htmlFor="cashback">Cashback</Label>
+  1568→                    <div className="relative">
+  1569→                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+  1570→                        Rp
+  1571→                      </span>
+  1572→                      <Input
+  1573→                        id="cashback"
+  1574→                        inputMode="decimal"
+  1575→                        type="number"
+  1576→                        min="0"
+  1577→                        step="0.01"
+  1578→                        placeholder="0"
+  1579→                        value={cashbackAmount}
+  1580→                        onChange={(e) => setCashbackAmount(e.target.value)}
+  1581→                        className="pl-8 text-sm"
+  1582→                      />
+  1583→                    </div>
+  1584→                  </div>
+  1585→                  <div className="space-y-1.5">
+  1586→                    <Label htmlFor="original-price">Harga Asli</Label>
+  1587→                    <div className="relative">
+  1588→                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+  1589→                        Rp
+  1590→                      </span>
+  1591→                      <Input
+  1592→                        id="original-price"
+  1593→                        inputMode="decimal"
+  1594→                        type="number"
+  1595→                        min="0"
+  1596→                        step="0.01"
+  1597→                        placeholder="0"
+  1598→                        value={originalPrice}
+  1599→                        onChange={(e) => setOriginalPrice(e.target.value)}
+  1600→                        className="pl-8 text-sm"
+  1601→                      />
+  1602→                    </div>
+  1603→                  </div>
+  1604→                  <div className="space-y-1.5">
+  1605→                    <Label htmlFor="discount">Diskon</Label>
+  1606→                    <div className="relative">
+  1607→                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+  1608→                        Rp
+  1609→                      </span>
+  1610→                      <Input
+  1611→                        id="discount"
+  1612→                        inputMode="decimal"
+  1613→                        type="number"
+  1614→                        min="0"
+  1615→                        step="0.01"
+  1616→                        placeholder="0"
+  1617→                        value={discountAmount}
+  1618→                        onChange={(e) => setDiscountAmount(e.target.value)}
+  1619→                        className="pl-8 text-sm"
+  1620→                      />
+  1621→                    </div>
+  1622→                  </div>
+  1623→                </div>
+  1624→
+  1625→                {/* Group / Event */}
+  1626→                <div className="space-y-1.5">
+  1627→                  <div className="flex items-center justify-between">
+  1628→                    <Label>Grup / Event</Label>
+  1629→                    <button
+  1630→                      type="button"
+  1631→                      onClick={() => setShowNewGroup((v) => !v)}
+  1632→                      className="text-xs font-medium text-primary hover:underline"
+  1633→                    >
+  1634→                      {showNewGroup ? "Batal" : "+ Buat baru"}
+  1635→                    </button>
+  1636→                  </div>
+  1637→                  <Select
+  1638→                    value={groupId}
+  1639→                    onValueChange={(v) => setGroupId(v === "__none__" ? "" : v)}
+  1640→                    disabled={showNewGroup}
+  1641→                  >
+  1642→                    <SelectTrigger className="w-full">
+  1643→                      <SelectValue placeholder="Pilih grup / event" />
+  1644→                    </SelectTrigger>
+  1645→                    <SelectContent>
+  1646→                      <SelectItem value="__none__">— Tidak ada —</SelectItem>
+  1647→                      {groups?.map((g) => (
+  1648→                        <SelectItem key={g.id} value={g.id}>
+  1649→                          <span className="flex items-center gap-2">
+  1650→                            <LucideIcon
+  1651→                              name={g.icon}
+  1652→                              className="h-4 w-4"
+  1653→                              style={{ color: g.color }}
+  1654→                            />
+  1655→                            {g.name}
+  1656→                          </span>
+  1657→                        </SelectItem>
+  1658→                      ))}
+  1659→                    </SelectContent>
+  1660→                  </Select>
+  1661→                  {showNewGroup && (
+  1662→                    <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-2.5">
+  1663→                      <Input
+  1664→                        placeholder="Nama grup / event"
+  1665→                        value={newGroupName}
+  1666→                        onChange={(e) => setNewGroupName(e.target.value)}
+  1667→                        maxLength={40}
+  1668→                      />
+  1669→                      <div className="flex flex-wrap gap-1">
+  1670→                        {GROUP_ICONS.slice(0, 8).map((icon) => (
+  1671→                          <button
+  1672→                            key={icon}
+  1673→                            type="button"
+  1674→                            onClick={() => setNewGroupIcon(icon)}
+  1675→                            className={cn(
+  1676→                              "flex h-7 w-7 items-center justify-center rounded-md border",
+  1677→                              newGroupIcon === icon
+  1678→                                ? "border-foreground bg-background"
+  1679→                                : "border-border bg-background/60"
+  1680→                            )}
+  1681→                          >
+  1682→                            <LucideIcon name={icon} className="h-3.5 w-3.5" />
+  1683→                          </button>
+  1684→                        ))}
+  1685→                      </div>
+  1686→                      <div className="flex flex-wrap gap-1">
+  1687→                        {GROUP_COLORS.map((c) => (
+  1688→                          <button
+  1689→                            key={c}
+  1690→                            type="button"
+  1691→                            onClick={() => setNewGroupColor(c)}
+  1692→                            className={cn(
+  1693→                              "h-5 w-5 rounded-full border-2",
+  1694→                              newGroupColor === c
+  1695→                                ? "border-foreground"
+  1696→                                : "border-transparent"
+  1697→                            )}
+  1698→                            style={{ backgroundColor: c }}
+  1699→                            aria-label={`Warna ${c}`}
+  1700→                          />
+  1701→                        ))}
+  1702→                      </div>
+  1703→                      <Button
+  1704→                        type="button"
+  1705→                        size="sm"
+  1706→                        onClick={handleCreateGroup}
+  1707→                        disabled={createGroupMut.isPending || !newGroupName.trim()}
+  1708→                      >
+  1709→                        {createGroupMut.isPending && (
+  1710→                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+  1711→                        )}
+  1712→                        Simpan Grup
+  1713→                      </Button>
+  1714→                    </div>
+  1715→                  )}
+  1716→                </div>
+  1717→
+  1718→                {/* Receipt items editor */}
+  1719→                <div className="space-y-2">
+  1720→                  <div className="flex items-center justify-between">
+  1721→                    <Label>Item Struk</Label>
+  1722→                    <Button
+  1723→                      type="button"
+  1724→                      variant="ghost"
+  1725→                      size="sm"
+  1726→                      onClick={addReceiptItem}
+  1727→                      className="h-7 px-2 text-xs"
+  1728→                    >
+  1729→                      <Plus className="mr-1 h-3.5 w-3.5" />
+  1730→                      Tambah item
+  1731→                    </Button>
+  1732→                  </div>
+  1733→                  {receiptItems.length === 0 ? (
+  1734→                    <div className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+  1735→                      Belum ada item struk. Klik “Tambah item” untuk
+  1736→                      menguraikan transaksi.
+  1737→                    </div>
+  1738→                  ) : (
+  1739→                    <>
+  1740→                      <div className="space-y-2">
+  1741→                        {receiptItems.map((r, idx) => {
+  1742→                          const qty = Number(r.qty.replace(/[^\d.-]/g, "")) || 0;
+  1743→                          const price =
+  1744→                            Number(r.price.replace(/[^\d.-]/g, "")) || 0;
+  1745→                          const total = qty * price;
+  1746→                          return (
+  1747→                            <div
+  1748→                              key={idx}
+  1749→                              className="rounded-lg border border-border bg-muted/30 p-2.5"
+  1750→                            >
+  1751→                              <div className="flex gap-2">
+  1752→                                <Input
+  1753→                                  placeholder="Nama item"
+  1754→                                  value={r.name}
+  1755→                                  onChange={(e) =>
+  1756→                                    updateReceipt(idx, { name: e.target.value })
+  1757→                                  }
+  1758→                                  className="h-9 text-sm"
+  1759→                                  maxLength={60}
+  1760→                                />
+  1761→                                <Button
+  1762→                                  type="button"
+  1763→                                  variant="ghost"
+  1764→                                  size="icon"
+  1765→                                  className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+  1766→                                  onClick={() => removeReceipt(idx)}
+  1767→                                  aria-label="Hapus item"
+  1768→                                >
+  1769→                                  <Trash2 className="h-3.5 w-3.5" />
+  1770→                                </Button>
+  1771→                              </div>
+  1772→                              <div className="mt-2 grid grid-cols-3 gap-2">
+  1773→                                <div>
+  1774→                                  <Label className="text-[10px] text-muted-foreground">
+  1775→                                    Qty
+  1776→                                  </Label>
+  1777→                                  <Input
+  1778→                                    inputMode="decimal"
+  1779→                                    type="number"
+  1780→                                    min="0"
+  1781→                                    step="0.01"
+  1782→                                    value={r.qty}
+  1783→                                    onChange={(e) =>
+  1784→                                      updateReceipt(idx, { qty: e.target.value })
+  1785→                                    }
+  1786→                                    className="h-8 text-xs"
+  1787→                                  />
+  1788→                                </div>
+  1789→                                <div className="relative">
+  1790→                                  <Label className="text-[10px] text-muted-foreground">
+  1791→                                    Harga
+  1792→                                  </Label>
+  1793→                                  <span className="pointer-events-none absolute left-2 bottom-2 text-[10px] font-medium text-muted-foreground">
+  1794→                                    Rp
+  1795→                                  </span>
+  1796→                                  <Input
+  1797→                                    inputMode="decimal"
+  1798→                                    type="number"
+  1799→                                    min="0"
+  1800→                                    step="0.01"
+  1801→                                    value={r.price}
+  1802→                                    onChange={(e) =>
+  1803→                                      updateReceipt(idx, {
+  1804→                                        price: e.target.value,
+  1805→                                      })
+  1806→                                    }
+  1807→                                    className="h-8 pl-6 text-xs"
+  1808→                                  />
+  1809→                                </div>
+  1810→                                <div>
+  1811→                                  <Label className="text-[10px] text-muted-foreground">
+  1812→                                    Total
+  1813→                                  </Label>
+  1814→                                  <div className="flex h-8 items-center rounded-md border border-border bg-background px-2 text-xs font-medium">
+  1815→                                    {formatCurrency(total)}
+  1816→                                  </div>
+  1817→                                </div>
+  1818→                              </div>
+  1819→                            </div>
+  1820→                          );
+  1821→                        })}
+  1822→                      </div>
+  1823→                      <div className="flex items-center justify-between rounded-md bg-muted/60 px-3 py-2 text-xs">
+  1824→                        <span className="text-muted-foreground">
+  1825→                          Subtotal struk
+  1826→                        </span>
+  1827→                        <span className="font-semibold">
+  1828→                          {formatCurrency(receiptSubtotal)}
+  1829→                        </span>
+  1830→                      </div>
+  1831→                    </>
+  1832→                  )}
+  1833→                </div>
+  1834→              </TabsContent>
+  1835→            </div>
+  1836→          </Tabs>
+  1837→
+  1838→          {error && (
+  1839→            <div className="border-t border-destructive/20 bg-destructive/10 px-5 py-2 text-sm text-destructive">
+  1840→              {error}
+  1841→            </div>
+  1842→          )}
+  1843→
+  1844→          <DialogFooter className="flex-row items-center gap-2 border-t border-border bg-muted/30 p-4 sm:justify-between">
+  1845→            <div>
+  1846→              {isEdit && (
+  1847→                <AlertDialog>
+  1848→                  <AlertDialogTrigger asChild>
+  1849→                    <Button
+  1850→                      type="button"
+  1851→                      variant="ghost"
+  1852→                      size="sm"
+  1853→                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+  1854→                      disabled={submitting}
+  1855→                    >
+  1856→                      <Trash2 className="mr-1 h-4 w-4" />
+  1857→                      Hapus
+  1858→                    </Button>
+  1859→                  </AlertDialogTrigger>
+  1860→                  <AlertDialogContent>
+  1861→                    <AlertDialogHeader>
+  1862→                      <AlertDialogTitle>
+  1863→                        Hapus transaksi ini?
+  1864→                      </AlertDialogTitle>
+  1865→                      <AlertDialogDescription>
+  1866→                        Tindakan ini tidak dapat dibatalkan. Transaksi akan
+  1867→                        dihapus permanen.
+  1868→                      </AlertDialogDescription>
+  1869→                    </AlertDialogHeader>
+  1870→                    <AlertDialogFooter>
+  1871→                      <AlertDialogCancel>Batal</AlertDialogCancel>
+  1872→                      <AlertDialogAction
+  1873→                        onClick={handleDelete}
+  1874→                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+  1875→                      >
+  1876→                        Ya, Hapus
+  1877→                      </AlertDialogAction>
+  1878→                    </AlertDialogFooter>
+  1879→                  </AlertDialogContent>
+  1880→                </AlertDialog>
+  1881→              )}
+  1882→            </div>
+  1883→            <div className="flex gap-2">
+  1884→              <DialogClose asChild>
+  1885→                <Button type="button" variant="outline" disabled={submitting}>
+  1886→                  Batal
+  1887→                </Button>
+  1888→              </DialogClose>
+  1889→              <Button
+  1890→                type="submit"
+  1891→                disabled={submitting}
+  1892→                className={
+  1893→                  type === "INCOME"
+  1894→                    ? "bg-income text-white hover:bg-income/90"
+  1895→                    : "bg-expense text-white hover:bg-expense/90"
+  1896→                }
+  1897→              >
+  1898→                {submitting && (
+  1899→                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+  1900→                )}
+  1901→                {isEdit ? "Simpan" : "Tambah"}
+  1902→              </Button>
+  1903→            </div>
+  1904→          </DialogFooter>
+  1905→        </form>
+  1906→
+  1907→        {/* Receipt Scanner Dialog */}
+  1908→        <ReceiptScanner
+  1909→          open={scannerOpen}
+  1910→          onOpenChange={setScannerOpen}
+  1911→          onScan={handleScanResult}
+  1912→        />
+  1913→      </DialogContent>
+  1914→    </Dialog>
+  1915→  );
+  1916→}
+  1917→
+  1918→/* ---------- helper sub-components ---------- */
+  1919→
+  1920→function ToggleSection({
+  1921→  checked,
+  1922→  onCheckedChange,
+  1923→  title,
+  1924→  description,
+  1925→  children,
+  1926→}: {
+  1927→  checked: boolean;
+  1928→  onCheckedChange: (v: boolean) => void;
+  1929→  title: string;
+  1930→  description: string;
+  1931→  children: React.ReactNode;
+  1932→}) {
+  1933→  return (
+  1934→    <div className="rounded-lg border border-border">
+  1935→      <label className="flex cursor-pointer items-start gap-3 p-3">
+  1936→        <Checkbox
+  1937→          checked={checked}
+  1938→          onCheckedChange={(v) => onCheckedChange(v === true)}
+  1939→          className="mt-0.5"
+  1940→        />
+  1941→        <div className="flex-1">
+  1942→          <div className="text-sm font-medium">{title}</div>
+  1943→          <div className="text-xs text-muted-foreground">{description}</div>
+  1944→        </div>
+  1945→      </label>
+  1946→      {checked && <div className="border-t border-border p-3">{children}</div>}
+  1947→    </div>
+  1948→  );
+  1949→}
+  1950→
+  1951→function ToggleRow({
+  1952→  checked,
+  1953→  onCheckedChange,
+  1954→  title,
+  1955→  description,
+  1956→}: {
+  1957→  checked: boolean;
+  1958→  onCheckedChange: (v: boolean) => void;
+  1959→  title: string;
+  1960→  description: string;
+  1961→}) {
+  1962→  return (
+  1963→    <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+  1964→      <div className="min-w-0">
+  1965→        <div className="text-sm font-medium">{title}</div>
+  1966→        <div className="text-xs text-muted-foreground">{description}</div>
+  1967→      </div>
+  1968→      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+  1969→    </div>
+  1970→  );
+  1971→}
+  1972→
+  1973→function SplitTotalRow({ total, target }: { total: number; target: number }) {
+  1974→  const diff = target - total;
+  1975→  const matched = Math.abs(diff) < 0.01;
+  1976→  return (
+  1977→    <div
+  1978→      className={cn(
+  1979→        "flex items-center justify-between rounded-md px-3 py-2 text-xs",
+  1980→        matched
+  1981→          ? "bg-income-soft text-income"
+  1982→          : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+  1983→      )}
+  1984→    >
+  1985→      <span>
+  1986→        Total split: <strong>{formatCurrency(total)}</strong>
+  1987→      </span>
+  1988→      {matched ? (
+  1989→        <span>✓ Sesuai dengan jumlah</span>
+  1990→      ) : (
+  1991→        <span>
+  1992→          {diff > 0
+  1993→            ? `Kurang ${formatCurrency(diff)}`
+  1994→            : `Lebih ${formatCurrency(Math.abs(diff))}`}
+  1995→        </span>
+  1996→      )}
+  1997→    </div>
+  1998→  );
+  1999→}
+  2000→

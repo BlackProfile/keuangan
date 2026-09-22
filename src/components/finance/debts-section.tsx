@@ -9,6 +9,7 @@ import {
   CalendarIcon,
   CheckCircle2,
   Loader2,
+  MoreVertical,
   Pencil,
   Plus,
   Scale,
@@ -56,6 +57,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LucideIcon } from "@/components/lucide-icon";
 import { cn } from "@/lib/utils";
 import {
@@ -411,53 +419,62 @@ function DebtCard({
         </div>
 
         {/* Hover edit/delete */}
-        <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={onEdit}
-            aria-label="Ubah"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
+        <div className="absolute right-3 top-3 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                disabled={deleteMut.isPending}
-                aria-label="Hapus"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                aria-label="Aksi"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <MoreVertical className="h-3.5 w-3.5" />
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Hapus {DEBT_TYPE_LABEL[debt.type].toLowerCase()} ini?
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  Catatan {DEBT_TYPE_LABEL[debt.type].toLowerCase()} dengan{" "}
-                  <strong>{debt.person}</strong> akan dihapus. Tindakan ini
-                  tidak dapat dibatalkan.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Batal</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDelete}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {deleteMut.isPending && (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  )}
-                  Hapus
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={onEdit} className="gap-2">
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <DropdownMenuItem
+                    className="gap-2 text-destructive"
+                    onSelect={(e) => e.preventDefault()}
+                    disabled={deleteMut.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Hapus
+                  </DropdownMenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Hapus {DEBT_TYPE_LABEL[debt.type].toLowerCase()} ini?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Catatan {DEBT_TYPE_LABEL[debt.type].toLowerCase()} dengan{" "}
+                      <strong>{debt.person}</strong> akan dihapus. Tindakan ini
+                      tidak dapat dibatalkan.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteMut.isPending && (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      )}
+                      Hapus
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

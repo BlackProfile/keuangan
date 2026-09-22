@@ -7,6 +7,7 @@ import {
   CalendarClock,
   Info,
   Loader2,
+  MoreVertical,
   Pencil,
   Play,
   Plus,
@@ -50,6 +51,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LucideIcon } from "@/components/lucide-icon";
 import { cn } from "@/lib/utils";
 import {
@@ -365,53 +373,62 @@ function RecurringItem({
         </div>
 
         {/* Hover actions */}
-        <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={onEdit}
-            aria-label="Edit"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
+        <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                disabled={deleteMut.isPending}
-                aria-label="Hapus"
+                className="h-7 w-7 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Aksi transaksi berulang"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <MoreVertical className="h-3.5 w-3.5" />
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Hapus transaksi berulang ini?
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  <strong>{item.description}</strong> akan dihapus. Transaksi
-                  yang sudah dibuat sebelumnya tetap ada. Tindakan ini tidak
-                  dapat dibatalkan.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Batal</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDelete}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {deleteMut.isPending && (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  )}
-                  Hapus
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={onEdit} className="gap-2">
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <DropdownMenuItem
+                    className="gap-2 text-destructive"
+                    onSelect={(e) => e.preventDefault()}
+                    disabled={deleteMut.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Hapus
+                  </DropdownMenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Hapus transaksi berulang ini?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      <strong>{item.description}</strong> akan dihapus. Transaksi
+                      yang sudah dibuat sebelumnya tetap ada. Tindakan ini tidak
+                      dapat dibatalkan.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteMut.isPending && (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      )}
+                      Hapus
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </Card>
     </motion.div>

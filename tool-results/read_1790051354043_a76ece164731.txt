@@ -1,0 +1,1353 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import { toast } from "sonner";
+     5→import {
+     6→  AlertTriangle,
+     7→  ArrowRight,
+     8→  ArrowRightLeft,
+     9→  Calendar,
+    10→  Check,
+    11→  CheckCircle2,
+    12→  HandCoins,
+    13→  Loader2,
+    14→  Plus,
+    15→  Receipt,
+    16→  Trash2,
+    17→  Users,
+    18→  X,
+    19→} from "lucide-react";
+    20→
+    21→import { Button } from "@/components/ui/button";
+    22→import { Card } from "@/components/ui/card";
+    23→import { Badge } from "@/components/ui/badge";
+    24→import { Skeleton } from "@/components/ui/skeleton";
+    25→import {
+    26→  Dialog,
+    27→  DialogClose,
+    28→  DialogContent,
+    29→  DialogDescription,
+    30→  DialogFooter,
+    31→  DialogHeader,
+    32→  DialogTitle,
+    33→} from "@/components/ui/dialog";
+    34→import {
+    35→  AlertDialog,
+    36→  AlertDialogAction,
+    37→  AlertDialogCancel,
+    38→  AlertDialogContent,
+    39→  AlertDialogDescription,
+    40→  AlertDialogFooter,
+    41→  AlertDialogHeader,
+    42→  AlertDialogTitle,
+    43→  AlertDialogTrigger,
+    44→} from "@/components/ui/alert-dialog";
+    45→import { Input } from "@/components/ui/input";
+    46→import { Label } from "@/components/ui/label";
+    47→import { Textarea } from "@/components/ui/textarea";
+    48→import {
+    49→  Select,
+    50→  SelectContent,
+    51→  SelectItem,
+    52→  SelectTrigger,
+    53→  SelectValue,
+    54→} from "@/components/ui/select";
+    55→import {
+    56→  Tabs,
+    57→  TabsContent,
+    58→  TabsList,
+    59→  TabsTrigger,
+    60→} from "@/components/ui/tabs";
+    61→import { LucideIcon } from "@/components/lucide-icon";
+    62→import { cn } from "@/lib/utils";
+    63→import {
+    64→  formatCurrency,
+    65→  formatCurrencyCompact,
+    66→  formatDate,
+    67→  formatDateInput,
+    68→} from "@/lib/format";
+    69→import { SPLIT_BILL_CATEGORIES } from "@/lib/student-constants";
+    70→import {
+    71→  useCreateFriendDebt,
+    72→  useCreateSplitBill,
+    73→  useDeleteFriendDebt,
+    74→  useDeleteSplitBill,
+    75→  useFriendDebts,
+    76→  useMarkParticipantPaid,
+    77→  useSettleFriendDebt,
+    78→  useSettleSplitBill,
+    79→  useSplitBills,
+    80→} from "@/lib/hooks";
+    81→import type {
+    82→  FriendDebt,
+    83→  FriendDebtInput,
+    84→  SplitBill,
+    85→  SplitBillInput,
+    86→} from "@/lib/types";
+    87→
+    88→/* ------------------------------------------------------------------ */
+    89→/*  Helpers                                                            */
+    90→/* ------------------------------------------------------------------ */
+    91→
+    92→type SplitCategoryValue = "MAKAN" | "KOS" | "EVENT" | "TRANSPORT" | "OTHER";
+    93→type SplitTypeValue = "EQUAL" | "CUSTOM" | "PERCENTAGE";
+    94→type FriendDebtType = "DEBT" | "RECEIVABLE";
+    95→
+    96→function splitCategoryMeta(value: string) {
+    97→  return (
+    98→    SPLIT_BILL_CATEGORIES.find((c) => c.value === value) ??
+    99→    SPLIT_BILL_CATEGORIES[SPLIT_BILL_CATEGORIES.length - 1]
+   100→  );
+   101→}
+   102→
+   103→function isOverdue(dueDate: string | null, settled: boolean): boolean {
+   104→  if (!dueDate || settled) return false;
+   105→  const today = new Date();
+   106→  today.setHours(0, 0, 0, 0);
+   107→  const due = new Date(dueDate);
+   108→  due.setHours(0, 0, 0, 0);
+   109→  return due.getTime() < today.getTime();
+   110→}
+   111→
+   112→/* ------------------------------------------------------------------ */
+   113→/*  Main section                                                        */
+   114→/* ------------------------------------------------------------------ */
+   115→
+   116→export function PatunganSection() {
+   117→  const { data: splitBills, isLoading: splitLoading } = useSplitBills();
+   118→  const { data: friendDebts, isLoading: debtsLoading } = useFriendDebts();
+   119→
+   120→  const [splitDialogOpen, setSplitDialogOpen] = React.useState(false);
+   121→  const [debtDialogOpen, setDebtDialogOpen] = React.useState(false);
+   122→  const [debtTab, setDebtTab] = React.useState<FriendDebtType>("DEBT");
+   123→
+   124→  const totals = React.useMemo(() => {
+   125→    const debts = friendDebts ?? [];
+   126→    const iOwe = debts
+   127→      .filter((d) => d.type === "DEBT" && !d.settled)
+   128→      .reduce((s, d) => s + d.amount, 0);
+   129→    const owedToMe = debts
+   130→      .filter((d) => d.type === "RECEIVABLE" && !d.settled)
+   131→      .reduce((s, d) => s + d.amount, 0);
+   132→    const splitUnsettled = (splitBills ?? [])
+   133→      .filter((b) => !b.settled)
+   134→      .reduce((s, b) => s + b.totalAmount, 0);
+   135→    return { iOwe, owedToMe, splitUnsettled };
+   136→  }, [friendDebts, splitBills]);
+   137→
+   138→  const myDebts = (friendDebts ?? []).filter((d) => d.type === "DEBT");
+   139→  const theirDebts = (friendDebts ?? []).filter(
+   140→    (d) => d.type === "RECEIVABLE"
+   141→  );
+   142→
+   143→  return (
+   144→    <div className="space-y-6">
+   145→      {/* Header */}
+   146→      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   147→        <div>
+   148→          <h2 className="text-xl font-semibold tracking-tight">
+   149→            Patungan &amp; Hutang Teman
+   150→          </h2>
+   151→          <p className="mt-0.5 text-sm text-muted-foreground">
+   152→            Kelola tagihan bersama dan ingat siapa belum lunas.
+   153→          </p>
+   154→        </div>
+   155→        <div className="flex gap-2">
+   156→          <Button
+   157→            variant="outline"
+   158→            onClick={() => {
+   159→              setDebtTab("DEBT");
+   160→              setDebtDialogOpen(true);
+   161→            }}
+   162→            className="gap-1"
+   163→          >
+   164→            <HandCoins className="h-4 w-4" />
+   165→            Tambah Hutang
+   166→          </Button>
+   167→          <Button
+   168→            onClick={() => setSplitDialogOpen(true)}
+   169→            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+   170→          >
+   171→            <Plus className="h-4 w-4" />
+   172→            Buat Patungan
+   173→          </Button>
+   174→        </div>
+   175→      </div>
+   176→
+   177→      {/* Stats strip */}
+   178→      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+   179→        <StatCard
+   180→          label="Saya berhutang"
+   181→          value={totals.iOwe}
+   182→          icon={<ArrowRight className="h-4 w-4" />}
+   183→          tone="expense"
+   184→        />
+   185→        <StatCard
+   186→          label="Teman berhutang"
+   187→          value={totals.owedToMe}
+   188→          icon={<ArrowRightLeft className="h-4 w-4" />}
+   189→          tone="income"
+   190→        />
+   191→        <StatCard
+   192→          label="Patungan belum settle"
+   193→          value={totals.splitUnsettled}
+   194→          icon={<Users className="h-4 w-4" />}
+   195→          tone="default"
+   196→        />
+   197→      </div>
+   198→
+   199→      {/* Split Bills */}
+   200→      <div className="space-y-3">
+   201→        <div>
+   202→          <h3 className="text-lg font-semibold tracking-tight">Patungan</h3>
+   203→          <p className="text-sm text-muted-foreground">
+   204→            Bagi bill bareng teman, tandai siapa yang sudah bayar.
+   205→          </p>
+   206→        </div>
+   207→
+   208→        {splitLoading ? (
+   209→          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+   210→            {Array.from({ length: 2 }).map((_, i) => (
+   211→              <Skeleton key={i} className="h-48 rounded-2xl" />
+   212→            ))}
+   213→          </div>
+   214→        ) : (splitBills ?? []).length === 0 ? (
+   215→          <SplitBillEmptyState onCreate={() => setSplitDialogOpen(true)} />
+   216→        ) : (
+   217→          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+   218→            {(splitBills ?? []).map((b) => (
+   219→              <SplitBillCard key={b.id} bill={b} />
+   220→            ))}
+   221→          </div>
+   222→        )}
+   223→      </div>
+   224→
+   225→      {/* Friend Debts */}
+   226→      <div className="space-y-3">
+   227→        <div>
+   228→          <h3 className="text-lg font-semibold tracking-tight">
+   229→            Hutang Teman
+   230→          </h3>
+   231→          <p className="text-sm text-muted-foreground">
+   232→            Catat utang piutang kecil dengan teman, lengkap dengan jatuh tempo.
+   233→          </p>
+   234→        </div>
+   235→
+   236→        <Tabs
+   237→          value={debtTab}
+   238→          onValueChange={(v) => setDebtTab(v as FriendDebtType)}
+   239→        >
+   240→          <TabsList>
+   241→            <TabsTrigger value="DEBT" className="gap-1">
+   242→              <ArrowRight className="h-3.5 w-3.5" />
+   243→              Saya Berhutang
+   244→            </TabsTrigger>
+   245→            <TabsTrigger value="RECEIVABLE" className="gap-1">
+   246→              <ArrowRightLeft className="h-3.5 w-3.5" />
+   247→              Teman Berhutang
+   248→            </TabsTrigger>
+   249→          </TabsList>
+   250→
+   251→          <TabsContent value="DEBT" className="mt-3">
+   252→            {debtsLoading ? (
+   253→              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+   254→                {Array.from({ length: 2 }).map((_, i) => (
+   255→                  <Skeleton key={i} className="h-32 rounded-2xl" />
+   256→                ))}
+   257→              </div>
+   258→            ) : myDebts.length === 0 ? (
+   259→              <FriendDebtEmpty
+   260→                type="DEBT"
+   261→                onCreate={() => {
+   262→                  setDebtTab("DEBT");
+   263→                  setDebtDialogOpen(true);
+   264→                }}
+   265→              />
+   266→            ) : (
+   267→              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+   268→                {myDebts.map((d) => (
+   269→                  <FriendDebtCard key={d.id} debt={d} />
+   270→                ))}
+   271→              </div>
+   272→            )}
+   273→          </TabsContent>
+   274→
+   275→          <TabsContent value="RECEIVABLE" className="mt-3">
+   276→            {debtsLoading ? (
+   277→              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+   278→                {Array.from({ length: 2 }).map((_, i) => (
+   279→                  <Skeleton key={i} className="h-32 rounded-2xl" />
+   280→                ))}
+   281→              </div>
+   282→            ) : theirDebts.length === 0 ? (
+   283→              <FriendDebtEmpty
+   284→                type="RECEIVABLE"
+   285→                onCreate={() => {
+   286→                  setDebtTab("RECEIVABLE");
+   287→                  setDebtDialogOpen(true);
+   288→                }}
+   289→              />
+   290→            ) : (
+   291→              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+   292→                {theirDebts.map((d) => (
+   293→                  <FriendDebtCard key={d.id} debt={d} />
+   294→                ))}
+   295→              </div>
+   296→            )}
+   297→          </TabsContent>
+   298→        </Tabs>
+   299→      </div>
+   300→
+   301→      {/* Dialogs */}
+   302→      <SplitBillFormDialog open={splitDialogOpen} onOpenChange={setSplitDialogOpen} />
+   303→      <FriendDebtFormDialog
+   304→        open={debtDialogOpen}
+   305→        onOpenChange={setDebtDialogOpen}
+   306→        defaultType={debtTab}
+   307→      />
+   308→    </div>
+   309→  );
+   310→}
+   311→
+   312→/* ------------------------------------------------------------------ */
+   313→/*  Stat card                                                           */
+   314→/* ------------------------------------------------------------------ */
+   315→
+   316→function StatCard({
+   317→  label,
+   318→  value,
+   319→  icon,
+   320→  tone,
+   321→}: {
+   322→  label: string;
+   323→  value: number;
+   324→  icon: React.ReactNode;
+   325→  tone: "default" | "income" | "expense";
+   326→}) {
+   327→  return (
+   328→    <Card className="p-4">
+   329→      <div className="flex items-center justify-between gap-2">
+   330→        <p className="text-xs text-muted-foreground">{label}</p>
+   331→        <span className="text-muted-foreground/70">{icon}</span>
+   332→      </div>
+   333→      <p
+   334→        className={cn(
+   335→          "mt-1 text-xl font-bold tabular-nums",
+   336→          tone === "income" && "text-emerald-600 dark:text-emerald-400",
+   337→          tone === "expense" && "text-rose-600 dark:text-rose-400"
+   338→        )}
+   339→      >
+   340→        {formatCurrency(value)}
+   341→      </p>
+   342→    </Card>
+   343→  );
+   344→}
+   345→
+   346→/* ------------------------------------------------------------------ */
+   347→/*  Split Bill Card                                                     */
+   348→/* ------------------------------------------------------------------ */
+   349→
+   350→function SplitBillCard({ bill }: { bill: SplitBill }) {
+   351→  const settleMut = useSettleSplitBill();
+   352→  const deleteMut = useDeleteSplitBill();
+   353→  const markPaidMut = useMarkParticipantPaid();
+   354→
+   355→  const catMeta = splitCategoryMeta(bill.category);
+   356→  const paidCount = bill.participants.filter((p) => p.paid).length;
+   357→  const allPaid = paidCount === bill.participants.length && paidCount > 0;
+   358→  const isSettled = bill.settled || allPaid;
+   359→
+   360→  const unpaidShare = bill.participants
+   361→    .filter((p) => !p.paid)
+   362→    .reduce((s, p) => s + p.share, 0);
+   363→
+   364→  return (
+   365→    <Card className="flex flex-col gap-3 p-4">
+   366→      {/* Header */}
+   367→      <div className="flex items-start gap-3">
+   368→        <span
+   369→          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+   370→          style={{
+   371→            backgroundColor: `${catMeta.color}1a`,
+   372→            color: catMeta.color,
+   373→          }}
+   374→        >
+   375→          <LucideIcon name={catMeta.icon} className="h-5 w-5" />
+   376→        </span>
+   377→        <div className="min-w-0 flex-1">
+   378→          <p className="truncate text-sm font-semibold text-foreground">
+   379→            {bill.title}
+   380→          </p>
+   381→          <p className="text-xs text-muted-foreground">
+   382→            Dibayar oleh <span className="font-medium">{bill.paidBy}</span> ·{" "}
+   383→            {formatDate(bill.date)}
+   384→          </p>
+   385→        </div>
+   386→        <div className="flex shrink-0 flex-col items-end gap-1">
+   387→          <Badge
+   388→            variant="secondary"
+   389→            className="border-transparent"
+   390→            style={{
+   391→              backgroundColor: `${catMeta.color}1a`,
+   392→              color: catMeta.color,
+   393→            }}
+   394→          >
+   395→            {catMeta.label}
+   396→          </Badge>
+   397→          {isSettled && (
+   398→            <Badge
+   399→              variant="secondary"
+   400→              className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+   401→            >
+   402→              <Check className="mr-0.5 h-3 w-3" />
+   403→              Lunas
+   404→            </Badge>
+   405→          )}
+   406→        </div>
+   407→      </div>
+   408→
+   409→      {/* Total */}
+   410→      <div className="flex items-end justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
+   411→        <div>
+   412→          <p className="text-[11px] text-muted-foreground">Total</p>
+   413→          <p className="text-lg font-bold tabular-nums text-foreground">
+   414→            {formatCurrency(bill.totalAmount)}
+   415→          </p>
+   416→        </div>
+   417→        <div className="text-right">
+   418→          <p className="text-[11px] text-muted-foreground">Belum dibayar</p>
+   419→          <p
+   420→            className={cn(
+   421→              "text-sm font-semibold tabular-nums",
+   422→              unpaidShare > 0
+   423→                ? "text-rose-600 dark:text-rose-400"
+   424→                : "text-emerald-600 dark:text-emerald-400"
+   425→            )}
+   426→          >
+   427→            {formatCurrency(unpaidShare)}
+   428→          </p>
+   429→        </div>
+   430→      </div>
+   431→
+   432→      {/* Participants */}
+   433→      <div className="space-y-1.5">
+   434→        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+   435→          Peserta ({paidCount}/{bill.participants.length} lunas)
+   436→        </p>
+   437→        <div className="max-h-40 overflow-y-auto pr-1">
+   438→          <ul className="space-y-1.5">
+   439→            {bill.participants.map((p) => (
+   440→              <li
+   441→                key={p.id}
+   442→                className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5"
+   443→              >
+   444→                <div className="flex min-w-0 items-center gap-2">
+   445→                  {p.paid ? (
+   446→                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+   447→                  ) : (
+   448→                    <span className="h-4 w-4 shrink-0 rounded-full border border-muted-foreground/40" />
+   449→                  )}
+   450→                  <span
+   451→                    className={cn(
+   452→                      "truncate text-sm",
+   453→                      p.paid && "text-muted-foreground line-through"
+   454→                    )}
+   455→                  >
+   456→                    {p.name}
+   457→                    {bill.paidBy === p.name && (
+   458→                      <span className="ml-1 text-[10px] text-muted-foreground">
+   459→                        (payer)
+   460→                      </span>
+   461→                    )}
+   462→                  </span>
+   463→                </div>
+   464→                <div className="flex items-center gap-2">
+   465→                  <span className="text-xs tabular-nums text-muted-foreground">
+   466→                    {formatCurrencyCompact(p.share)}
+   467→                  </span>
+   468→                  {!p.paid && !bill.settled && (
+   469→                    <Button
+   470→                      variant="ghost"
+   471→                      size="sm"
+   472→                      disabled={markPaidMut.isPending}
+   473→                      onClick={() =>
+   474→                        markPaidMut.mutate(p.id, {
+   475→                          onSuccess: () =>
+   476→                            toast.success(`${p.name} ditandai lunas.`),
+   477→                          onError: (err) =>
+   478→                            toast.error(
+   479→                              err.message || "Gagal menandai peserta."
+   480→                            ),
+   481→                        })
+   482→                      }
+   483→                      className="h-7 px-2 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+   484→                    >
+   485→                      Tandai Lunas
+   486→                    </Button>
+   487→                  )}
+   488→                </div>
+   489→              </li>
+   490→            ))}
+   491→          </ul>
+   492→        </div>
+   493→      </div>
+   494→
+   495→      {/* Actions */}
+   496→      <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
+   497→        <Button
+   498→          variant="ghost"
+   499→          size="sm"
+   500→          disabled={settleMut.isPending || bill.settled}
+   501→          onClick={() =>
+   502→            settleMut.mutate(bill.id, {
+   503→              onSuccess: () =>
+   504→                toast.success(`Patungan "${bill.title}" ditandai lunas semua.`),
+   505→              onError: (err) =>
+   506→                toast.error(err.message || "Gagal menandai patungan."),
+   507→            })
+   508→          }
+   509→          className="gap-1 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+   510→        >
+   511→          {settleMut.isPending && settleMut.variables === bill.id ? (
+   512→            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   513→          ) : (
+   514→            <Check className="h-3.5 w-3.5" />
+   515→          )}
+   516→          Settle Semua
+   517→        </Button>
+   518→
+   519→        <AlertDialog>
+   520→          <AlertDialogTrigger asChild>
+   521→            <Button
+   522→              variant="ghost"
+   523→              size="icon"
+   524→              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+   525→              disabled={deleteMut.isPending}
+   526→              aria-label="Hapus patungan"
+   527→            >
+   528→              <Trash2 className="h-4 w-4" />
+   529→            </Button>
+   530→          </AlertDialogTrigger>
+   531→          <AlertDialogContent>
+   532→            <AlertDialogHeader>
+   533→              <AlertDialogTitle>Hapus patungan ini?</AlertDialogTitle>
+   534→              <AlertDialogDescription>
+   535→                Patungan <strong>{bill.title}</strong> akan dihapus permanen.
+   536→              </AlertDialogDescription>
+   537→            </AlertDialogHeader>
+   538→            <AlertDialogFooter>
+   539→              <AlertDialogCancel>Batal</AlertDialogCancel>
+   540→              <AlertDialogAction
+   541→                onClick={() =>
+   542→                  deleteMut.mutate(bill.id, {
+   543→                    onSuccess: () =>
+   544→                      toast.success(`Patungan "${bill.title}" dihapus.`),
+   545→                    onError: (err) =>
+   546→                      toast.error(err.message || "Gagal menghapus patungan."),
+   547→                  })
+   548→                }
+   549→                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+   550→              >
+   551→                {deleteMut.isPending && (
+   552→                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+   553→                )}
+   554→                Hapus
+   555→              </AlertDialogAction>
+   556→            </AlertDialogFooter>
+   557→          </AlertDialogContent>
+   558→        </AlertDialog>
+   559→      </div>
+   560→    </Card>
+   561→  );
+   562→}
+   563→
+   564→/* ------------------------------------------------------------------ */
+   565→/*  Split Bill Form Dialog                                              */
+   566→/* ------------------------------------------------------------------ */
+   567→
+   568→function SplitBillFormDialog({
+   569→  open,
+   570→  onOpenChange,
+   571→}: {
+   572→  open: boolean;
+   573→  onOpenChange: (v: boolean) => void;
+   574→}) {
+   575→  const createMut = useCreateSplitBill();
+   576→
+   577→  const [title, setTitle] = React.useState("");
+   578→  const [totalAmount, setTotalAmount] = React.useState("");
+   579→  const [paidBy, setPaidBy] = React.useState("");
+   580→  const [splitType, setSplitType] = React.useState<SplitTypeValue>("EQUAL");
+   581→  const [category, setCategory] = React.useState<SplitCategoryValue>("MAKAN");
+   582→  const [note, setNote] = React.useState("");
+   583→  const [participants, setParticipants] = React.useState<
+   584→    Array<{ name: string; share: string }>
+   585→  >([
+   586→    { name: "", share: "" },
+   587→    { name: "", share: "" },
+   588→  ]);
+   589→  const [error, setError] = React.useState<string | null>(null);
+   590→
+   591→  React.useEffect(() => {
+   592→    if (!open) return;
+   593→    setTitle("");
+   594→    setTotalAmount("");
+   595→    setPaidBy("");
+   596→    setSplitType("EQUAL");
+   597→    setCategory("MAKAN");
+   598→    setNote("");
+   599→    setParticipants([
+   600→      { name: "", share: "" },
+   601→      { name: "", share: "" },
+   602→    ]);
+   603→    setError(null);
+   604→  }, [open]);
+   605→
+   606→  const totalNum = Number(totalAmount) || 0;
+   607→
+   608→  // Recompute EQUAL shares when total/participant-count changes
+   609→  const computedParticipants = React.useMemo(() => {
+   610→    if (splitType !== "EQUAL") return participants;
+   611→    const validCount = participants.filter((p) => p.name.trim()).length;
+   612→    const share = validCount > 0 ? Math.round(totalNum / validCount) : 0;
+   613→    return participants.map((p) =>
+   614→      p.name.trim() ? { ...p, share: String(share) } : p
+   615→    );
+   616→  }, [participants, splitType, totalNum]);
+   617→
+   618→  const shareSum = React.useMemo(() => {
+   619→    return computedParticipants
+   620→      .filter((p) => p.name.trim())
+   621→      .reduce((s, p) => s + (Number(p.share) || 0), 0);
+   622→  }, [computedParticipants]);
+   623→
+   624→  const shareMismatch =
+   625→    splitType === "CUSTOM" && totalNum > 0 && shareSum !== totalNum;
+   626→
+   627→  function addParticipant() {
+   628→    setParticipants((prev) => [...prev, { name: "", share: "" }]);
+   629→  }
+   630→  function removeParticipant(idx: number) {
+   631→    setParticipants((prev) => prev.filter((_, i) => i !== idx));
+   632→  }
+   633→  function updateParticipant(idx: number, field: "name" | "share", value: string) {
+   634→    setParticipants((prev) =>
+   635→      prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p))
+   636→    );
+   637→  }
+   638→
+   639→  function handleSubmit(e: React.FormEvent) {
+   640→    e.preventDefault();
+   641→    setError(null);
+   642→
+   643→    if (!title.trim()) {
+   644→      setError("Judul patungan wajib diisi.");
+   645→      return;
+   646→    }
+   647→    if (!Number.isFinite(totalNum) || totalNum <= 0) {
+   648→      setError("Total jumlah harus lebih dari 0.");
+   649→      return;
+   650→    }
+   651→    if (!paidBy.trim()) {
+   652→      setError("Isi siapa yang membayar.");
+   653→      return;
+   654→    }
+   655→    const valid = computedParticipants.filter((p) => p.name.trim());
+   656→    if (valid.length < 2) {
+   657→      setError("Minimal 2 peserta untuk patungan.");
+   658→      return;
+   659→    }
+   660→    if (shareMismatch) {
+   661→      setError(
+   662→        `Total share (${formatCurrency(shareSum)}) tidak sama dengan total (${formatCurrency(
+   663→          totalNum
+   664→        )}). Sesuaikan dulu.`
+   665→      );
+   666→      return;
+   667→    }
+   668→
+   669→    const catMeta = splitCategoryMeta(category);
+   670→    const payload: SplitBillInput = {
+   671→      title: title.trim(),
+   672→      description: undefined,
+   673→      totalAmount: Math.round(totalNum),
+   674→      paidBy: paidBy.trim(),
+   675→      splitType,
+   676→      category,
+   677→      icon: catMeta.icon,
+   678→      color: catMeta.color,
+   679→      note: note.trim() || undefined,
+   680→      participants: valid.map((p) => ({
+   681→        name: p.name.trim(),
+   682→        share: splitType === "EQUAL" ? Math.round(totalNum / valid.length) : Math.round(Number(p.share) || 0),
+   683→      })),
+   684→    };
+   685→
+   686→    createMut.mutate(payload, {
+   687→      onSuccess: () => {
+   688→        toast.success("Patungan dibuat.");
+   689→        onOpenChange(false);
+   690→      },
+   691→      onError: (err) =>
+   692→        setError(err.message || "Gagal membuat patungan."),
+   693→    });
+   694→  }
+   695→
+   696→  const pending = createMut.isPending;
+   697→
+   698→  return (
+   699→    <Dialog open={open} onOpenChange={onOpenChange}>
+   700→      <DialogContent
+   701→        showCloseButton={false}
+   702→        className="max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl"
+   703→      >
+   704→        <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+   705→          <div className="flex items-center justify-between">
+   706→            <div>
+   707→              <DialogTitle className="text-base">Buat Patungan</DialogTitle>
+   708→              <DialogDescription className="text-xs">
+   709→                Bagi tagihan bareng teman, otomatis terhitung share-nya.
+   710→              </DialogDescription>
+   711→            </div>
+   712→            <DialogClose asChild>
+   713→              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+   714→                <X className="h-4 w-4" />
+   715→              </Button>
+   716→            </DialogClose>
+   717→          </div>
+   718→        </DialogHeader>
+   719→
+   720→        <form onSubmit={handleSubmit} className="flex flex-col">
+   721→          <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
+   722→            <div className="space-y-1.5">
+   723→              <Label htmlFor="sb-title">Judul</Label>
+   724→              <Input
+   725→                id="sb-title"
+   726→                placeholder="cth. Makan Ayam Geprek"
+   727→                value={title}
+   728→                onChange={(e) => setTitle(e.target.value)}
+   729→                autoFocus
+   730→                maxLength={60}
+   731→              />
+   732→            </div>
+   733→
+   734→            <div className="grid grid-cols-2 gap-3">
+   735→              <div className="space-y-1.5">
+   736→                <Label htmlFor="sb-total">Total (Rp)</Label>
+   737→                <Input
+   738→                  id="sb-total"
+   739→                  type="number"
+   740→                  inputMode="numeric"
+   741→                  min={0}
+   742→                  step={500}
+   743→                  placeholder="cth. 60000"
+   744→                  value={totalAmount}
+   745→                  onChange={(e) => setTotalAmount(e.target.value)}
+   746→                />
+   747→                {totalNum > 0 && (
+   748→                  <p className="text-xs text-muted-foreground">
+   749→                    {formatCurrency(totalNum)}
+   750→                  </p>
+   751→                )}
+   752→              </div>
+   753→              <div className="space-y-1.5">
+   754→                <Label htmlFor="sb-paidby">Dibayar Oleh</Label>
+   755→                <Input
+   756→                  id="sb-paidby"
+   757→                  placeholder="cth. Aku / Andi"
+   758→                  value={paidBy}
+   759→                  onChange={(e) => setPaidBy(e.target.value)}
+   760→                  maxLength={40}
+   761→                />
+   762→              </div>
+   763→            </div>
+   764→
+   765→            <div className="grid grid-cols-2 gap-3">
+   766→              <div className="space-y-1.5">
+   767→                <Label htmlFor="sb-split">Tipe Bagi</Label>
+   768→                <Select
+   769→                  value={splitType}
+   770→                  onValueChange={(v) => setSplitType(v as SplitTypeValue)}
+   771→                >
+   772→                  <SelectTrigger id="sb-split" className="w-full">
+   773→                    <SelectValue />
+   774→                  </SelectTrigger>
+   775→                  <SelectContent>
+   776→                    <SelectItem value="EQUAL">Sama Rata</SelectItem>
+   777→                    <SelectItem value="CUSTOM">Custom</SelectItem>
+   778→                  </SelectContent>
+   779→                </Select>
+   780→              </div>
+   781→              <div className="space-y-1.5">
+   782→                <Label htmlFor="sb-cat">Kategori</Label>
+   783→                <Select
+   784→                  value={category}
+   785→                  onValueChange={(v) => setCategory(v as SplitCategoryValue)}
+   786→                >
+   787→                  <SelectTrigger id="sb-cat" className="w-full">
+   788→                    <SelectValue />
+   789→                  </SelectTrigger>
+   790→                  <SelectContent>
+   791→                    {SPLIT_BILL_CATEGORIES.map((c) => (
+   792→                      <SelectItem key={c.value} value={c.value}>
+   793→                        <span className="flex items-center gap-2">
+   794→                          <LucideIcon
+   795→                            name={c.icon}
+   796→                            className="h-4 w-4"
+   797→                            style={{ color: c.color }}
+   798→                          />
+   799→                          {c.label}
+   800→                        </span>
+   801→                      </SelectItem>
+   802→                    ))}
+   803→                  </SelectContent>
+   804→                </Select>
+   805→              </div>
+   806→            </div>
+   807→
+   808→            {/* Participants */}
+   809→            <div className="space-y-2">
+   810→              <div className="flex items-center justify-between">
+   811→                <Label>Peserta</Label>
+   812→                <Button
+   813→                  type="button"
+   814→                  variant="outline"
+   815→                  size="sm"
+   816→                  onClick={addParticipant}
+   817→                  className="h-7 gap-1 px-2 text-xs"
+   818→                >
+   819→                  <Plus className="h-3 w-3" />
+   820→                  Tambah
+   821→                </Button>
+   822→              </div>
+   823→
+   824→              <div className="space-y-2">
+   825→                {computedParticipants.map((p, idx) => (
+   826→                  <div key={idx} className="flex items-center gap-2">
+   827→                    <Input
+   828→                      placeholder={`Nama peserta ${idx + 1}`}
+   829→                      value={p.name}
+   830→                      onChange={(e) =>
+   831→                        updateParticipant(idx, "name", e.target.value)
+   832→                      }
+   833→                      maxLength={40}
+   834→                    />
+   835→                    <Input
+   836→                      type="number"
+   837→                      inputMode="numeric"
+   838→                      placeholder="share"
+   839→                      value={p.share}
+   840→                      onChange={(e) =>
+   841→                        updateParticipant(idx, "share", e.target.value)
+   842→                      }
+   843→                      disabled={splitType === "EQUAL"}
+   844→                      className="w-28 tabular-nums"
+   845→                    />
+   846→                    {participants.length > 2 && (
+   847→                      <Button
+   848→                        type="button"
+   849→                        variant="ghost"
+   850→                        size="icon"
+   851→                        onClick={() => removeParticipant(idx)}
+   852→                        className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+   853→                        aria-label="Hapus peserta"
+   854→                      >
+   855→                        <X className="h-4 w-4" />
+   856→                      </Button>
+   857→                    )}
+   858→                  </div>
+   859→                ))}
+   860→              </div>
+   861→
+   862→              {splitType === "EQUAL" && totalNum > 0 && (
+   863→                <p className="text-xs text-muted-foreground">
+   864→                  Share otomatis dihitung rata:{" "}
+   865→                  <span className="font-medium tabular-nums">
+   866→                    {formatCurrency(
+   867→                      computedParticipants.filter((p) => p.name.trim()).length >
+   868→                        0
+   869→                        ? Math.round(
+   870→                            totalNum /
+   871→                              computedParticipants.filter((p) =>
+   872→                                p.name.trim()
+   873→                              ).length
+   874→                          )
+   875→                        : 0
+   876→                    )}
+   877→                  </span>{" "}
+   878→                  / orang
+   879→                </p>
+   880→              )}
+   881→              {shareMismatch && (
+   882→                <p className="text-xs text-amber-600 dark:text-amber-400">
+   883→                  Total share ({formatCurrency(shareSum)}) belum sama dengan{" "}
+   884→                  {formatCurrency(totalNum)}.
+   885→                </p>
+   886→              )}
+   887→            </div>
+   888→
+   889→            <div className="space-y-1.5">
+   890→              <Label htmlFor="sb-note">Catatan (opsional)</Label>
+   891→              <Textarea
+   892→                id="sb-note"
+   893→                placeholder="cth. Bayar di restoran depan kampus"
+   894→                value={note}
+   895→                onChange={(e) => setNote(e.target.value)}
+   896→                maxLength={120}
+   897→                className="min-h-16"
+   898→              />
+   899→            </div>
+   900→
+   901→            {error && (
+   902→              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+   903→                {error}
+   904→              </div>
+   905→            )}
+   906→          </div>
+   907→
+   908→          <DialogFooter className="border-t border-border bg-muted/30 p-4">
+   909→            <DialogClose asChild>
+   910→              <Button type="button" variant="outline" disabled={pending}>
+   911→                Batal
+   912→              </Button>
+   913→            </DialogClose>
+   914→            <Button
+   915→              type="submit"
+   916→              disabled={pending}
+   917→              className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+   918→            >
+   919→              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+   920→              <Plus className="h-4 w-4" />
+   921→              Buat Patungan
+   922→            </Button>
+   923→          </DialogFooter>
+   924→        </form>
+   925→      </DialogContent>
+   926→    </Dialog>
+   927→  );
+   928→}
+   929→
+   930→/* ------------------------------------------------------------------ */
+   931→/*  Split Bill Empty State                                             */
+   932→/* ------------------------------------------------------------------ */
+   933→
+   934→function SplitBillEmptyState({ onCreate }: { onCreate: () => void }) {
+   935→  return (
+   936→    <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+   937→      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+   938→        <Receipt className="h-7 w-7 text-muted-foreground" />
+   939→      </span>
+   940→      <div>
+   941→        <p className="text-sm font-medium text-foreground">
+   942→          Belum ada patungan
+   943→        </p>
+   944→        <p className="mt-0.5 text-xs text-muted-foreground">
+   945→          Bagi bill bareng teman biar gampang ngitung siapa bayar berapa.
+   946→        </p>
+   947→      </div>
+   948→      <Button onClick={onCreate} className="gap-1 bg-emerald-600 hover:bg-emerald-700">
+   949→        <Plus className="h-4 w-4" />
+   950→        Buat Patungan Pertama
+   951→      </Button>
+   952→    </Card>
+   953→  );
+   954→}
+   955→
+   956→/* ------------------------------------------------------------------ */
+   957→/*  Friend Debt Card                                                    */
+   958→/* ------------------------------------------------------------------ */
+   959→
+   960→function FriendDebtCard({ debt }: { debt: FriendDebt }) {
+   961→  const settleMut = useSettleFriendDebt();
+   962→  const deleteMut = useDeleteFriendDebt();
+   963→
+   964→  const overdue = isOverdue(debt.dueDate, debt.settled);
+   965→  const isOwe = debt.type === "DEBT";
+   966→
+   967→  return (
+   968→    <Card className="p-4">
+   969→      <div className="flex items-start justify-between gap-3">
+   970→        <div className="flex min-w-0 items-start gap-3">
+   971→          <span
+   972→            className={cn(
+   973→              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+   974→              isOwe
+   975→                ? "bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400"
+   976→                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+   977→            )}
+   978→          >
+   979→            <HandCoins className="h-5 w-5" />
+   980→          </span>
+   981→          <div className="min-w-0">
+   982→            <p className="truncate text-sm font-semibold text-foreground">
+   983→              {debt.friendName}
+   984→            </p>
+   985→            <p className="text-xs text-muted-foreground">
+   986→              {isOwe ? "Saya berhutang" : "Berhutang ke saya"} ·{" "}
+   987→              {formatDate(debt.date)}
+   988→            </p>
+   989→            {debt.description && (
+   990→              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+   991→                {debt.description}
+   992→              </p>
+   993→            )}
+   994→          </div>
+   995→        </div>
+   996→
+   997→        <div className="flex shrink-0 flex-col items-end gap-1">
+   998→          <p
+   999→            className={cn(
+  1000→              "text-base font-bold tabular-nums",
+  1001→              isOwe
+  1002→                ? "text-rose-600 dark:text-rose-400"
+  1003→                : "text-emerald-600 dark:text-emerald-400"
+  1004→            )}
+  1005→          >
+  1006→            {formatCurrency(debt.amount)}
+  1007→          </p>
+  1008→          {debt.settled ? (
+  1009→            <Badge
+  1010→              variant="secondary"
+  1011→              className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+  1012→            >
+  1013→              <Check className="mr-0.5 h-3 w-3" />
+  1014→              Lunas
+  1015→            </Badge>
+  1016→          ) : overdue ? (
+  1017→            <Badge
+  1018→              variant="secondary"
+  1019→              className="border-transparent bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"
+  1020→            >
+  1021→              <AlertTriangle className="mr-0.5 h-3 w-3" />
+  1022→              Jatuh tempo
+  1023→            </Badge>
+  1024→          ) : debt.dueDate ? (
+  1025→            <Badge variant="outline" className="gap-1 text-muted-foreground">
+  1026→              <Calendar className="h-3 w-3" />
+  1027→              {formatDate(debt.dueDate)}
+  1028→            </Badge>
+  1029→          ) : null}
+  1030→        </div>
+  1031→      </div>
+  1032→
+  1033→      {debt.note && (
+  1034→        <p className="mt-2 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground">
+  1035→          {debt.note}
+  1036→        </p>
+  1037→      )}
+  1038→
+  1039→      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2">
+  1040→        <Button
+  1041→          variant="ghost"
+  1042→          size="sm"
+  1043→          disabled={settleMut.isPending || debt.settled}
+  1044→          onClick={() =>
+  1045→            settleMut.mutate(debt.id, {
+  1046→              onSuccess: () =>
+  1047→                toast.success(
+  1048→                  `Utang dengan ${debt.friendName} dilunasi.`
+  1049→                ),
+  1050→              onError: (err) =>
+  1051→                toast.error(err.message || "Gagal melunasi utang."),
+  1052→            })
+  1053→          }
+  1054→          className="gap-1 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+  1055→        >
+  1056→          {settleMut.isPending && settleMut.variables === debt.id ? (
+  1057→            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+  1058→          ) : (
+  1059→            <Check className="h-3.5 w-3.5" />
+  1060→          )}
+  1061→          Tandai Lunas
+  1062→        </Button>
+  1063→
+  1064→        <AlertDialog>
+  1065→          <AlertDialogTrigger asChild>
+  1066→            <Button
+  1067→              variant="ghost"
+  1068→              size="icon"
+  1069→              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+  1070→              disabled={deleteMut.isPending}
+  1071→              aria-label="Hapus utang"
+  1072→            >
+  1073→              <Trash2 className="h-4 w-4" />
+  1074→            </Button>
+  1075→          </AlertDialogTrigger>
+  1076→          <AlertDialogContent>
+  1077→            <AlertDialogHeader>
+  1078→              <AlertDialogTitle>Hapus catatan ini?</AlertDialogTitle>
+  1079→              <AlertDialogDescription>
+  1080→                Utang dengan <strong>{debt.friendName}</strong> akan dihapus
+  1081→                permanen.
+  1082→              </AlertDialogDescription>
+  1083→            </AlertDialogHeader>
+  1084→            <AlertDialogFooter>
+  1085→              <AlertDialogCancel>Batal</AlertDialogCancel>
+  1086→              <AlertDialogAction
+  1087→                onClick={() =>
+  1088→                  deleteMut.mutate(debt.id, {
+  1089→                    onSuccess: () =>
+  1090→                      toast.success(`Catatan utang dihapus.`),
+  1091→                    onError: (err) =>
+  1092→                      toast.error(err.message || "Gagal menghapus utang."),
+  1093→                  })
+  1094→                }
+  1095→                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+  1096→              >
+  1097→                {deleteMut.isPending && (
+  1098→                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+  1099→                )}
+  1100→                Hapus
+  1101→              </AlertDialogAction>
+  1102→            </AlertDialogFooter>
+  1103→          </AlertDialogContent>
+  1104→        </AlertDialog>
+  1105→      </div>
+  1106→    </Card>
+  1107→  );
+  1108→}
+  1109→
+  1110→/* ------------------------------------------------------------------ */
+  1111→/*  Friend Debt Empty State                                             */
+  1112→/* ------------------------------------------------------------------ */
+  1113→
+  1114→function FriendDebtEmpty({
+  1115→  type,
+  1116→  onCreate,
+  1117→}: {
+  1118→  type: FriendDebtType;
+  1119→  onCreate: () => void;
+  1120→}) {
+  1121→  const isOwe = type === "DEBT";
+  1122→  return (
+  1123→    <Card className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+  1124→      <span
+  1125→        className={cn(
+  1126→          "flex h-14 w-14 items-center justify-center rounded-2xl",
+  1127→          isOwe
+  1128→            ? "bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400"
+  1129→            : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+  1130→        )}
+  1131→      >
+  1132→        <HandCoins className="h-7 w-7" />
+  1133→      </span>
+  1134→      <div>
+  1135→        <p className="text-sm font-medium text-foreground">
+  1136→          {isOwe ? "Belum ada utang ke teman" : "Belum ada piutang"}
+  1137→        </p>
+  1138→        <p className="mt-0.5 text-xs text-muted-foreground">
+  1139→          {isOwe
+  1140→            ? "Catat kalau kamu minjem ke teman biar gak lupa bayar."
+  1141→            : "Catat kalau teman minjem ke kamu biar gengsi gak ngilu."}
+  1142→        </p>
+  1143→      </div>
+  1144→      <Button onClick={onCreate} className="gap-1 bg-emerald-600 hover:bg-emerald-700">
+  1145→        <Plus className="h-4 w-4" />
+  1146→        Tambah
+  1147→      </Button>
+  1148→    </Card>
+  1149→  );
+  1150→}
+  1151→
+  1152→/* ------------------------------------------------------------------ */
+  1153→/*  Friend Debt Form Dialog                                             */
+  1154→/* ------------------------------------------------------------------ */
+  1155→
+  1156→function FriendDebtFormDialog({
+  1157→  open,
+  1158→  onOpenChange,
+  1159→  defaultType,
+  1160→}: {
+  1161→  open: boolean;
+  1162→  onOpenChange: (v: boolean) => void;
+  1163→  defaultType: FriendDebtType;
+  1164→}) {
+  1165→  const createMut = useCreateFriendDebt();
+  1166→
+  1167→  const [friendName, setFriendName] = React.useState("");
+  1168→  const [type, setType] = React.useState<FriendDebtType>(defaultType);
+  1169→  const [amount, setAmount] = React.useState("");
+  1170→  const [description, setDescription] = React.useState("");
+  1171→  const [dueDate, setDueDate] = React.useState("");
+  1172→  const [note, setNote] = React.useState("");
+  1173→  const [error, setError] = React.useState<string | null>(null);
+  1174→
+  1175→  React.useEffect(() => {
+  1176→    if (!open) return;
+  1177→    setFriendName("");
+  1178→    setType(defaultType);
+  1179→    setAmount("");
+  1180→    setDescription("");
+  1181→    setDueDate("");
+  1182→    setNote("");
+  1183→    setError(null);
+  1184→  }, [open, defaultType]);
+  1185→
+  1186→  function handleSubmit(e: React.FormEvent) {
+  1187→    e.preventDefault();
+  1188→    setError(null);
+  1189→    if (!friendName.trim()) {
+  1190→      setError("Nama teman wajib diisi.");
+  1191→      return;
+  1192→    }
+  1193→    const amountNum = Number(amount);
+  1194→    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+  1195→      setError("Jumlah harus lebih dari 0.");
+  1196→      return;
+  1197→    }
+  1198→    const payload: FriendDebtInput = {
+  1199→      friendName: friendName.trim(),
+  1200→      type,
+  1201→      amount: Math.round(amountNum),
+  1202→      description: description.trim() || undefined,
+  1203→      dueDate: dueDate || undefined,
+  1204→      note: note.trim() || undefined,
+  1205→    };
+  1206→    createMut.mutate(payload, {
+  1207→      onSuccess: () => {
+  1208→        toast.success("Catatan utang ditambahkan.");
+  1209→        onOpenChange(false);
+  1210→      },
+  1211→      onError: (err) =>
+  1212→        setError(err.message || "Gagal menambahkan utang."),
+  1213→    });
+  1214→  }
+  1215→
+  1216→  const pending = createMut.isPending;
+  1217→
+  1218→  return (
+  1219→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1220→      <DialogContent
+  1221→        showCloseButton={false}
+  1222→        className="max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl"
+  1223→      >
+  1224→        <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+  1225→          <div className="flex items-center justify-between">
+  1226→            <div>
+  1227→              <DialogTitle className="text-base">Tambah Catatan Utang</DialogTitle>
+  1228→              <DialogDescription className="text-xs">
+  1229→                Catat utang piutang kecil dengan teman.
+  1230→              </DialogDescription>
+  1231→            </div>
+  1232→            <DialogClose asChild>
+  1233→              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+  1234→                <X className="h-4 w-4" />
+  1235→              </Button>
+  1236→            </DialogClose>
+  1237→          </div>
+  1238→        </DialogHeader>
+  1239→
+  1240→        <form onSubmit={handleSubmit} className="flex flex-col">
+  1241→          <div className="space-y-4 p-5">
+  1242→            <div className="space-y-1.5">
+  1243→              <Label htmlFor="fd-type">Tipe</Label>
+  1244→              <Select
+  1245→                value={type}
+  1246→                onValueChange={(v) => setType(v as FriendDebtType)}
+  1247→              >
+  1248→                <SelectTrigger id="fd-type" className="w-full">
+  1249→                  <SelectValue />
+  1250→                </SelectTrigger>
+  1251→                <SelectContent>
+  1252→                  <SelectItem value="DEBT">Saya berhutang ke teman</SelectItem>
+  1253→                  <SelectItem value="RECEIVABLE">
+  1254→                    Teman berhutang ke saya
+  1255→                  </SelectItem>
+  1256→                </SelectContent>
+  1257→              </Select>
+  1258→            </div>
+  1259→
+  1260→            <div className="space-y-1.5">
+  1261→              <Label htmlFor="fd-name">Nama Teman</Label>
+  1262→              <Input
+  1263→                id="fd-name"
+  1264→                placeholder="cth. Andi"
+  1265→                value={friendName}
+  1266→                onChange={(e) => setFriendName(e.target.value)}
+  1267→                autoFocus
+  1268→                maxLength={50}
+  1269→              />
+  1270→            </div>
+  1271→
+  1272→            <div className="space-y-1.5">
+  1273→              <Label htmlFor="fd-amount">Jumlah (Rp)</Label>
+  1274→              <Input
+  1275→                id="fd-amount"
+  1276→                type="number"
+  1277→                inputMode="numeric"
+  1278→                min={0}
+  1279→                step={1000}
+  1280→                placeholder="cth. 25000"
+  1281→                value={amount}
+  1282→                onChange={(e) => setAmount(e.target.value)}
+  1283→              />
+  1284→              {amount && Number(amount) > 0 && (
+  1285→                <p className="text-xs text-muted-foreground">
+  1286→                  {formatCurrency(Number(amount))}
+  1287→                </p>
+  1288→              )}
+  1289→            </div>
+  1290→
+  1291→            <div className="space-y-1.5">
+  1292→              <Label htmlFor="fd-desc">Keterangan</Label>
+  1293→              <Input
+  1294→                id="fd-desc"
+  1295→                placeholder="cth. Bayar makan siang"
+  1296→                value={description}
+  1297→                onChange={(e) => setDescription(e.target.value)}
+  1298→                maxLength={100}
+  1299→              />
+  1300→            </div>
+  1301→
+  1302→            <div className="space-y-1.5">
+  1303→              <Label htmlFor="fd-due">Jatuh Tempo (opsional)</Label>
+  1304→              <Input
+  1305→                id="fd-due"
+  1306→                type="date"
+  1307→                value={dueDate}
+  1308→                onChange={(e) => setDueDate(e.target.value)}
+  1309→                min={formatDateInput(new Date())}
+  1310→              />
+  1311→            </div>
+  1312→
+  1313→            <div className="space-y-1.5">
+  1314→              <Label htmlFor="fd-note">Catatan (opsional)</Label>
+  1315→              <Textarea
+  1316→                id="fd-note"
+  1317→                placeholder="cth. Akan dilunas waktu gajian"
+  1318→                value={note}
+  1319→                onChange={(e) => setNote(e.target.value)}
+  1320→                maxLength={120}
+  1321→                className="min-h-16"
+  1322→              />
+  1323→            </div>
+  1324→
+  1325→            {error && (
+  1326→              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+  1327→                {error}
+  1328→              </div>
+  1329→            )}
+  1330→          </div>
+  1331→
+  1332→          <DialogFooter className="border-t border-border bg-muted/30 p-4">
+  1333→            <DialogClose asChild>
+  1334→              <Button type="button" variant="outline" disabled={pending}>
+  1335→                Batal
+  1336→              </Button>
+  1337→            </DialogClose>
+  1338→            <Button
+  1339→              type="submit"
+  1340→              disabled={pending}
+  1341→              className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+  1342→            >
+  1343→              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+  1344→              <Plus className="h-4 w-4" />
+  1345→              Simpan
+  1346→            </Button>
+  1347→          </DialogFooter>
+  1348→        </form>
+  1349→      </DialogContent>
+  1350→    </Dialog>
+  1351→  );
+  1352→}
+  1353→

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowRightLeft,
+  Bell,
   Calendar,
   Check,
   CheckCircle2,
@@ -13,9 +14,11 @@ import {
   Loader2,
   Plus,
   Receipt,
+  Scale,
   Trash2,
   Users,
   X,
+  Zap,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -109,6 +112,50 @@ function isOverdue(dueDate: string | null, settled: boolean): boolean {
   return due.getTime() < today.getTime();
 }
 
+/** True when the debt is older than `days` days and still unsettled. */
+function isStaleByDays(
+  dateISO: string | Date,
+  settled: boolean,
+  days: number
+): boolean {
+  if (settled) return false;
+  const d = new Date(dateISO);
+  if (Number.isNaN(d.getTime())) return false;
+  const diffMs = Date.now() - d.getTime();
+  return diffMs >= days * 24 * 60 * 60 * 1000;
+}
+
+/** Net balance per friend across unsettled FriendDebts.
+ *  Positive → friend owes me; Negative → I owe friend. */
+interface NetBalance {
+  friendName: string;
+  net: number; // positive = friend owes me
+  iOwe: number;
+  owedToMe: number;
+}
+
+function computeNetBalances(debts: FriendDebt[]): NetBalance[] {
+  const map = new Map<string, NetBalance>();
+  for (const d of debts) {
+    if (d.settled) continue;
+    const name = d.friendName.trim();
+    if (!name) continue;
+    let entry = map.get(name);
+    if (!entry) {
+      entry = { friendName: name, net: 0, iOwe: 0, owedToMe: 0 };
+      map.set(name, entry);
+    }
+    if (d.type === "DEBT") {
+      entry.iOwe += d.amount;
+      entry.net -= d.amount;
+    } else {
+      entry.owedToMe += d.amount;
+      entry.net += d.amount;
+    }
+  }
+  return Array.from(map.values()).filter((e) => Math.abs(e.net) >= 1);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main section                                                        */
 /* ------------------------------------------------------------------ */
@@ -119,6 +166,8 @@ export function PatunganSection() {
 
   const [splitDialogOpen, setSplitDialogOpen] = React.useState(false);
   const [debtDialogOpen, setDebtDialogOpen] = React.useState(false);
+  const [quickDebtDialogOpen, setQuickDebtDialogOpen] = React.useState(false);
+  const [settleSmartOpen, setSettleSmartOpen] = React.useState(false);
   const [debtTab, setDebtTab] = React.useState<FriendDebtType>("DEBT");
 
   const totals = React.useMemo(() => {
@@ -152,7 +201,16 @@ export function PatunganSection() {
             Kelola tagihan bersama dan ingat siapa belum lunas.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setQuickDebtDialogOpen(true)}
+            className="gap-1"
+            aria-label="Hutang Teman — catat cepat"
+          >
+            <Zap className="h-4 w-4 text-amber-500" />
+            Hutang Teman
+          </Button>
           <Button
             variant="outline"
             onClick={() => {
@@ -194,6 +252,19 @@ export function PatunganSection() {
           icon={<Users className="h-4 w-4" />}
           tone="default"
         />
+      </div>
+
+      {/* Settle up smart action */}
+      <div className="flex justify-end">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setSettleSmartOpen(true)}
+          className="gap-1 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+        >
+          <Scale className="h-4 w-4" />
+          Settle Up Smart
+        </Button>
       </div>
 
       {/* Split Bills */}
@@ -304,6 +375,15 @@ export function PatunganSection() {
         open={debtDialogOpen}
         onOpenChange={setDebtDialogOpen}
         defaultType={debtTab}
+      />
+      <QuickFriendDebtDialog
+        open={quickDebtDialogOpen}
+        onOpenChange={setQuickDebtDialogOpen}
+      />
+      <SettleUpSmartDialog
+        open={settleSmartOpen}
+        onOpenChange={setSettleSmartOpen}
+        debts={friendDebts ?? []}
       />
     </div>
   );
@@ -962,6 +1042,7 @@ function FriendDebtCard({ debt }: { debt: FriendDebt }) {
   const deleteMut = useDeleteFriendDebt();
 
   const overdue = isOverdue(debt.dueDate, debt.settled);
+  const stale = isStaleByDays(debt.date, debt.settled, 7);
   const isOwe = debt.type === "DEBT";
 
   return (
@@ -1020,6 +1101,14 @@ function FriendDebtCard({ debt }: { debt: FriendDebt }) {
             >
               <AlertTriangle className="mr-0.5 h-3 w-3" />
               Jatuh tempo
+            </Badge>
+          ) : stale ? (
+            <Badge
+              variant="secondary"
+              className="border-transparent bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400"
+            >
+              <Bell className="mr-0.5 h-3 w-3" />
+              Reminder
             </Badge>
           ) : debt.dueDate ? (
             <Badge variant="outline" className="gap-1 text-muted-foreground">
@@ -1346,6 +1435,366 @@ function FriendDebtFormDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Quick Friend Debt Dialog — fast: friendName + amount + Catat       */
+/* ------------------------------------------------------------------ */
+
+function QuickFriendDebtDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const createMut = useCreateFriendDebt();
+  const [friendName, setFriendName] = React.useState("");
+  const [amount, setAmount] = React.useState("");
+  const [type, setType] = React.useState<FriendDebtType>("DEBT");
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setFriendName("");
+    setAmount("");
+    setType("DEBT");
+    setError(null);
+  }, [open]);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!friendName.trim()) {
+      setError("Nama teman wajib diisi.");
+      return;
+    }
+    const amountNum = Number(amount);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      setError("Jumlah harus lebih dari 0.");
+      return;
+    }
+    const payload: FriendDebtInput = {
+      friendName: friendName.trim(),
+      type,
+      amount: Math.round(amountNum),
+    };
+    createMut.mutate(payload, {
+      onSuccess: () => {
+        toast.success(
+          `Catat: ${type === "DEBT" ? "berhutang ke" : "piutang dari"} ${friendName.trim()} ${formatCurrency(amountNum)}.`
+        );
+        onOpenChange(false);
+      },
+      onError: (err) =>
+        setError(err.message || "Gagal menambahkan utang."),
+    });
+  }
+
+  const pending = createMut.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-sm gap-0 overflow-hidden p-0 sm:rounded-2xl"
+      >
+        <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-1.5 text-base">
+                <Zap className="h-4 w-4 text-amber-500" />
+                Hutang Teman
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Catat cepat — isi nama + jumlah saja.
+              </DialogDescription>
+            </div>
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogClose>
+          </div>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          <div className="space-y-3 p-5">
+            {/* Type toggle */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setType("DEBT")}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+                  type === "DEBT"
+                    ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/50 dark:bg-rose-500/10 dark:text-rose-400"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+                )}
+                aria-pressed={type === "DEBT"}
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+                Saya berhutang
+              </button>
+              <button
+                type="button"
+                onClick={() => setType("RECEIVABLE")}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+                  type === "RECEIVABLE"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-400"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+                )}
+                aria-pressed={type === "RECEIVABLE"}
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+                Teman berhutang
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="qd-name">Nama Teman</Label>
+              <Input
+                id="qd-name"
+                placeholder="cth. Andi"
+                value={friendName}
+                onChange={(e) => setFriendName(e.target.value)}
+                autoFocus
+                maxLength={50}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="qd-amount">Jumlah (Rp)</Label>
+              <Input
+                id="qd-amount"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1000}
+                placeholder="cth. 25000"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              {amount && Number(amount) > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(Number(amount))}
+                </p>
+              )}
+            </div>
+
+            {error && (
+              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t border-border bg-muted/30 p-4">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={pending}>
+                Batal
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={pending}
+              className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+            >
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              <Check className="h-4 w-4" />
+              Catat
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settle Up Smart — net debt between all friends                     */
+/* ------------------------------------------------------------------ */
+
+function SettleUpSmartDialog({
+  open,
+  onOpenChange,
+  debts,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  debts: FriendDebt[];
+}) {
+  const balances = React.useMemo(
+    () => computeNetBalances(debts),
+    [debts]
+  );
+
+  // Simple greedy matching: creditors (net > 0) match debtors (net < 0)
+  const suggestions = React.useMemo(() => {
+    const creditors = balances
+      .filter((b) => b.net > 0)
+      .sort((a, b) => b.net - a.net);
+    const debtors = balances
+      .filter((b) => b.net < 0)
+      .sort((a, b) => a.net - b.net); // most negative first
+    const out: Array<{ from: string; to: string; amount: number }> = [];
+    let i = 0;
+    let j = 0;
+    const cRemain = creditors.map((c) => c.net);
+    const dRemain = debtors.map((d) => Math.abs(d.net));
+    while (i < debtors.length && j < creditors.length) {
+      const dName = debtors[i].friendName;
+      const cName = creditors[j].friendName;
+      const transfer = Math.min(dRemain[i], cRemain[j]);
+      if (transfer >= 1) {
+        out.push({ from: dName, to: cName, amount: Math.round(transfer) });
+      }
+      dRemain[i] -= transfer;
+      cRemain[j] -= transfer;
+      if (dRemain[i] < 1) i++;
+      if (cRemain[j] < 1) j++;
+    }
+    return out;
+  }, [balances]);
+
+  const totalCredit = balances
+    .filter((b) => b.net > 0)
+    .reduce((s, b) => s + b.net, 0);
+  const totalDebit = balances
+    .filter((b) => b.net < 0)
+    .reduce((s, b) => s + Math.abs(b.net), 0);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-md gap-0 overflow-hidden p-0 sm:rounded-2xl"
+      >
+        <DialogHeader className="border-b border-border bg-muted/30 p-5 pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-1.5 text-base">
+                <Scale className="h-4 w-4 text-emerald-600" />
+                Settle Up Smart
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Konsolidasi semua utang jadi transfer minimum.
+              </DialogDescription>
+            </div>
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogClose>
+          </div>
+        </DialogHeader>
+
+        <div className="max-h-[70vh] overflow-y-auto p-5 custom-scrollbar">
+          {balances.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+              <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+              <p className="text-sm font-medium">Semua sudah rata!</p>
+              <p className="text-xs text-muted-foreground">
+                Tidak ada utang piutang yang perlu diselesaikan.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Net balance per friend */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Saldo bersih per teman
+                </p>
+                <div className="max-h-48 overflow-y-auto custom-scrollbar rounded-lg border border-border bg-muted/20 p-2">
+                  <ul className="space-y-1">
+                    {balances
+                      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
+                      .map((b) => (
+                        <li
+                          key={b.friendName}
+                          className="flex items-center justify-between rounded px-2 py-1.5 text-sm"
+                        >
+                          <span className="truncate text-foreground">
+                            {b.friendName}
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 font-medium tabular-nums",
+                              b.net > 0
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : b.net < 0
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : "text-muted-foreground"
+                            )}
+                          >
+                            {b.net > 0 ? "+" : ""}
+                            {formatCurrencyCompact(b.net)}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    +{formatCurrency(totalCredit)}
+                  </span>{" "}
+                  piutang ·{" "}
+                  <span className="text-rose-600 dark:text-rose-400">
+                    −{formatCurrency(totalDebit)}
+                  </span>{" "}
+                  utang
+                </p>
+              </div>
+
+              {/* Transfer suggestions */}
+              <div className="mt-4 space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Saran transfer minimum
+                </p>
+                {suggestions.length === 0 ? (
+                  <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                    Tidak ada transfer diperlukan.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {suggestions.map((s, idx) => (
+                      <li
+                        key={`${s.from}-${s.to}-${idx}`}
+                        className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/5"
+                      >
+                        <span className="rounded-md bg-background px-2 py-0.5 text-xs font-medium text-foreground">
+                          {s.from}
+                        </span>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span className="rounded-md bg-background px-2 py-0.5 text-xs font-medium text-foreground">
+                          {s.to}
+                        </span>
+                        <span className="ml-auto text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                          {formatCurrency(s.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="pt-1 text-[11px] text-muted-foreground">
+                  Setelah transfer di atas, semua utang piutang dianggap lunas.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter className="border-t border-border bg-muted/30 p-4">
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Tutup
+            </Button>
+          </DialogClose>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

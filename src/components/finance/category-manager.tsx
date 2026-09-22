@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   Check,
   Loader2,
+  MoreVertical,
   Plus,
   Trash2,
   X,
@@ -42,6 +43,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LucideIcon } from "@/components/lucide-icon";
 import { cn } from "@/lib/utils";
 import { CATEGORY_COLORS, CATEGORY_ICONS } from "@/lib/constants";
@@ -174,39 +181,52 @@ function CategoryCard({ category }: { category: Category }) {
 
   return (
     <div className="group relative flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-3 transition-colors hover:bg-muted/40">
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <button
-            className="absolute right-1.5 top-1.5 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-            aria-label={`Hapus kategori ${category.name}`}
-            disabled={deleteMut.isPending}
+            className="absolute right-1.5 top-1.5 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+            aria-label={`Aksi kategori ${category.name}`}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <MoreVertical className="h-3.5 w-3.5" />
           </button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hapus kategori ini?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Kategori <strong>{category.name}</strong> akan dihapus. Tindakan
-              ini tidak dapat dibatalkan. Jika masih ada transaksi terkait,
-              penghapusan akan ditolak.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMut.isPending && (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              )}
-              Hapus
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <DropdownMenuItem
+                onSelect={(e) => e.preventDefault()}
+                disabled={deleteMut.isPending}
+                className="gap-2 text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Hapus
+              </DropdownMenuItem>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Hapus kategori ini?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Kategori <strong>{category.name}</strong> akan dihapus. Tindakan
+                  ini tidak dapat dibatalkan. Jika masih ada transaksi terkait,
+                  penghapusan akan ditolak.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Batal</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleteMut.isPending && (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  )}
+                  Hapus
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <span
         className="flex h-12 w-12 items-center justify-center rounded-xl"

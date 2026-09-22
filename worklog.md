@@ -1768,3 +1768,359 @@ Stage Summary:
 - Fixed CSV export in TransactionList to use new endpoint
 - Removed unused imports
 - All lint-clean, verified end-to-end
+
+---
+Task ID: REBUILD
+Agent: main (orchestrator)
+Task: Rombak total — recreate simplified 7-menu UI (lost to git checkout revert)
+
+Work Log:
+- Read worklog.md to understand the rombak plan + previous (lost) implementation.
+- Inspected existing files (app-shell, page.tsx, transaction-form 1999 lines, dashboard-tab, jajan-button, hub components, types, hooks, format helpers).
+- Found: BillsSection and InsightsSection components don't exist — used React.lazy aliases mapping to existing RecurringSection and AnalyticsSection respectively.
+
+Files recreated (8 source files, +1438 / -2174 lines):
+
+1. `/src/components/layout/app-shell.tsx` (rewritten, simplified)
+   - New `SectionId` type with 16 values: 7 main + 9 hub sub-sections (patungan-bill/debt, laporan-insight/export, pengaturan-keamanan/akun/kategori/tagihan/anggaran).
+   - 7 main menu items in desktop sidebar (Beranda, Transaksi, Uang Saku, Target, Patungan, Laporan, Pengaturan).
+   - Desktop sidebar footer: "Jajan Cepat" (outline) + "Tambah Transaksi" (primary).
+   - Mobile: hamburger Sheet with same 7 items + 2 buttons.
+   - Mobile header: hamburger + logo + "DompetKu" + NotificationsBell + ThemeToggle.
+   - Desktop header: section title + NotificationsBell + ThemeToggle.
+   - Bottom navigation (mobile-only, h-16): 5 items (Home, Catat, Saku, Target, Bagi) + "Lainnya" (Settings icon, navigates to pengaturan).
+   - Mobile FABs at `fixed bottom-20`: jajan (left, emerald) + tambah (right, primary), both `sm:hidden`.
+   - Main: `px-4 py-4 pb-32 sm:px-6 sm:py-6 lg:pb-6` with content wrapper `mx-auto w-full max-w-md lg:max-w-3xl xl:max-w-4xl`.
+   - Footer hidden on mobile (`hidden lg:block`), visible on desktop with sticky-bottom behavior.
+   - Props: `{ active, onNavigate, onAdd, onJajan, children }`.
+   - `activeMain` resolver collapses sub-section ids to their hub parent (for sidebar/bottom-nav highlighting).
+
+2. `/src/components/finance/hub-pages.tsx` (new file, ~210 lines)
+   - `PengaturanHub`: 5 hub cards (Keamanan, Akun, Kategori, Tagihan, Anggaran) — each with colored Lucide icon + label + description + ChevronRight.
+   - `PatunganHub`: 2 hub cards (Split Bill, Hutang & Piutang).
+   - `LaporanHub`: 2 hub cards (Insight & Tips, Export Data).
+   - Each card uses motion.button (whileTap scale 0.98, whileHover y -1) + Card from shadcn/ui.
+   - Each card onClick calls `onNavigate(id)` with appropriate sub-section id.
+   - Props: `{ onNavigate: (id: SectionId) => void }`.
+
+3. `/src/components/finance/breadcrumb.tsx` (new file, ~60 lines)
+   - Simple breadcrumb bar with back button + crumb trail.
+   - Renders: `‹ Kembali  HubName › SubPageName` (last crumb bold).
+   - Props: `{ crumbs: string[], onBack: () => void, className? }`.
+   - Back button (ChevronLeft) on left with "Kembali" label.
+   - Crumbs separated by ChevronRight icons; truncates with overflow-x-auto on small screens.
+
+4. `/src/components/finance/transaction-form.tsx` (replaced — was 1999 lines, now ~600 lines)
+   - Single Dialog (NOT 3 tabs), single scrollable form.
+   - DialogContent: `flex max-h-[95dvh] max-w-md flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl`.
+   - Form: `flex min-h-0 flex-1 flex-col`.
+   - Content area: `min-h-0 flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4`.
+   - Sticky footer: `shrink-0 border-t border-border bg-background p-3` with Batal + Simpan buttons.
+   - Fields: type toggle (Pengeluaran/Pemasukan), amount input (Rp prefix) + quick presets (5rb/10rb/20rb/50rb add-to-current), description, category+date side-by-side grid-cols-2, account (optional Select), scan struk button (opens ReceiptScanner dialog), photo preview with X-to-remove, note Textarea (optional).
+   - Edit mode: AlertDialog with Trash2 button on left of footer for delete.
+   - ReceiptScanner integration via `handleScan(data: ScannedReceiptData)` — applies total/merchant/date/categoryId/photoUrl to form state.
+   - Uses useCategories, useAccounts, useCreateTransaction, useUpdateTransaction, useDeleteTransaction.
+   - Form state synced via useEffect on `[open, transaction, prefill]`.
+   - Category select auto-filters by current type; defaults to first category on type change.
+   - QUICK_AMOUNTS inline = `[5000, 10000, 20000, 50000]`.
+
+5. `/src/components/finance/dashboard-tab.tsx` (replaced, simplified)
+   - Focused on "sisa uang": Hero card with `gradient-hero` ring-inner-glow + big balance (3xl/4xl font).
+   - Greeting via `useState + useEffect` (client-only) to avoid hydration mismatch — empty string initial, set to `getGreeting()` in effect.
+   - Hero: greeting + "Sisa uang Anda saat ini" + balance + "Tambah" button (white/15 backdrop).
+   - Hero quick stats: 2-col grid of Income (emerald) + Expense (rose) using formatCurrencyCompact.
+   - Monthly summary card: "Sisa bulan ini" (monthBalance) + transaction count badge.
+   - Budget + Goals mini-cards: `grid-cols-1 sm:grid-cols-2`, conditional (only if topBudget/topGoal exist).
+     - BudgetMiniCard: category icon + name + pct% + progress bar colored by status (safe/warning/danger/over).
+     - GoalMiniCard: goal icon + name + progress bar (primary color).
+   - Recent transactions card: 6 items max, simplified rows (h-9 icon, description+category·relativeDay, amount colored by type).
+   - EmptyTransactions fallback with Sparkles icon + CTA button.
+   - Props: `{ onAdd, onEdit, onViewAll }`. Container: `space-y-4` (no max-w — AppShell wraps).
+
+6. `/src/components/notifications-bell.tsx` (new file, ~60 lines)
+   - Simple bell button with static emerald dot badge.
+   - Click toggles a small dropdown with 2 placeholder notification items.
+   - Outside-click closes (via mousedown listener + ref).
+   - aria-label="Notifikasi".
+
+7. `/src/components/finance/jajan-button.tsx` (modified — minor refactor for controlled mode)
+   - Added optional `open?` and `onOpenChange?` props to JajanButton.
+   - When both provided (controlled mode), the built-in floating FAB is NOT rendered (AppShell renders its own).
+   - When not provided (uncontrolled mode), behavior unchanged (renders own FAB at bottom-20 right).
+   - Uses internal `isControlled` flag to switch between internal useState and external props.
+   - This allows page.tsx to wire AppShell's onJajan callback to setJajanOpen state, passing it down to `<JajanButton open={jajanOpen} onOpenChange={setJajanOpen} />`.
+
+8. `/src/app/page.tsx` (rewritten)
+   - Imports AppShell, TransactionForm, DashboardTab, TransactionList, JajanButton, LockScreen, GoalsSection, BudgetsSection from existing modules.
+   - Imports PengaturanHub, PatunganHub, LaporanHub from hub-pages.
+   - Imports Breadcrumb from breadcrumb.
+   - Lazy-loads 9 sections via React.lazy + Suspense:
+     * StudentSection (from student-section)
+     * PatunganSection (from patungan-section)
+     * DebtsSection (from debts-section)
+     * AccountsSection (from accounts-section)
+     * BillsSection = alias to RecurringSection (from recurring-section)
+     * CategoryManager (from category-manager)
+     * SecuritySection (from security-section)
+     * ExportSection (from export-section)
+     * InsightsSection = alias to AnalyticsSection (from analytics-section)
+   - SectionSkeleton component: 4 animate-pulse bars for lazy fallback.
+   - Section switch (16 cases) with Breadcrumb wrapping sub-sections:
+     * beranda → DashboardTab
+     * transaksi → header + TransactionList
+     * uang-saku → StudentSection (lazy)
+     * target → GoalsSection
+     * patungan → PatunganHub
+     * patungan-bill → Breadcrumb["Patungan","Split Bill"] + PatunganSection (lazy)
+     * patungan-debt → Breadcrumb["Patungan","Hutang & Piutang"] + DebtsSection (lazy)
+     * laporan → LaporanHub
+     * laporan-insight → Breadcrumb["Laporan","Insight & Tips"] + InsightsSection (lazy)
+     * laporan-export → Breadcrumb["Laporan","Export Data"] + ExportSection (lazy)
+     * pengaturan → PengaturanHub
+     * pengaturan-keamanan → Breadcrumb + SecuritySection (lazy)
+     * pengaturan-akun → Breadcrumb + AccountsSection (lazy)
+     * pengaturan-kategori → Breadcrumb + CategoryManager (lazy)
+     * pengaturan-tagihan → Breadcrumb + BillsSection (lazy)
+     * pengaturan-anggaran → Breadcrumb + BudgetsSection
+   - AppShell props: `active={section} onNavigate={setSection} onAdd={openAdd} onJajan={() => setJajanOpen(true)}`.
+   - JajanButton rendered with `open={jajanOpen} onOpenChange={setJajanOpen}` (controlled mode — no own FAB).
+   - Security logic preserved: useSecuritySync, useRealtimeSync, useSecurityLockSync, broadcastLock/broadcastUnlock, lockEnabled detection (pin/password/biometric/pattern), auto-lock idle interval, touch on mousemove/keydown/click/scroll/touchstart, lockOnTabSwitch, blurOnBackground, lockOnAppClose.
+   - Content wrapper has `pointer-events-none opacity-0` when locked (per spec), with smooth opacity-100 transition when unlocked.
+   - LockScreen rendered as overlay when `showLockScreen = lockEnabled && securityStore.isLocked`.
+   - Auto-seed on first load (categories.length === 0). Run recurring on load (once per session).
+   - `goBackToHub()` helper routes sub-section back to its hub based on prefix.
+
+Verification:
+- `bun run lint` → 0 errors, 0 warnings ✓ (after one fix: SelectContent was misclosed as `</Select>` — corrected to `</SelectContent>` in account selector)
+- Dev server log: `GET / 200` in 95ms, `GET /api/dashboard?month=2026-09 200`, `GET /api/categories 200`, `GET /api/security 200` — all returning 200, no compile errors.
+- Git commit: `Rombak total: simplified 7-menu UI with hub pages + bottom nav` (8 files, +1438 / -2174 lines).
+
+Stage Summary:
+- 7 main menu UI: Beranda, Transaksi, Uang Saku, Target, Patungan, Laporan, Pengaturan (down from 19+ items in old sidebar).
+- 3 hub pages with 9 sub-sections (5 pengaturan + 2 patungan + 2 laporan).
+- Mobile-first: bottom nav (5+1 items) + 2 FABs (jajan left, tambah right) at bottom-20.
+- Desktop: sidebar with 7 items + 2 CTA buttons (Jajan Cepat + Tambah Transaksi).
+- Simplified TransactionForm: 1 dialog, 1 scrollable form (was 3 tabs + 1999 lines, now ~600 lines).
+- Simplified DashboardTab: focus on sisa uang + hero card + budget/goal mini-cards (was full charts/summary cards, now lightweight).
+- Lazy loading for 9 sections reduces initial bundle.
+- NotificationsBell new component (simple dropdown).
+- JajanButton refactored to support controlled mode (no own FAB when AppShell provides one).
+- All security/lock logic preserved end-to-end (auto-lock, tab-switch, blur, panic wipe, broadcast sync).
+- Code is committed to git (commit 18b4f72) so it won't be lost again.
+
+---
+Task ID: DASH-ENHANCE
+Agent: main (orchestrator)
+Task: Enhance DompetKu dashboard for student use — add 8 student-focused features
+
+Work Log:
+- Membaca worklog.md + dashboard-tab.tsx existing + hooks.ts (useDashboard, useDailyAllowance, useTransactions, useAnalytics) + format.ts (formatCurrency, formatCurrencyCompact, getGreeting, relativeDay, getMonthKey, formatDateInput, parseDateLocal, addDays) + types.ts (DailyAllowanceInfo, BudgetStatus, Goal, Transaction) + api/analytics/route.ts (monthComparison).
+- Verifikasi kontrak data: /api/student-profile/daily returns { dailyAllowance, dailySpent, dailyRemaining, projection: { willRunOutDay, surplusOrDeficit, dailyCutNeeded, message } }.
+- Verifikasi /api/analytics?month=YYYY-MM returns monthComparison { current.expense, previous.expense, expenseChange }.
+- Verifikasi semua ikon lucide-react yang dipakai tersedia: Coins, Flame, Leaf, ListOrdered, PiggyBank, GraduationCap, CalendarRange, TriangleAlert, ArrowDownRight, ArrowUpRight.
+- Implementasi 8 fitur baru pada src/components/finance/dashboard-tab.tsx (TANPA menghapus hero/budget mini-card/goal mini-card/monthly summary/recent transactions):
+
+  1. **Sisa Harian Besar + Proyeksi Akhir Bulan** (`SisaHarianCard`):
+     - Pakai hook `useDailyAllowance()` (refetch setiap 60 detik).
+     - Big number: dailyAllowance − dailySpent = remaining today, formatCurrency.
+     - Progress bar: persentase terpakai (dailySpent / dailyAllowance).
+     - Warna dinamis: green (>50% remaining), yellow (20–50%), red (<20%) — kelas bg-emerald-500 / bg-amber-500 / bg-rose-500 + badge status.
+     - Proyeksi: jika `willRunOutDay` != null → alert merah "Uang saku habis tanggal X" + saran "Kurangi RpY/hari" (cutNeeded). Jika `surplusOrDeficit` >= 0 → alert hijau "Aman sampai akhir bulan! 🎉" + sisa perkiraan. Fallback message dari projection.message.
+     - Empty state: tampilkan pesan "Belum ada uang saku bulanan yang diatur" jika dailyAllowance = 0.
+
+  2. **Counter Jajan Harian** (`CounterJajanCard`):
+     - Hitung EXPENSE transactions hari ini (filter dari rangeTx dengan match tanggal todayStr).
+     - Tampilkan big "Xx" + label "Biasanya Yx/hari" — Y = rata-rata jajan per hari selama 14 hari terakhir.
+     - Diff label: "+Nx dari biasanya" (merah), "−Nx dari biasanya" (hijau), "sesuai rata-rata" (netral).
+     - Label berubah saat Mode UTS/UAS: "Jajan hari ini" → tetap, tapi "Counter jajan" saat OFF.
+
+  3. **Top 5 Jajan Favorit** (`Top5JajanCard`):
+     - Group transaksi EXPENSE bulan ini by description (lowercase trim).
+     - Sort by count desc, ambil 5 teratas.
+     - Tampilkan list compact: nomor 1–5 + nama (capitalize) + total (formatCurrencyCompact) + badge "{count}x".
+     - Bar progress di belakang baris berdasarkan rasio count/maxCount (min 8%).
+     - max-h-72 overflow-y-auto + custom-scrollbar untuk list panjang.
+     - Empty state: "Belum ada jajan bulan ini."
+
+  4. **Weekly Summary Card** (`WeeklySummaryCard`):
+     - Hitung income & expense minggu ini (Senin–hari ini) + expense minggu lalu (Senin–Minggu sebelumnya) dari rangeTx.
+     - Tampilkan "Sisa +RpX" (income − expense) + sub "−RpY expense" + trend arrow.
+     - Trend: <0 = "hemat N% vs minggu lalu" (hijau, ArrowDownRight), >0 = "boros N% vs minggu lalu" (merah, ArrowUpRight), 0 = "sama dengan minggu lalu".
+
+  5. **Comparison Bulan Lalu** (`ComparisonBulanLaluCard`):
+     - Pakai data `analytics.monthComparison` (current.expense, previous.expense, expenseChange).
+     - Tampilkan badge persentase perubahan + label "Hemat RpX" / "Boros RpX" / "Sama dengan bulan lalu".
+     - Border + bg dinamis: hijau jika hemat, merah jika boros.
+     - Sub-label: "{current} vs {previous}" formatCurrencyCompact.
+
+  6. **Mode Hemat toggle** (top row, `Switch`):
+     - Persist ke localStorage key `dompetku:modeHemat` (di-load via useEffect setelah mount, hindari hydration mismatch).
+     - Saat ON: badge "Hemat aktif" + filter kategori "Hiburan" dari top budget mini-card (topBudget computed dengan useMemo, skip category.name === "Hiburan").
+     - Saat ON: tampilkan alert box tambahan di SisaHarianCard "Mode Hemat aktif — kategori Hiburan disembunyikan dari ringkasan anggaran."
+     - Card border saat ON: border-emerald-500/40 + bg-emerald-500/10.
+
+  7. **Mode UTS/UAS** (`Button` cycle):
+     - Tombol "Mode Kuliah" → klik cycle: OFF → UTS → UAS → OFF.
+     - Persist ke localStorage key `dompetku:academicMode`.
+     - Saat UTS: button warna amber + badge "Mode UTS" (bg-amber-500).
+     - Saat UAS: button warna rose + badge "Mode UAS" (bg-rose-500).
+     - Saat UTS/UAS: tampilkan alert box di SisaHarianCard "Mode UTS/UAS aktif — prioritaskan pengeluaran akademik (fotokopi, alat tulis, transport kampus)."
+     - Counter Jajan label juga berubah saat Mode UTS/UAS aktif.
+
+- Single fetch optimization: `useTransactions({ from: fetchFromStr, to: todayStr, limit: 500 })` dengan fetchFromStr = min(monthStartStr, lastWeekMondayStr). Satu query untuk Top 5 jajan bulan ini + Counter jajan today + Avg 14 hari + Weekly summary (minggu ini + minggu lalu).
+- Layout responsive: 1 column mobile, 2 columns sm+ (`grid-cols-1 sm:grid-cols-2`) untuk pasangan Counter Jajan + Weekly Summary dan Comparison + Top 5.
+- Skeleton loading states untuk semua card baru (SisaHarianCard, CounterJajanCard, WeeklySummaryCard, ComparisonBulanLaluCard, Top5JajanCard).
+- Framer Motion entrance animation untuk SisaHarianCard (opacity + y).
+
+- Run `bun run lint` → PASS (0 errors, 0 warnings).
+- Dev server log check: 
+  - `GET / 200` in ~150–300ms (page compiles & renders successfully)
+  - `GET /api/dashboard?month=2026-09 200` ✓
+  - `GET /api/student-profile/daily 200` ✓
+  - `GET /api/transactions?from=2026-09-01&to=2026-09-22&limit=500 200` ✓
+  - `GET /api/analytics?month=2026-09 200` ✓
+  - No compile errors, no TypeScript errors.
+
+Stage Summary:
+- Dashboard sekarang menampilkan 8 fitur baru student-focused: Sisa Harian Besar (+proyeksi akhir bulan), Counter Jajan Harian (vs avg 14 hari), Top 5 Jajan Favorit (mini list with progress bar), Weekly Summary (trend vs minggu lalu), Comparison Bulan Lalu (hemat/boros indicator), Mode Hemat (filter Hiburan + extra alerts, persisted localStorage), Mode UTS/UAS (cycle OFF→UTS→UAS, visual indicator + label change).
+- Hero card, monthly summary, budget mini-card, goal mini-card, recent transactions tetap dipertahankan tanpa modifikasi.
+- New cards ditempatkan ANTARA hero dan recent transactions sesuai instruksi.
+- Responsive: 1 column mobile, 2 columns sm+.
+- Pakai shadcn/ui Card, Skeleton, Switch, Button, Badge + Lucide icons (Coins, Flame, Leaf, ListOrdered, PiggyBank, GraduationCap, CalendarRange, TriangleAlert, ArrowDownRight, ArrowUpRight).
+- Pakai hooks existing: useDashboard, useDailyAllowance, useTransactions, useAnalytics + format helpers (formatCurrency, formatCurrencyCompact, getGreeting, relativeDay, getMonthKey, formatDateInput, parseDateLocal, addDays).
+- Lint: PASS. Dev server: all endpoints return 200, no errors.
+
+---
+Task ID: MULTI-ENHANCE
+Agent: main (orchestrator)
+Task: Enhance 5 existing DompetKu components with student-focused features (jajan-button, ai-section, patungan-section, goals-section, notifications-bell)
+
+Work Log:
+
+Backend setup (Notification model + API):
+- Added `Notification` model to `prisma/schema.prisma` (id, type, title, body, icon, read, createdAt + indexes). `bun run db:push` synced.
+- Created `/api/notifications` (GET newest-50, POST with 24h idempotency by type+title — dedupes auto-generation spam).
+- Created `/api/notifications/[id]` (DELETE).
+- Created `/api/notifications/[id]/read` (POST + PATCH alias — marks as read).
+- Extended `lib/api.ts`: `listNotifications`, `createNotification`, `markNotificationRead`, `deleteNotification` + types `NotificationItem`, `NotificationPayload`.
+- Extended `lib/hooks.ts`: `useNotifications` (staleTime 30s), `useCreateNotification`, `useMarkNotificationRead`, `useDeleteNotification`.
+
+1) `src/components/finance/jajan-button.tsx`:
+- Voice Input button (Mic/MicOff) — uses Web Speech API (window.SpeechRecognition || window.webkitSpeechRecognition). Falls back to `toast.error("Voice input tidak didukung di browser ini")` when unsupported. `lang="id-ID"`, single-shot, maxAlternatives=1.
+- Voice parser `parseSpokenJajan(raw)`: regex matches "<digits> [ribu|rb|k|juta|jt|m]" or grouped thousands "8.500" → numeric value; word-based fallback ("delapan ribu") using `NUMBER_WORDS` map (delapan=8, ribu=1000, etc.). Strips amount token from string → description. E.g. "kopi 8 ribu" → { description: "kopi", amount: 8000 }.
+- Quick Repeat section: `useTransactions({ limit: 3 })` fetches last 3 transactions; renders 1-tap buttons that duplicate the transaction (preserves type/amount/description/categoryId/merchant, fresh date+time) via `useCreateTransaction`.
+- Auto-categorize hint: `suggestCategory(description)` matches against `COMMON_MERCHANTS` (Indomaret, KFC, Starbucks, Gojek, etc.) + `AUTO_CATEGORY_KEYWORDS` from constants. Shows Lightbulb chip "Saran kategori: Makanan · GoFood" below the description input; click to apply. Auto-applies categoryId on first hint via useEffect (skipped if user manually picked).
+- Mic listen state shown via pulsing dot + "Mendengarkan…" label. Sheet's max-h bumped 60vh → 70vh to fit new sections.
+- Toast feedback: `toast.info("Dengarkan… sebutkan, mis. \"kopi 8 ribu\"")` on start, `toast.success` on transcript parse, `toast.warning` if empty.
+
+2) `src/components/finance/ai-section.tsx`:
+- Added new "Boleh?" tab (4 tabs total: Chat, Boleh?, Struk, Insight). TabsList grid-cols-3 → grid-cols-4. Mobile label "Jajan?".
+- `BolehJajanCard` component: simple Card with Rp-prefixed amount input + "Check" button. Calls `useJajanCheck(amount)` (already in hooks).
+- Result rendering uses chat-bubble style (Bot avatar + rounded-bl-sm bg-muted bubble with `data.reply`).
+- Affordability badge: green "Boleh jajan" (CheckCircle2) when canAfford=true, red "Sebaiknya tahan dulu" (XCircle) when false.
+- Remaining budget badge: "Sisa budget: RpX" (Wallet icon, outline).
+- Quick chips (5rb/10rb/20rb/50rb) for fast input. Reset button after submission.
+- AnimatePresence wraps result block for smooth fade/slide-in.
+
+3) `src/components/finance/patungan-section.tsx`:
+- New "Hutang Teman" button (Zap icon, amber) in header → opens `QuickFriendDebtDialog`. Existing "Tambah Hutang" button retained.
+- `QuickFriendDebtDialog`: minimal form — friendName + amount + DEBT/RECEIVABLE type toggle buttons + "Catat" submit. Creates FriendDebt via `useCreateFriendDebt`. Auto-resets on open.
+- Reminder indicator: `isStaleByDays(date, settled, 7)` helper. If debt is older than 7 days AND not settled AND not overdue (dueDate past), shows orange "Reminder" badge (Bell icon) on `FriendDebtCard`. Settled/overdue badges take priority.
+- New "Settle Up Smart" ghost button (Scale icon) below stats strip → opens `SettleUpSmartDialog`.
+- `SettleUpSmartDialog`: computes net balance per friend via `computeNetBalances(debts)` (DEBT subtracts, RECEIVABLE adds). Greedy matching algorithm pairs creditors (net>0) with debtors (net<0) for minimum transfer count. Shows: per-friend net table (+/- color-coded), totals (piutang vs utang), and suggestions list "Andi → Budi Rp25.000" with ArrowRight icons. Empty state: green check "Semua sudah rata!".
+
+4) `src/components/finance/goals-section.tsx`:
+- Round-Up toggle per goal: `RoundUpToggle` button in GoalCard (emerald when active, with toggle switch UI). Single-select via localStorage key `dompetku:roundup-goal-id` (toggling ON on goal B auto-disables goal A). Persisted across sessions.
+- Round-up processor (useEffect in GoalsSection): when round-up goal is active, watches all transactions via `useTransactions`. For each NEW expense tx (id not in `dompetku:roundup-processed-tx-ids` localStorage set), computes `ceil(amount/1000)*1000 - amount` and adds the diff to that goal via `useUpdateGoal`. Toast `Round-up +Rp500 masuk ke "<goal>"`. Skips temp- and recurring-generated txns (marks them processed to prevent reprocessing).
+- Streak indicator: badge `🔥 7 hari nabung berturut` (Flame icon, orange bg) on GoalCard. Computed via `calculateStreak(transactions.filter(t => t.goalId === g.id).map(t => t.date))` using existing format.ts helper.
+- Milestone celebration: useEffect in GoalsSection watches goals' percentages. When crossing 25/50/75/100% (tracked in `dompetku:goal-milestones-seen` localStorage map per goal), fires `toast.success("🎉 Target '<name>' sudah 50%!")` + `ConfettiOverlay` (pure CSS — 36 colored pieces falling via `confetti-fall` keyframes for ~3.5s, pointer-events-none, z-80). Each milestone celebrated only once per goal.
+- Fun fact comparison: `findFunFact(remaining)` matches remaining amount against `FUN_FACTS` from student-constants. Shows emerald chip "<span>50rb</span> = 2x kopi kenangan" (Sparkles icon) below progress bar. Hidden when goal completed.
+- GoalCard props extended: `transactions`, `roundUpActive`, `onToggleRoundUp` (existing onEdit/onContribute preserved).
+- All existing dialogs (GoalFormDialog, ContributionDialog) preserved unchanged.
+
+5) `src/components/notifications-bell.tsx`:
+- Completely rewritten. Real-time bell dropdown now backed by `useNotifications()` query (replaces placeholder static items).
+- Bell badge: shows unread count (1-9 then "9+") in rose pill when >0; small emerald dot when read items exist but no unread; nothing when empty.
+- Auto-notification generation via `generate()` useCallback (deps: qc, transactions, recurring, daily, goals) running on mount (2s delay to let queries hydrate) + every 5 minutes (setInterval).
+- 5 notification types generated:
+  * DAILY_REMINDER — at 9 PM (hour >= 21), if no EXPENSE transaction today → "Sudah catat pengeluaran hari ini?"
+  * BILL_DUE — for each active recurring with nextDate within next 3 days → "Tagihan <description> jatuh tempo <relativeDay>"
+  * BUDGET_ALERT — if spentThisMonth / monthlyAllowance >= 80% → "Pengeluaran sudah 80% uang saku!"
+  * GOAL_MILESTONE — for each goal with pct >= 50% and not completed → "Target '<name>' sudah <pct>%!"
+  * ANOMALY — if today's expense total > 3x avg daily (30-day rolling) and > Rp10.000 → "Pengeluaran hari ini tidak biasa"
+- Each notification POSTed via `api.createNotification` (silently catches errors, then invalidates `["notifications"]` query to refetch list). Server-side 24h dedup prevents duplicates.
+- Dropdown UI: scrollable list (max-h-96, custom-scrollbar), per-row icon (LucideIcon by item.icon), title, body, relative time. Unread items get emerald bg tint + dot. Hover reveals Trash2 delete button. Click row → markRead. "Tandai dibaca" header button marks all. "Tutup" X button. Empty state shows BellOff icon.
+- Outside-click closes dropdown (preserved from original).
+- Uses useQueryClient to invalidate notifications cache after creating/markRead/delete.
+
+Verification:
+- `bun run lint` → 0 errors, 0 warnings (initial run flagged "Cannot update ref during render" — fixed by removing the ref-state-mutation pattern and using direct useCallback deps instead).
+- `bun run db:push` → schema synced with new Notification model.
+- Dev server compiled successfully (`✓ Compiled in 232ms` etc.); existing endpoints continue to return 200 (transactions, dashboard, recurring, goals, student-profile/daily, accounts, security).
+
+Stage Summary:
+- 5 components enhanced (jajan-button, ai-section, patungan-section, goals-section, notifications-bell).
+- 1 new Prisma model (Notification).
+- 3 new API routes (notifications GET/POST, [id] DELETE, [id]/read POST/PATCH).
+- 4 new hooks (useNotifications, useCreateNotification, useMarkNotificationRead, useDeleteNotification).
+- ~1100 lines added across 5 enhanced files + 3 new API files + 1 schema change.
+- All features use existing hooks, types, constants (COMMON_MERCHANTS, AUTO_CATEGORY_KEYWORDS, FUN_FACTS, JAJAN_PRESETS, SPLIT_BILL_CATEGORIES), LucideIcon, cn, toast from sonner, format helpers (formatCurrency, formatCurrencyCompact, formatDate, formatDateInput, relativeDay, calculateStreak, parseDateLocal).
+- All existing functionality preserved (no rewrites; only additions inside existing component shells).
+- Voice input gracefully degrades when Web Speech API unavailable.
+- Round-up uses localStorage + idempotent transaction processing to prevent double-counting.
+- Milestone celebrations are one-shot per goal (localStorage-seen map).
+- Notifications API is 24h-dedup-safe so auto-generation cannot spam.
+- Lint clean, dev server healthy.
+
+---
+Task ID: DOT3
+Agent: general-purpose (sub agent)
+Task: Replace all inline edit/hapus (pencil/trash) buttons with 3-dot (MoreVertical) dropdown menu across all DompetKu components
+
+Work Log:
+- Reference pattern studied from `src/components/finance/transaction-list.tsx` lines 882-942 (existing MoreVertical dropdown combining Edit, Duplikat, Sematkan, Sembunyikan, Lihat Detail).
+- For each file: added `MoreVertical` to lucide-react import block, added `DropdownMenu / DropdownMenuContent / DropdownMenuItem / DropdownMenuSeparator / DropdownMenuTrigger` from `@/components/ui/dropdown-menu`, replaced the inline `<Button>` + `<AlertDialog>` pair with a `<DropdownMenu>` wrapping the existing `<AlertDialog>` (its trigger moved inside a `<DropdownMenuItem onSelect={(e) => e.preventDefault()}>` so the dropdown does not close before the AlertDialog opens).
+
+1) `src/components/finance/goals-section.tsx` (~line 673):
+   - Added MoreVertical + DropdownMenu imports.
+   - Replaced `<div className="absolute right-3 top-3 flex gap-1 ...">` (containing Pencil button + Trash2 AlertDialog) with single MoreVertical dropdown (Edit, separator, Hapus AlertDialog). AlertDialog body preserved unchanged (Target name, destructive action). Parent Card already had `group` class so hover-reveal pattern still works.
+
+2) `src/components/finance/budgets-section.tsx` (~line 333):
+   - Same pattern. AlertDialog body preserved (category.name, destructive action).
+
+3) `src/components/finance/accounts-section.tsx` (~line 327):
+   - Same pattern. AlertDialog body preserved (account.name, isDefault warning about default account).
+
+4) `src/components/finance/debts-section.tsx` (~line 414):
+   - Same pattern. AlertDialog body preserved (debt.type label + person name).
+
+5) `src/components/finance/recurring-section.tsx` (~line 368):
+   - Same pattern. AlertDialog body preserved (item.description, note that previously-created transactions remain).
+
+6) `src/components/finance/templates-section.tsx` (~line 238):
+   - Same pattern. AlertDialog body preserved (template.name).
+
+7) `src/components/finance/shares-section.tsx` (~line 586):
+   - Already had a partial dropdown (Edit, Duplikasi, Cabut, Hapus). Extended by consolidating ALL actions into one dropdown: Edit, separator, Salin Link (was inline `Salin` button), Kode QR (was inline `QR` button), Bagikan ke WhatsApp (was inline `WhatsApp` button), separator, Duplikasi, Cabut (text-amber-600), separator, Hapus AlertDialog.
+   - Removed the 3 now-redundant inline outline buttons (Copy/QR/WhatsApp).
+   - Added `group` class to parent `<Card>` so the trigger can opt-in to `group-hover:opacity-100` if needed (currently trigger is always visible since it's in the actions row, but class added for consistency).
+   - AlertDialog body preserved unchanged (share.title, destructive permanent delete note).
+
+8) `src/components/finance/category-manager.tsx` (~line 175):
+   - Delete-only card (no edit). Wrapped the existing AlertDialog with a DropdownMenu containing only the `Hapus` item (no Edit, no separator needed since single item). Trigger swapped from a Trash2 icon button to a MoreVertical icon button (rounded-full p-1 absolute right-1.5 top-1.5, opacity-0 group-hover:opacity-100 — hover style changed from red-tinted to standard muted for the trigger, the destructive red styling now lives on the Hapus menu item itself).
+   - AlertDialog body preserved unchanged (category.name, note about transactions blocking delete).
+
+Verification:
+- `bun run lint` → PASS (0 errors, 0 warnings, exit code 0).
+- `bunx tsc --noEmit` → 48 pre-existing errors in unrelated files (examples/, skills/, dashboard route, audit-section, security-section, crypto.ts). 0 errors introduced in any of the 8 modified files (verified by grepping tsc output for the modified filenames — empty result).
+- All existing handlers preserved: `onEdit`, `handleDelete`, `handleCopy`, `onShowQr`, `handleWhatsApp`, `handleClone`, `handleRevoke`, `deleteMut.isPending` etc.
+- All AlertDialog confirmation flows preserved verbatim (title, description, cancel button, destructive action button with Loader2 spinner when pending).
+- Parent `group` class verified present on all container Cards so `group-hover:opacity-100` reveal continues to work (shares-section Card had to be updated from `relative flex flex-col gap-3 p-4` → `group relative flex flex-col gap-3 p-4`).
+- `onSelect={(e) => e.preventDefault()}` applied to every AlertDialog trigger DropdownMenuItem to prevent the dropdown from auto-closing before the AlertDialog opens.
+
+Stage Summary:
+- 8 component files updated: goals-section, budgets-section, accounts-section, debts-section, recurring-section, templates-section, shares-section, category-manager.
+- Pattern unified across the app: every list-row action now lives behind a single MoreVertical (3-dot) ghost button → DropdownMenu → either direct DropdownMenuItem (Edit, Copy Link, QR, WhatsApp, Clone, Revoke) or AlertDialog-wrapped destructive action (Hapus).
+- shares-section went from 4 inline buttons + partial dropdown → 1 consolidated dropdown with all 7 actions grouped by separators (Edit / Share actions / Modify actions / Delete).
+- category-manager (delete-only) now also uses the dropdown for visual consistency with the rest of the app, even though there is only one menu item.
+- Lint clean. No new TypeScript errors. No behavioral changes to business logic.
