@@ -18,7 +18,7 @@ export async function POST(
 
     const updated = await db.friendDebt.update({
       where: { id },
-      data: { settled: true },
+      data: { settled: true, settledAt: new Date() },
     });
 
     return NextResponse.json(updated);

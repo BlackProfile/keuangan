@@ -483,6 +483,11 @@ function SplitBillCard({ bill }: { bill: SplitBill }) {
               Lunas
             </Badge>
           )}
+          {isSettled && participants.some((p) => p.paidAt) && (
+            <span className="text-[11px] text-muted-foreground">
+              Dibayar {formatDate(participants.find((p) => p.paidAt)?.paidAt ?? new Date())}
+            </span>
+          )}
         </div>
       </div>
 
@@ -545,6 +550,11 @@ function SplitBillCard({ bill }: { bill: SplitBill }) {
                   <span className="text-xs tabular-nums text-muted-foreground">
                     {formatCurrencyCompact(p.share)}
                   </span>
+                  {p.paid && p.paidAt && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {formatDate(p.paidAt)}
+                    </span>
+                  )}
                   {!p.paid && !bill.settled && (
                     <Button
                       variant="ghost"
@@ -1116,6 +1126,11 @@ function FriendDebtCard({ debt }: { debt: FriendDebt }) {
               {formatDate(debt.dueDate)}
             </Badge>
           ) : null}
+          {debt.settled && debt.settledAt && (
+            <span className="text-[11px] text-muted-foreground">
+              Dibayar {formatDate(debt.settledAt)}
+            </span>
+          )}
         </div>
       </div>
 

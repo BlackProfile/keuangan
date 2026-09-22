@@ -302,6 +302,7 @@ export interface Debt {
   description: string | null;
   note: string | null;
   settled: boolean;
+  settledAt: string | null;
   linkedTransactionId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -743,6 +744,7 @@ export interface FriendDebt {
   date: string;
   dueDate: string | null;
   settled: boolean;
+  settledAt: string | null;
   reminderSent: boolean;
   note: string | null;
   createdAt: string;

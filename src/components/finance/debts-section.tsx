@@ -72,6 +72,7 @@ import {
   formatDateInput,
   formatDateLong,
   parseDateLocal,
+  relativeDay,
 } from "@/lib/format";
 import { DEBT_TYPE_OPTIONS } from "@/lib/constants";
 import {
@@ -385,6 +386,11 @@ function DebtCard({
                   <CheckCircle2 className="mr-1 h-3 w-3" />
                   Lunas
                 </Badge>
+              )}
+              {isSettled && debt.settledAt && (
+                <span className="text-[11px] text-muted-foreground">
+                  Dibayar {relativeDay(debt.settledAt)}
+                </span>
               )}
               {overdue && (
                 <Badge

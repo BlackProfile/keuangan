@@ -569,6 +569,9 @@ function GoalCard({
             <p className="text-sm font-semibold tabular-nums text-income">
               {formatCurrency(goal.currentAmount)}
             </p>
+            <p className="text-[10px] text-muted-foreground">
+              Diperbarui {formatDate(goal.updatedAt)}
+            </p>
           </div>
           <div className="text-right">
             <p className="text-[11px] text-muted-foreground">Target</p>

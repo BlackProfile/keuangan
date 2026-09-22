@@ -19,6 +19,7 @@ export async function POST(
         data: {
           settled: true,
           paidAmount: existing.amount,
+          settledAt: new Date(),
         },
       });
     });
