@@ -536,7 +536,7 @@ export function TransactionList({
       ) : grouped.length === 0 ? (
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <AnimatePresence mode="popLayout">
             {grouped.map(([day, items]) => {
               const dayIncome = items
@@ -581,12 +581,13 @@ export function TransactionList({
                       </Badge>
                     </div>
                   </div>
-                  <Card className="divide-y divide-border overflow-hidden p-0">
-                    {items.map((t) => (
+                  <Card className="gap-0 overflow-hidden p-0">
+                    {items.map((t, idx) => (
                       <TransactionRow
                         key={t.id}
                         transaction={t}
                         onEdit={() => onEdit(t)}
+                        isFirst={idx === 0}
                       />
                     ))}
                   </Card>
@@ -693,9 +694,11 @@ function ToggleChip({
 function TransactionRow({
   transaction,
   onEdit,
+  isFirst = false,
 }: {
   transaction: Transaction;
   onEdit: () => void;
+  isFirst?: boolean;
 }) {
   const duplicateMut = useDuplicateTransaction();
   const pinMut = useTogglePin();
@@ -760,7 +763,12 @@ function TransactionRow({
   }
 
   return (
-    <div className="group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/40 sm:px-4">
+    <div
+      className={cn(
+        "group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/40 sm:px-4",
+        !isFirst && "border-t border-border/60",
+      )}
+    >
       {/* Category icon (with optional pinned ring) */}
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"

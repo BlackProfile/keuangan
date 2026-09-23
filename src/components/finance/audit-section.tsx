@@ -163,7 +163,7 @@ export function AuditSection() {
           </p>
         </Card>
       ) : (
-        <Card className="divide-y divide-border overflow-hidden p-0">
+        <Card className="gap-0 overflow-hidden p-0 [&>*+*]:border-t [&>*+*]:border-border/60">
           {entries.map((entry, idx) => {
             const meta = ACTION_LABELS[entry.action] ?? {
               label: entry.action,

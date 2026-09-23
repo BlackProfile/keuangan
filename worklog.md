@@ -2186,3 +2186,56 @@ Stage Summary:
 - Visual result: items now appear as a connected compact list with subtle 1px separator lines, no more "floating with gap" appearance.
 - Touch target preserved at 44px (icon h-9=36px + py-1=8px).
 - Lint clean, dev server healthy, Agent Browser DOM + visual verification passed.
+
+---
+Task ID: GAP-FIX-4
+Agent: main (orchestrator)
+Task: Perbaiki gap antar transaksi di tab Transaksi (full list) — "di transaksi kedua dan setelahnya kenapa ada jarak, di hari yang lain juga ada jarak atasnya"
+
+Work Log:
+- User report: di tab Transaksi (full list grouped by day), transaksi kedua dan seterusnya ada gap, dan di atas header hari lain juga ada gap.
+- Investigasi via Agent Browser DOM inspection (getBoundingClientRect + getComputedStyle) pada `<Card className="divide-y divide-border overflow-hidden p-0">`:
+  * **ROOT CAUSE 1**: shadcn/ui Card component (src/components/ui/card.tsx line 10) default class: `"bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm"`.
+  * `gap-6` (24px) tidak di-override oleh `p-0` → flex children separated by 24px gap!
+  * Measurement: cardGap="24px", gap between row 1 bottom and row 2 top = 24px.
+  * **ROOT CAUSE 2**: `divide-y divide-border` utility tidak render border-top di Tailwind CSS v4 (verified: borderTopWidth="0px" on children).
+  * Kombinasi: 24px gap + no visible border = item melayang dengan whitespace besar.
+
+- Fix transaction-list.tsx:
+  1. Card className: `"divide-y divide-border overflow-hidden p-0"` → `"gap-0 overflow-hidden p-0"` (kill the 24px flex gap).
+  2. TransactionRow: tambah prop `isFirst?: boolean` (default false).
+  3. TransactionRow root div: `className="group flex items-center gap-3 px-3 py-2..."` → `className={cn("group flex items-center gap-3 px-3 py-2...", !isFirst && "border-t border-border/60")}`.
+  4. items.map: `(t) =>` → `(t, idx) =>`, pass `isFirst={idx === 0}`.
+  5. Parent day-group spacing: `space-y-2` → `space-y-1.5` (8px → 6px gap antar hari).
+
+- Fix 3 other components with same `divide-y divide-border overflow-hidden p-0` pattern (preventive):
+  * accounts-section.tsx line 424: → `"gap-0 overflow-hidden p-0 [&>*+*]:border-t [&>*+*]:border-border/60"` (arbitrary variant adds border-top to every child after first).
+  * audit-section.tsx line 166: same fix.
+  * student-section.tsx line 412: `overflow-hidden p-0` → `gap-0 overflow-hidden p-0` (kill the 24px gap between gradient header and content).
+
+- Verification via Agent Browser DOM measurement (transaction-list.tsx after fix):
+  * cardGap: "0px" (was "24px") ✓
+  * Row 1: top=803, bottom=857, borderTopWidth=0px (first, no border) ✓
+  * Row 2: top=857, bottom=912, borderTopWidth=1px (border now renders!) ✓
+  * Gap between rows: 0px (was 24px) ✓
+  * Row height: 54-55px (touch-target compliant) ✓
+
+- Visual verification via VLM:
+  * "Transaksi dalam hari yang sama sudah menyatu rapat dengan garis pemisah tipis" ✓
+  * "Tidak ada gap besar di transaksi kedua dan setelahnya" ✓
+  * "Jarak antar day group sudah berkurang" ✓
+  * "Overall compact dan rapi" ✓
+
+- `bun run lint` → PASS (0 errors). Dev log clean.
+
+Stage Summary:
+- Files modified (4):
+  1. src/components/finance/transaction-list.tsx — Card gap-0 + TransactionRow isFirst border-t + space-y-1.5 between day groups
+  2. src/components/finance/accounts-section.tsx — Card gap-0 + [&>*+*]:border-t arbitrary variant
+  3. src/components/finance/audit-section.tsx — same pattern
+  4. src/components/finance/student-section.tsx — Card gap-0 (remove 24px gap between gradient header & content)
+- Root cause: shadcn/ui Card default `gap-6` (24px) not overridden by `p-0`, combined with Tailwind v4 `divide-y` not rendering borders.
+- Fix strategy: `gap-0` on Card + explicit `border-t` per child (either via isFirst prop or `[&>*+*]:border-t` arbitrary variant).
+- Result: 24px gap → 0px gap, with 1px visible border separator. Day-group spacing 8px → 6px.
+- Touch targets preserved (54px row height, 36px icon + 8px+8px padding).
+- Lint clean, dev server healthy, Agent Browser DOM + visual verification passed.

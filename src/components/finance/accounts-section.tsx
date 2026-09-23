@@ -421,7 +421,7 @@ function AccountRecentTransactions({ accountId }: { accountId: string }) {
   const list = transactions ?? [];
 
   return (
-    <Card className="divide-y divide-border overflow-hidden p-0">
+    <Card className="gap-0 overflow-hidden p-0 [&>*+*]:border-t [&>*+*]:border-border/60">
       <div className="flex items-center justify-between bg-muted/40 px-4 py-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Transaksi Terbaru

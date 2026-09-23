@@ -409,7 +409,7 @@ function UangSakuHero({
   const isOverDaily = dailyRemaining < 0;
 
   return (
-    <Card className="overflow-hidden p-0">
+    <Card className="gap-0 overflow-hidden p-0">
       <div className="relative bg-gradient-to-br from-emerald-600 via-emerald-600 to-emerald-700 p-5 text-white sm:p-6">
         <div className="absolute right-4 top-4 flex items-center gap-2">
           <Badge
