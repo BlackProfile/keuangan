@@ -490,15 +490,18 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
         ) : recent.length === 0 ? (
           <EmptyTransactions onAdd={onAdd} />
         ) : (
-          <div className="-mx-1 divide-y divide-border">
-            {recent.slice(0, 6).map((t) => {
+          <div className="-mx-1">
+            {recent.slice(0, 6).map((t, idx) => {
               const isIncome = t.type === "INCOME";
               const cat = t.category;
               return (
                 <button
                   key={t.id}
                   onClick={() => onEdit(t)}
-                  className="group flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors hover:bg-muted/50"
+                  className={cn(
+                    "group flex w-full items-center gap-3 px-1 py-1 text-left transition-colors hover:bg-muted/50",
+                    idx > 0 && "border-t border-border/60",
+                  )}
                 >
                   <span
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"

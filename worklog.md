@@ -2151,3 +2151,38 @@ Stage Summary:
 - Touch target tetap aman (44px+ per row berkat icon h-9 + content 2 baris).
 - Konsisten dengan transaction-list.tsx yang sudah diperketat di commit 7215c10.
 - Lint clean, dev server healthy, Agent Browser verified.
+
+---
+Task ID: GAP-FIX-3
+Agent: main (orchestrator)
+Task: Perbaiki gap antar item yang masih terlihat di "Transaksi Terbaru" dashboard (user report: "masih ada jaraknya yang saya tandain")
+
+Work Log:
+- User kirim ulang screenshot yang sama (Screenshot 2026-09-22 202142.png) dengan annotation merah menunjuk vertical gap antar item transaksi.
+- Investigasi via Agent Browser + DOM inspection (getBoundingClientRect + getComputedStyle):
+  * Sebelumnya (commit cd83a3a): py-1 (4px+4px=8px gap konten) dengan `divide-y divide-border`.
+  * Measurement: gap antar button = 0px (items touching), TAPI `borderTopWidth: 0px` — divide-y TIDAK render border di Tailwind v4!
+  * Akibatnya: 8px whitespace antar item tanpa garis pemisah visual → user melihat "floating items with gap".
+- Root cause: utility `divide-y divide-border` tidak menghasilkan border di Tailwind CSS v4 (perubahan behavior dari v3).
+- Fix:
+  1. Hapus `divide-y divide-border` dari parent div (ganti dengan `-mx-1` saja).
+  2. Tambahkan border eksplisit di setiap button: `idx > 0 && "border-t border-border/60"` via cn() conditional.
+  3. Pertahankan `py-1` (4px+4px=8px internal padding, total row height 44px = minimum touch target).
+  4. Tambah parameter `idx` ke `.map((t, idx) => ...)`.
+- Verification via Agent Browser DOM measurement:
+  * Row height: 44-45px (touch-target compliant)
+  * paddingTop: 4px, borderTopWidth: 1px (BORDER NOW RENDERS ✓)
+  * gap between buttons: 0px (items touch, separated by 1px visible line)
+- Visual verification via VLM: "compact dan rapi, garis pemisah sudah terlihat jelas, gap berlebihan sudah hilang, jauh lebih baik dari versi sebelumnya".
+- `bun run lint` → PASS (0 errors). Dev log clean (all 200 responses).
+
+Stage Summary:
+- File modified: `src/components/finance/dashboard-tab.tsx` (line 493-504)
+  - Parent div: `"-mx-1 divide-y divide-border"` → `"-mx-1"`
+  - Button map: `(t) =>` → `(t, idx) =>`
+  - Button className: string literal → cn() with conditional `idx > 0 && "border-t border-border/60"`
+  - py-1 retained (was already correct from GAP-FIX-2)
+- Issue resolved: Tailwind v4 `divide-y` not rendering border-top on children. Workaround: explicit conditional `border-t` class per item.
+- Visual result: items now appear as a connected compact list with subtle 1px separator lines, no more "floating with gap" appearance.
+- Touch target preserved at 44px (icon h-9=36px + py-1=8px).
+- Lint clean, dev server healthy, Agent Browser DOM + visual verification passed.
