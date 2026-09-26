@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
   Camera,
@@ -21,7 +20,6 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -167,17 +165,6 @@ export function TransactionList({
     paymentMethod,
     onlyLunasPending,
   ]);
-
-  const grouped = React.useMemo(() => {
-    const map = new Map<string, Transaction[]>();
-    for (const t of transactions) {
-      const key = relativeDay(t.date);
-      const arr = map.get(key) ?? [];
-      arr.push(t);
-      map.set(key, arr);
-    }
-    return Array.from(map.entries());
-  }, [transactions]);
 
   const total = transactions.length;
   const totalIncome = transactions
@@ -533,69 +520,19 @@ export function TransactionList({
             <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
-      ) : grouped.length === 0 ? (
+      ) : transactions.length === 0 ? (
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
-        <div className="space-y-1.5">
-          <AnimatePresence mode="popLayout">
-            {grouped.map(([day, items]) => {
-              const dayIncome = items
-                .filter((t) => t.type === "INCOME")
-                .reduce((s, t) => s + t.amount, 0);
-              const dayExpense = items
-                .filter((t) => t.type === "EXPENSE")
-                .reduce((s, t) => s + t.amount, 0);
-              const hasPinned = items.some((t) => t.isPinned);
-              return (
-                <motion.div
-                  key={day}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  className="space-y-1"
-                >
-                  <div className="flex items-center justify-between px-1">
-                    <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {day}
-                      {hasPinned && (
-                        <Pin className="h-3 w-3 fill-primary text-primary" />
-                      )}
-                    </span>
-                    <div className="flex items-center gap-2 text-xs">
-                      {dayIncome > 0 && (
-                        <span className="font-medium text-income">
-                          +{formatCurrency(dayIncome)}
-                        </span>
-                      )}
-                      {dayExpense > 0 && (
-                        <span className="font-medium text-expense">
-                          −{formatCurrency(dayExpense)}
-                        </span>
-                      )}
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] font-normal"
-                      >
-                        {items.length}
-                      </Badge>
-                    </div>
-                  </div>
-                  <Card className="gap-0 overflow-hidden p-0">
-                    {items.map((t, idx) => (
-                      <TransactionRow
-                        key={t.id}
-                        transaction={t}
-                        onEdit={() => onEdit(t)}
-                        isFirst={idx === 0}
-                      />
-                    ))}
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
+        <Card className="gap-0 overflow-hidden p-0">
+          {transactions.map((t, idx) => (
+            <TransactionRow
+              key={t.id}
+              transaction={t}
+              onEdit={() => onEdit(t)}
+              isFirst={idx === 0}
+            />
+          ))}
+        </Card>
       )}
     </div>
   );

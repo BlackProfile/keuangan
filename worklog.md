@@ -2239,3 +2239,36 @@ Stage Summary:
 - Result: 24px gap → 0px gap, with 1px visible border separator. Day-group spacing 8px → 6px.
 - Touch targets preserved (54px row height, 36px icon + 8px+8px padding).
 - Lint clean, dev server healthy, Agent Browser DOM + visual verification passed.
+
+---
+Task ID: DELETE-DAY-HEADER
+Agent: main (orchestrator)
+Task: Hapus baris header day-group di tab Transaksi (user: "hapus ini")
+
+Work Log:
+- User kirim screenshot "Screenshot 2026-09-26 162109.png" dengan pesan "hapus ini" — file tidak tersync ke server (tidak bisa dilihat).
+- Berdasarkan konteks percakapan sebelumnya (user komplain "di hari yang lain juga ada jarak atasnya"), asumsi: user menunjuk baris header day-group yang menyebabkan gap antar hari.
+- Analisis transaction-list.tsx:
+  * Setiap day-group punya header row (lines 558-583): day label + pin icon + day income total + day expense total + count badge.
+  * TransactionRow subtitle sudah menampilkan relativeDay(transaction.date) → info tanggal redundant dengan header.
+  * Header row + space-y-1.5 antar day-group = sumber "jarak di atas hari lain".
+- Fix: hapus seluruh struktur day-grouping, flatten jadi single Card continuous:
+  1. Hapus `grouped.map(([day, items]) => ...)` dengan motion.div wrapper + header div + Card per day.
+  2. Ganti dengan flat `transactions.map((t, idx) => <TransactionRow isFirst={idx===0} />)` dalam satu Card.
+  3. Hapus unused: `grouped` useMemo, `motion`/`AnimatePresence` import (framer-motion), `Badge` import.
+  4. Empty check: `grouped.length === 0` → `transactions.length === 0`.
+- `bun run lint` → PASS (0 errors).
+- Verification via Agent Browser screenshot + VLM:
+  * "Baris header day-group sudah hilang" ✓
+  * "Transaksi menyatu sebagai satu list continuous tanpa gap antar hari" ✓
+  * "Tanggal masih terlihat di setiap baris (subtitle kategori)" ✓
+  * "Tampilan lebih clean" ✓
+- Dev log clean.
+
+Stage Summary:
+- File modified: src/components/finance/transaction-list.tsx
+  - Removed: `grouped` useMemo (Map-based day grouping), day-group header div (day label + pin + income/expense totals + count Badge), motion.div wrapper per day, framer-motion imports (motion, AnimatePresence), Badge import.
+  - Added: flat `transactions.map()` in single Card with `isFirst={idx === 0}` border-t separators.
+- Result: tab Transaksi sekarang adalah flat continuous list (no day grouping, no day headers). Tanggal tetap terlihat di subtitle setiap TransactionRow.
+- Note: User screenshot tidak tersync ke server; asumsi berdasarkan konteks percakapan. Jika user maksud elemen lain, perlu konfirmasi ulang.
+- Lint clean, dev server healthy, Agent Browser verified.
