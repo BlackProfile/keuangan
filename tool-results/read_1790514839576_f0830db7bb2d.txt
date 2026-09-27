@@ -1,0 +1,1082 @@
+     1→"use client";
+     2→
+     3→import {
+     4→  useMutation,
+     5→  useQuery,
+     6→  useQueryClient,
+     7→} from "@tanstack/react-query";
+     8→import { api, type NotificationItem, type NotificationPayload } from "@/lib/api";
+     9→import type {
+    10→  AccountInput,
+    11→  BudgetInput,
+    12→  CategoryInput,
+    13→  ChallengeParticipation,
+    14→  DebtInput,
+    15→  ExportTemplateInput,
+    16→  FriendDebtInput,
+    17→  GoalInput,
+    18→  InstallmentInput,
+    19→  RecurringInput,
+    20→  ShareLinkInput,
+    21→  SplitBillInput,
+    22→  StudentProfileInput,
+    23→  Transaction,
+    24→  TransactionGroupInput,
+    25→  TransactionInput,
+    26→  TransactionTemplateInput,
+    27→  TransferInput,
+    28→} from "@/lib/types";
+    29→import { broadcastChange } from "@/lib/use-realtime-sync";
+    30→
+    31→// Wrapper to broadcast entity changes (safe to call — no-op if socket not connected)
+    32→function broadcastEntityChange(entity: string, action: string) {
+    33→  try {
+    34→    broadcastChange(entity, action);
+    35→  } catch {
+    36→    // ignore — realtime is best-effort
+    37→  }
+    38→}
+    39→
+    40→export const queryKeys = {
+    41→  transactions: ["transactions"] as const,
+    42→  transactionsList: (
+    43→    params?: Record<string, string | number | boolean | undefined>
+    44→  ) => ["transactions", "list", params] as const,
+    45→  categories: (type?: string) => ["categories", type] as const,
+    46→  accounts: ["accounts"] as const,
+    47→  budgets: ["budgets"] as const,
+    48→  budgetStatuses: ["budgets", "statuses"] as const,
+    49→  goals: ["goals"] as const,
+    50→  recurring: ["recurring"] as const,
+    51→  tags: ["tags"] as const,
+    52→  dashboard: ["dashboard"] as const,
+    53→  dashboardMonth: (month: string) => ["dashboard", month] as const,
+    54→  analytics: ["analytics"] as const,
+    55→  analyticsMonth: (month: string) => ["analytics", month] as const,
+    56→  settings: ["settings"] as const,
+    57→  shares: ["shares"] as const,
+    58→};
+    59→
+    60→// ---------- Transactions ----------
+    61→export function useTransactions(params?: {
+    62→  // API-supported filters (sent to /api/transactions)
+    63→  type?: string;
+    64→  categoryId?: string;
+    65→  accountId?: string;
+    66→  search?: string;
+    67→  from?: string;
+    68→  to?: string;
+    69→  tag?: string;
+    70→  limit?: number;
+    71→  // Client-side filters (not sent to API — used for cache key + client filtering)
+    72→  mood?: string;
+    73→  priority?: string;
+    74→  paymentMethod?: string;
+    75→  pinned?: boolean;
+    76→  reimbursable?: boolean;
+    77→  debt?: boolean;
+    78→  subscription?: boolean;
+    79→}) {
+    80→  return useQuery({
+    81→    queryKey: queryKeys.transactionsList(params),
+    82→    queryFn: () =>
+    83→      api.listTransactions({
+    84→        type: params?.type,
+    85→        categoryId: params?.categoryId,
+    86→        accountId: params?.accountId,
+    87→        search: params?.search,
+    88→        from: params?.from,
+    89→        to: params?.to,
+    90→        tag: params?.tag,
+    91→        limit: params?.limit,
+    92→      }),
+    93→  });
+    94→}
+    95→
+    96→export function useCreateTransaction() {
+    97→  const qc = useQueryClient();
+    98→  return useMutation({
+    99→    mutationFn: (data: TransactionInput) => api.createTransaction(data),
+   100→    onMutate: async (data) => {
+   101→      // Optimistic: add temp transaction to list cache
+   102→      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+   103→      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+   104→      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+   105→        if (!old) return old;
+   106→        const temp = {
+   107→          ...data,
+   108→          id: `temp-${Date.now()}`,
+   109→          createdAt: new Date().toISOString(),
+   110→          updatedAt: new Date().toISOString(),
+   111→          isRecurringGenerated: false,
+   112→        } as Transaction;
+   113→        return [temp, ...old];
+   114→      });
+   115→      return { prev };
+   116→    },
+   117→    onError: (_e, _data, ctx) => {
+   118→      // Rollback on error
+   119→      if (ctx?.prev) {
+   120→        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+   121→      }
+   122→    },
+   123→    onSuccess: () => {
+   124→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   125→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   126→      qc.invalidateQueries({ queryKey: queryKeys.analytics });
+   127→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   128→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   129→      broadcastEntityChange("transaction", "create");
+   130→    },
+   131→  });
+   132→}
+   133→
+   134→export function useUpdateTransaction() {
+   135→  const qc = useQueryClient();
+   136→  return useMutation({
+   137→    mutationFn: ({ id, data }: { id: string; data: TransactionInput }) =>
+   138→      api.updateTransaction(id, data),
+   139→    onMutate: async ({ id, data }) => {
+   140→      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+   141→      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+   142→      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+   143→        if (!old) return old;
+   144→        return old.map((t) => (t.id === id ? { ...t, ...data } as Transaction : t));
+   145→      });
+   146→      return { prev };
+   147→    },
+   148→    onError: (_e, _v, ctx) => {
+   149→      if (ctx?.prev) {
+   150→        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+   151→      }
+   152→    },
+   153→    onSuccess: () => {
+   154→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   155→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   156→      qc.invalidateQueries({ queryKey: queryKeys.analytics });
+   157→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   158→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   159→      broadcastEntityChange("transaction", "update");
+   160→    },
+   161→  });
+   162→}
+   163→
+   164→export function useDeleteTransaction() {
+   165→  const qc = useQueryClient();
+   166→  return useMutation({
+   167→    mutationFn: (id: string) => api.deleteTransaction(id),
+   168→    onMutate: async (id) => {
+   169→      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+   170→      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+   171→      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+   172→        if (!old) return old;
+   173→        return old.filter((t) => t.id !== id);
+   174→      });
+   175→      return { prev };
+   176→    },
+   177→    onError: (_e, _id, ctx) => {
+   178→      if (ctx?.prev) {
+   179→        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+   180→      }
+   181→    },
+   182→    onSuccess: () => {
+   183→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   184→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   185→      qc.invalidateQueries({ queryKey: queryKeys.analytics });
+   186→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   187→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   188→      broadcastEntityChange("transaction", "delete");
+   189→    },
+   190→  });
+   191→}
+   192→
+   193→// ---------- Categories ----------
+   194→export function useCategories(type?: string) {
+   195→  return useQuery({
+   196→    queryKey: queryKeys.categories(type),
+   197→    queryFn: () => api.listCategories(type),
+   198→    staleTime: 60_000,
+   199→  });
+   200→}
+   201→
+   202→export function useCreateCategory() {
+   203→  const qc = useQueryClient();
+   204→  return useMutation({
+   205→    mutationFn: (data: CategoryInput) => api.createCategory(data),
+   206→    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+   207→  });
+   208→}
+   209→
+   210→export function useDeleteCategory() {
+   211→  const qc = useQueryClient();
+   212→  return useMutation({
+   213→    mutationFn: (id: string) => api.deleteCategory(id),
+   214→    onSuccess: () => {
+   215→      qc.invalidateQueries({ queryKey: ["categories"] });
+   216→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   217→    },
+   218→  });
+   219→}
+   220→
+   221→// ---------- Accounts ----------
+   222→export function useAccounts() {
+   223→  return useQuery({
+   224→    queryKey: queryKeys.accounts,
+   225→    queryFn: () => api.listAccounts(),
+   226→    staleTime: 30_000,
+   227→  });
+   228→}
+   229→
+   230→export function useCreateAccount() {
+   231→  const qc = useQueryClient();
+   232→  return useMutation({
+   233→    mutationFn: (data: AccountInput) => api.createAccount(data),
+   234→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+   235→  });
+   236→}
+   237→
+   238→export function useUpdateAccount() {
+   239→  const qc = useQueryClient();
+   240→  return useMutation({
+   241→    mutationFn: ({ id, data }: { id: string; data: Partial<AccountInput> }) =>
+   242→      api.updateAccount(id, data),
+   243→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+   244→  });
+   245→}
+   246→
+   247→export function useDeleteAccount() {
+   248→  const qc = useQueryClient();
+   249→  return useMutation({
+   250→    mutationFn: (id: string) => api.deleteAccount(id),
+   251→    onSuccess: () => {
+   252→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   253→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   254→    },
+   255→  });
+   256→}
+   257→
+   258→export function useTransfer() {
+   259→  const qc = useQueryClient();
+   260→  return useMutation({
+   261→    mutationFn: (data: TransferInput) => api.transfer(data),
+   262→    onSuccess: () => {
+   263→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   264→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   265→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   266→    },
+   267→  });
+   268→}
+   269→
+   270→// ---------- Budgets ----------
+   271→export function useBudgets() {
+   272→  return useQuery({
+   273→    queryKey: queryKeys.budgets,
+   274→    queryFn: () => api.listBudgets(),
+   275→    staleTime: 30_000,
+   276→  });
+   277→}
+   278→
+   279→export function useBudgetStatuses() {
+   280→  return useQuery({
+   281→    queryKey: queryKeys.budgetStatuses,
+   282→    queryFn: () => api.budgetStatuses(),
+   283→  });
+   284→}
+   285→
+   286→export function useCreateBudget() {
+   287→  const qc = useQueryClient();
+   288→  return useMutation({
+   289→    mutationFn: (data: BudgetInput) => api.createBudget(data),
+   290→    onSuccess: () => {
+   291→      qc.invalidateQueries({ queryKey: queryKeys.budgets });
+   292→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   293→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   294→    },
+   295→  });
+   296→}
+   297→
+   298→export function useUpdateBudget() {
+   299→  const qc = useQueryClient();
+   300→  return useMutation({
+   301→    mutationFn: ({ id, data }: { id: string; data: BudgetInput }) =>
+   302→      api.updateBudget(id, data),
+   303→    onSuccess: () => {
+   304→      qc.invalidateQueries({ queryKey: queryKeys.budgets });
+   305→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   306→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   307→    },
+   308→  });
+   309→}
+   310→
+   311→export function useDeleteBudget() {
+   312→  const qc = useQueryClient();
+   313→  return useMutation({
+   314→    mutationFn: (id: string) => api.deleteBudget(id),
+   315→    onSuccess: () => {
+   316→      qc.invalidateQueries({ queryKey: queryKeys.budgets });
+   317→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   318→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   319→    },
+   320→  });
+   321→}
+   322→
+   323→// ---------- Goals ----------
+   324→export function useGoals() {
+   325→  return useQuery({
+   326→    queryKey: queryKeys.goals,
+   327→    queryFn: () => api.listGoals(),
+   328→  });
+   329→}
+   330→
+   331→export function useCreateGoal() {
+   332→  const qc = useQueryClient();
+   333→  return useMutation({
+   334→    mutationFn: (data: GoalInput) => api.createGoal(data),
+   335→    onSuccess: () => {
+   336→      qc.invalidateQueries({ queryKey: queryKeys.goals });
+   337→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   338→    },
+   339→  });
+   340→}
+   341→
+   342→export function useUpdateGoal() {
+   343→  const qc = useQueryClient();
+   344→  return useMutation({
+   345→    mutationFn: ({ id, data }: { id: string; data: Partial<GoalInput> }) =>
+   346→      api.updateGoal(id, data),
+   347→    onSuccess: () => {
+   348→      qc.invalidateQueries({ queryKey: queryKeys.goals });
+   349→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   350→    },
+   351→  });
+   352→}
+   353→
+   354→export function useDeleteGoal() {
+   355→  const qc = useQueryClient();
+   356→  return useMutation({
+   357→    mutationFn: (id: string) => api.deleteGoal(id),
+   358→    onSuccess: () => {
+   359→      qc.invalidateQueries({ queryKey: queryKeys.goals });
+   360→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   361→    },
+   362→  });
+   363→}
+   364→
+   365→// ---------- Recurring ----------
+   366→export function useRecurring() {
+   367→  return useQuery({
+   368→    queryKey: queryKeys.recurring,
+   369→    queryFn: () => api.listRecurring(),
+   370→  });
+   371→}
+   372→
+   373→export function useCreateRecurring() {
+   374→  const qc = useQueryClient();
+   375→  return useMutation({
+   376→    mutationFn: (data: RecurringInput) => api.createRecurring(data),
+   377→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.recurring }),
+   378→  });
+   379→}
+   380→
+   381→export function useUpdateRecurring() {
+   382→  const qc = useQueryClient();
+   383→  return useMutation({
+   384→    mutationFn: ({ id, data }: { id: string; data: Partial<RecurringInput> }) =>
+   385→      api.updateRecurring(id, data),
+   386→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.recurring }),
+   387→  });
+   388→}
+   389→
+   390→export function useDeleteRecurring() {
+   391→  const qc = useQueryClient();
+   392→  return useMutation({
+   393→    mutationFn: (id: string) => api.deleteRecurring(id),
+   394→    onSuccess: () => {
+   395→      qc.invalidateQueries({ queryKey: queryKeys.recurring });
+   396→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   397→    },
+   398→  });
+   399→}
+   400→
+   401→// ---------- Tags ----------
+   402→export function useTags() {
+   403→  return useQuery({
+   404→    queryKey: queryKeys.tags,
+   405→    queryFn: () => api.listTags(),
+   406→    staleTime: 60_000,
+   407→  });
+   408→}
+   409→
+   410→// ---------- Dashboard & Analytics ----------
+   411→export function useDashboard(month?: string) {
+   412→  return useQuery({
+   413→    queryKey: month ? queryKeys.dashboardMonth(month) : queryKeys.dashboard,
+   414→    queryFn: () => api.getDashboard(month),
+   415→  });
+   416→}
+   417→
+   418→export function useAnalytics(month?: string) {
+   419→  return useQuery({
+   420→    queryKey: month ? queryKeys.analyticsMonth(month) : queryKeys.analytics,
+   421→    queryFn: () => api.getAnalytics(month),
+   422→  });
+   423→}
+   424→
+   425→// ---------- Settings ----------
+   426→export function useSettings() {
+   427→  return useQuery({
+   428→    queryKey: queryKeys.settings,
+   429→    queryFn: () => api.getSettings(),
+   430→    staleTime: 30_000,
+   431→  });
+   432→}
+   433→
+   434→export function useUpdateSetting() {
+   435→  const qc = useQueryClient();
+   436→  return useMutation({
+   437→    mutationFn: ({ key, value }: { key: string; value: string }) =>
+   438→      api.updateSetting(key, value),
+   439→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.settings }),
+   440→  });
+   441→}
+   442→
+   443→// ---------- AI ----------
+   444→export function useAiChat() {
+   445→  return useMutation({
+   446→    mutationFn: (messages: { role: "user" | "assistant"; content: string }[]) =>
+   447→      api.chat(messages),
+   448→  });
+   449→}
+   450→
+   451→export function useReceiptScan() {
+   452→  return useMutation({
+   453→    mutationFn: (imageBase64: string) => api.receiptScan(imageBase64),
+   454→  });
+   455→}
+   456→
+   457→export function useInsights() {
+   458→  return useQuery({
+   459→    queryKey: ["ai", "insights"],
+   460→    queryFn: () => api.insights(),
+   461→    staleTime: 5 * 60_000,
+   462→  });
+   463→}
+   464→
+   465→// ---------- Import ----------
+   466→export function useImportCsv() {
+   467→  const qc = useQueryClient();
+   468→  return useMutation({
+   469→    mutationFn: (rows: Array<Record<string, string>>) => api.importCsv(rows),
+   470→    onSuccess: () => {
+   471→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   472→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   473→      qc.invalidateQueries({ queryKey: queryKeys.analytics });
+   474→      qc.invalidateQueries({ queryKey: queryKeys.budgetStatuses });
+   475→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   476→    },
+   477→  });
+   478→}
+   479→
+   480→// ---------- Seed & Recurring run ----------
+   481→export function useSeed() {
+   482→  const qc = useQueryClient();
+   483→  return useMutation({
+   484→    mutationFn: () => api.seed(),
+   485→    onSuccess: () => {
+   486→      qc.invalidateQueries();
+   487→    },
+   488→  });
+   489→}
+   490→
+   491→export function useRunRecurring() {
+   492→  const qc = useQueryClient();
+   493→  return useMutation({
+   494→    mutationFn: () => api.runRecurring(),
+   495→    onSuccess: () => {
+   496→      qc.invalidateQueries({ queryKey: queryKeys.recurring });
+   497→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   498→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   499→      qc.invalidateQueries({ queryKey: queryKeys.accounts });
+   500→    },
+   501→  });
+   502→}
+   503→
+   504→// ---------- Debts ----------
+   505→export function useDebts() {
+   506→  return useQuery({
+   507→    queryKey: ["debts"] as const,
+   508→    queryFn: () => api.listDebts(),
+   509→  });
+   510→}
+   511→
+   512→export function useCreateDebt() {
+   513→  const qc = useQueryClient();
+   514→  return useMutation({
+   515→    mutationFn: (data: DebtInput) => api.createDebt(data),
+   516→    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+   517→  });
+   518→}
+   519→
+   520→export function useUpdateDebt() {
+   521→  const qc = useQueryClient();
+   522→  return useMutation({
+   523→    mutationFn: ({ id, data }: { id: string; data: Partial<DebtInput> }) =>
+   524→      api.updateDebt(id, data),
+   525→    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+   526→  });
+   527→}
+   528→
+   529→export function useDeleteDebt() {
+   530→  const qc = useQueryClient();
+   531→  return useMutation({
+   532→    mutationFn: (id: string) => api.deleteDebt(id),
+   533→    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+   534→  });
+   535→}
+   536→
+   537→export function useSettleDebt() {
+   538→  const qc = useQueryClient();
+   539→  return useMutation({
+   540→    mutationFn: (id: string) => api.settleDebt(id),
+   541→    onSuccess: () => {
+   542→      qc.invalidateQueries({ queryKey: ["debts"] });
+   543→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   544→    },
+   545→  });
+   546→}
+   547→
+   548→// ---------- Installments ----------
+   549→export function useInstallments() {
+   550→  return useQuery({
+   551→    queryKey: ["installments"] as const,
+   552→    queryFn: () => api.listInstallments(),
+   553→  });
+   554→}
+   555→
+   556→export function useCreateInstallment() {
+   557→  const qc = useQueryClient();
+   558→  return useMutation({
+   559→    mutationFn: (data: InstallmentInput) => api.createInstallment(data),
+   560→    onSuccess: () => {
+   561→      qc.invalidateQueries({ queryKey: ["installments"] });
+   562→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   563→    },
+   564→  });
+   565→}
+   566→
+   567→export function useDeleteInstallment() {
+   568→  const qc = useQueryClient();
+   569→  return useMutation({
+   570→    mutationFn: (id: string) => api.deleteInstallment(id),
+   571→    onSuccess: () => qc.invalidateQueries({ queryKey: ["installments"] }),
+   572→  });
+   573→}
+   574→
+   575→// ---------- Transaction Templates ----------
+   576→export function useTemplates() {
+   577→  return useQuery({
+   578→    queryKey: ["templates"] as const,
+   579→    queryFn: () => api.listTemplates(),
+   580→  });
+   581→}
+   582→
+   583→export function useCreateTemplate() {
+   584→  const qc = useQueryClient();
+   585→  return useMutation({
+   586→    mutationFn: (data: TransactionTemplateInput) => api.createTemplate(data),
+   587→    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+   588→  });
+   589→}
+   590→
+   591→export function useDeleteTemplate() {
+   592→  const qc = useQueryClient();
+   593→  return useMutation({
+   594→    mutationFn: (id: string) => api.deleteTemplate(id),
+   595→    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+   596→  });
+   597→}
+   598→
+   599→// ---------- Transaction Groups ----------
+   600→export function useGroups() {
+   601→  return useQuery({
+   602→    queryKey: ["transaction-groups"] as const,
+   603→    queryFn: () => api.listGroups(),
+   604→  });
+   605→}
+   606→
+   607→export function useCreateGroup() {
+   608→  const qc = useQueryClient();
+   609→  return useMutation({
+   610→    mutationFn: (data: TransactionGroupInput) => api.createGroup(data),
+   611→    onSuccess: () => qc.invalidateQueries({ queryKey: ["transaction-groups"] }),
+   612→  });
+   613→}
+   614→
+   615→export function useDeleteGroup() {
+   616→  const qc = useQueryClient();
+   617→  return useMutation({
+   618→    mutationFn: (id: string) => api.deleteGroup(id),
+   619→    onSuccess: () => {
+   620→      qc.invalidateQueries({ queryKey: ["transaction-groups"] });
+   621→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   622→    },
+   623→  });
+   624→}
+   625→
+   626→// ---------- Transaction actions ----------
+   627→export function useDuplicateTransaction() {
+   628→  const qc = useQueryClient();
+   629→  return useMutation({
+   630→    mutationFn: (id: string) => api.duplicateTransaction(id),
+   631→    onSuccess: () => {
+   632→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   633→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   634→    },
+   635→  });
+   636→}
+   637→
+   638→export function useTogglePin() {
+   639→  const qc = useQueryClient();
+   640→  return useMutation({
+   641→    mutationFn: (id: string) => api.togglePin(id),
+   642→    onSuccess: () => {
+   643→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   644→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   645→    },
+   646→  });
+   647→}
+   648→
+   649→// ---------- Security ----------
+   650→export function useSecuritySettings() {
+   651→  return useQuery({
+   652→    queryKey: ["security"] as const,
+   653→    queryFn: () => api.getSecurity(),
+   654→    staleTime: 30_000,
+   655→  });
+   656→}
+   657→
+   658→export function useUpdateSecurity() {
+   659→  const qc = useQueryClient();
+   660→  return useMutation({
+   661→    mutationFn: (data: { key: string; value: string }) =>
+   662→      api.updateSecurity(data.key, data.value),
+   663→    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
+   664→  });
+   665→}
+   666→
+   667→export function useUpdateSecurityBulk() {
+   668→  const qc = useQueryClient();
+   669→  return useMutation({
+   670→    mutationFn: (settings: Record<string, string>) =>
+   671→      api.updateSecurityBulk(settings),
+   672→    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
+   673→  });
+   674→}
+   675→
+   676→// ---------- Audit Log ----------
+   677→export function useAuditLog(params?: { limit?: number; action?: string }) {
+   678→  return useQuery({
+   679→    queryKey: ["audit", params] as const,
+   680→    queryFn: () => api.listAudit(params),
+   681→  });
+   682→}
+   683→
+   684→export function useLogAudit() {
+   685→  return useMutation({
+   686→    mutationFn: (data: { action: string; detail?: string; success?: boolean; fingerprint?: string }) =>
+   687→      api.logAudit(data.action, data.detail, data.success ?? true, data.fingerprint),
+   688→  });
+   689→}
+   690→
+   691→// ---------- Biometric ----------
+   692→export function useBiometricList() {
+   693→  return useQuery({
+   694→    queryKey: ["biometric"] as const,
+   695→    queryFn: () => api.listBiometric(),
+   696→  });
+   697→}
+   698→
+   699→export function useRegisterBiometric() {
+   700→  const qc = useQueryClient();
+   701→  return useMutation({
+   702→    mutationFn: (data: { name: string; credentialId: string; publicKey: string; counter: number }) =>
+   703→      api.registerBiometric(data),
+   704→    onSuccess: () => qc.invalidateQueries({ queryKey: ["biometric"] }),
+   705→  });
+   706→}
+   707→
+   708→export function useDeleteBiometric() {
+   709→  const qc = useQueryClient();
+   710→  return useMutation({
+   711→    mutationFn: (id: string) => api.deleteBiometric(id),
+   712→    onSuccess: () => qc.invalidateQueries({ queryKey: ["biometric"] }),
+   713→  });
+   714→}
+   715→
+   716→// ---------- Trusted Devices ----------
+   717→export function useTrustedDevices() {
+   718→  return useQuery({
+   719→    queryKey: ["trusted-devices"] as const,
+   720→    queryFn: () => api.listTrustedDevices(),
+   721→  });
+   722→}
+   723→
+   724→export function useAddTrustedDevice() {
+   725→  const qc = useQueryClient();
+   726→  return useMutation({
+   727→    mutationFn: (data: { name: string; fingerprint: string; trustedDays: number }) =>
+   728→      api.addTrustedDevice(data),
+   729→    onSuccess: () => qc.invalidateQueries({ queryKey: ["trusted-devices"] }),
+   730→  });
+   731→}
+   732→
+   733→export function useRevokeTrustedDevice() {
+   734→  const qc = useQueryClient();
+   735→  return useMutation({
+   736→    mutationFn: (id: string) => api.revokeTrustedDevice(id),
+   737→    onSuccess: () => qc.invalidateQueries({ queryKey: ["trusted-devices"] }),
+   738→  });
+   739→}
+   740→
+   741→// ---------- Panic Wipe ----------
+   742→export function usePanicWipe() {
+   743→  const qc = useQueryClient();
+   744→  return useMutation({
+   745→    mutationFn: () => api.panicWipe(),
+   746→    onSuccess: () => qc.invalidateQueries(),
+   747→  });
+   748→}
+   749→
+   750→// ---------- Share Links ----------
+   751→export function useShareLinks() {
+   752→  return useQuery({
+   753→    queryKey: queryKeys.shares,
+   754→    queryFn: () => api.listShares(),
+   755→  });
+   756→}
+   757→
+   758→export function useCreateShareLink() {
+   759→  const qc = useQueryClient();
+   760→  return useMutation({
+   761→    mutationFn: (data: ShareLinkInput) => api.createShare(data),
+   762→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   763→  });
+   764→}
+   765→
+   766→export function useUpdateShareLink() {
+   767→  const qc = useQueryClient();
+   768→  return useMutation({
+   769→    mutationFn: ({ id, data }: { id: string; data: Partial<ShareLinkInput> }) =>
+   770→      api.updateShare(id, data),
+   771→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   772→  });
+   773→}
+   774→
+   775→export function useDeleteShareLink() {
+   776→  const qc = useQueryClient();
+   777→  return useMutation({
+   778→    mutationFn: (id: string) => api.deleteShare(id),
+   779→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   780→  });
+   781→}
+   782→
+   783→export function useRevokeShareLink() {
+   784→  const qc = useQueryClient();
+   785→  return useMutation({
+   786→    mutationFn: (token: string) => api.revokeShare(token),
+   787→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   788→  });
+   789→}
+   790→
+   791→export function useCloneShareLink() {
+   792→  const qc = useQueryClient();
+   793→  return useMutation({
+   794→    mutationFn: (token: string) => api.cloneShare(token),
+   795→    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shares }),
+   796→  });
+   797→}
+   798→
+   799→// ---------- Export ----------
+   800→export function useExportPreview() {
+   801→  return useMutation({
+   802→    mutationFn: (data: {
+   803→      scope: Record<string, unknown>;
+   804→      fields?: string[];
+   805→      options?: Record<string, unknown>;
+   806→    }) => api.exportPreview(data),
+   807→  });
+   808→}
+   809→
+   810→export function useToggleHideTransaction() {
+   811→  const qc = useQueryClient();
+   812→  return useMutation({
+   813→    mutationFn: (id: string) => api.toggleHideTransaction(id),
+   814→    onMutate: async (id) => {
+   815→      await qc.cancelQueries({ queryKey: queryKeys.transactions });
+   816→      const prev = qc.getQueriesData<Transaction[]>({ queryKey: queryKeys.transactions });
+   817→      qc.setQueriesData<Transaction[]>({ queryKey: queryKeys.transactions }, (old) => {
+   818→        if (!old) return old;
+   819→        return old.map((t) => (t.id === id ? { ...t, isHidden: !t.isHidden } : t));
+   820→      });
+   821→      return { prev };
+   822→    },
+   823→    onError: (_e, _id, ctx) => {
+   824→      if (ctx?.prev) {
+   825→        ctx.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+   826→      }
+   827→    },
+   828→    onSuccess: () => {
+   829→      qc.invalidateQueries({ queryKey: queryKeys.transactions });
+   830→      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+   831→    },
+   832→  });
+   833→}
+   834→
+   835→// ---------- Export Templates ----------
+   836→export function useExportTemplates() {
+   837→  return useQuery({
+   838→    queryKey: ["export-templates"] as const,
+   839→    queryFn: () => api.listExportTemplates(),
+   840→  });
+   841→}
+   842→
+   843→export function useCreateExportTemplate() {
+   844→  const qc = useQueryClient();
+   845→  return useMutation({
+   846→    mutationFn: (data: ExportTemplateInput) => api.createExportTemplate(data),
+   847→    onSuccess: () => qc.invalidateQueries({ queryKey: ["export-templates"] }),
+   848→  });
+   849→}
+   850→
+   851→export function useDeleteExportTemplate() {
+   852→  const qc = useQueryClient();
+   853→  return useMutation({
+   854→    mutationFn: (id: string) => api.deleteExportTemplate(id),
+   855→    onSuccess: () => qc.invalidateQueries({ queryKey: ["export-templates"] }),
+   856→  });
+   857→}
+   858→
+   859→// ---------- Student Profile ----------
+   860→export function useStudentProfile() {
+   861→  return useQuery({
+   862→    queryKey: ["student-profile"] as const,
+   863→    queryFn: async () => {
+   864→      const r = await api.getStudentProfile();
+   865→      return r;
+   866→    },
+   867→  });
+   868→}
+   869→
+   870→export function useUpdateStudentProfile() {
+   871→  const qc = useQueryClient();
+   872→  return useMutation({
+   873→    mutationFn: (data: StudentProfileInput) => api.updateStudentProfile(data),
+   874→    onSuccess: () => {
+   875→      qc.invalidateQueries({ queryKey: ["student-profile"] });
+   876→      qc.invalidateQueries({ queryKey: ["daily-allowance"] });
+   877→    },
+   878→  });
+   879→}
+   880→
+   881→export function useDailyAllowance() {
+   882→  return useQuery({
+   883→    queryKey: ["daily-allowance"] as const,
+   884→    queryFn: () => api.getDailyAllowance(),
+   885→    refetchInterval: 60_000, // refresh every minute
+   886→  });
+   887→}
+   888→
+   889→// ---------- Challenges ----------
+   890→export function useChallenges() {
+   891→  return useQuery({
+   892→    queryKey: ["challenges"] as const,
+   893→    queryFn: () => api.listChallenges(),
+   894→  });
+   895→}
+   896→
+   897→export function useJoinChallenge() {
+   898→  const qc = useQueryClient();
+   899→  return useMutation({
+   900→    mutationFn: (challengeId: string) => api.joinChallenge(challengeId),
+   901→    onSuccess: () => {
+   902→      qc.invalidateQueries({ queryKey: ["challenges"] });
+   903→      qc.invalidateQueries({ queryKey: ["challenge-participations"] });
+   904→    },
+   905→  });
+   906→}
+   907→
+   908→export function useChallengeParticipations() {
+   909→  return useQuery({
+   910→    queryKey: ["challenge-participations"] as const,
+   911→    queryFn: () => api.listChallengeParticipations(),
+   912→  });
+   913→}
+   914→
+   915→export function useAbandonChallenge() {
+   916→  const qc = useQueryClient();
+   917→  return useMutation({
+   918→    mutationFn: (participationId: string) => api.abandonChallenge(participationId),
+   919→    onSuccess: () => {
+   920→      qc.invalidateQueries({ queryKey: ["challenge-participations"] });
+   921→    },
+   922→  });
+   923→}
+   924→
+   925→// ---------- Split Bills ----------
+   926→export function useSplitBills() {
+   927→  return useQuery({
+   928→    queryKey: ["split-bills"] as const,
+   929→    queryFn: () => api.listSplitBills(),
+   930→  });
+   931→}
+   932→
+   933→export function useCreateSplitBill() {
+   934→  const qc = useQueryClient();
+   935→  return useMutation({
+   936→    mutationFn: (data: SplitBillInput) => api.createSplitBill(data),
+   937→    onSuccess: () => qc.invalidateQueries({ queryKey: ["split-bills"] }),
+   938→  });
+   939→}
+   940→
+   941→export function useDeleteSplitBill() {
+   942→  const qc = useQueryClient();
+   943→  return useMutation({
+   944→    mutationFn: (id: string) => api.deleteSplitBill(id),
+   945→    onSuccess: () => qc.invalidateQueries({ queryKey: ["split-bills"] }),
+   946→  });
+   947→}
+   948→
+   949→export function useSettleSplitBill() {
+   950→  const qc = useQueryClient();
+   951→  return useMutation({
+   952→    mutationFn: (id: string) => api.settleSplitBill(id),
+   953→    onSuccess: () => qc.invalidateQueries({ queryKey: ["split-bills"] }),
+   954→  });
+   955→}
+   956→
+   957→export function useMarkParticipantPaid() {
+   958→  const qc = useQueryClient();
+   959→  return useMutation({
+   960→    mutationFn: (participantId: string) => api.markParticipantPaid(participantId),
+   961→    onSuccess: () => qc.invalidateQueries({ queryKey: ["split-bills"] }),
+   962→  });
+   963→}
+   964→
+   965→// ---------- Friend Debts ----------
+   966→export function useFriendDebts() {
+   967→  return useQuery({
+   968→    queryKey: ["friend-debts"] as const,
+   969→    queryFn: () => api.listFriendDebts(),
+   970→  });
+   971→}
+   972→
+   973→export function useCreateFriendDebt() {
+   974→  const qc = useQueryClient();
+   975→  return useMutation({
+   976→    mutationFn: (data: FriendDebtInput) => api.createFriendDebt(data),
+   977→    onSuccess: () => qc.invalidateQueries({ queryKey: ["friend-debts"] }),
+   978→  });
+   979→}
+   980→
+   981→export function useSettleFriendDebt() {
+   982→  const qc = useQueryClient();
+   983→  return useMutation({
+   984→    mutationFn: (id: string) => api.settleFriendDebt(id),
+   985→    onSuccess: () => qc.invalidateQueries({ queryKey: ["friend-debts"] }),
+   986→  });
+   987→}
+   988→
+   989→export function useDeleteFriendDebt() {
+   990→  const qc = useQueryClient();
+   991→  return useMutation({
+   992→    mutationFn: (id: string) => api.deleteFriendDebt(id),
+   993→    onSuccess: () => qc.invalidateQueries({ queryKey: ["friend-debts"] }),
+   994→  });
+   995→}
+   996→
+   997→// ---------- AI Jajan Check ----------
+   998→export function useJajanCheck() {
+   999→  return useMutation({
+  1000→    mutationFn: (amount: number) => api.jajanCheck(amount),
+  1001→  });
+  1002→}
+  1003→
+  1004→// ---------- Notifications ----------
+  1005→export function useNotifications() {
+  1006→  return useQuery({
+  1007→    queryKey: ["notifications"] as const,
+  1008→    queryFn: () => api.listNotifications(),
+  1009→    staleTime: 30_000,
+  1010→  });
+  1011→}
+  1012→
+  1013→export function useCreateNotification() {
+  1014→  const qc = useQueryClient();
+  1015→  return useMutation({
+  1016→    mutationFn: (data: NotificationPayload) => api.createNotification(data),
+  1017→    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  1018→  });
+  1019→}
+  1020→
+  1021→export function useMarkNotificationRead() {
+  1022→  const qc = useQueryClient();
+  1023→  return useMutation({
+  1024→    mutationFn: (id: string) => api.markNotificationRead(id),
+  1025→    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  1026→  });
+  1027→}
+  1028→
+  1029→export function useDeleteNotification() {
+  1030→  const qc = useQueryClient();
+  1031→  return useMutation({
+  1032→    mutationFn: (id: string) => api.deleteNotification(id),
+  1033→    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  1034→  });
+  1035→}
+  1036→
+  1037→export type { NotificationItem, NotificationPayload };
+  1038→
+  1039→// ---------- Installment Payments ----------
+  1040→export function useInstallmentPayments(params?: { entityType?: string; entityId?: string }) {
+  1041→  return useQuery({
+  1042→    queryKey: ["installment-payments", params] as const,
+  1043→    queryFn: () => api.listInstallmentPayments(params),
+  1044→    enabled: !!params?.entityId,
+  1045→  });
+  1046→}
+  1047→
+  1048→export function useCreateInstallmentPayment() {
+  1049→  const qc = useQueryClient();
+  1050→  return useMutation({
+  1051→    mutationFn: (data: {
+  1052→      entityType: string;
+  1053→      entityId: string;
+  1054→      amount: number;
+  1055→      date?: string;
+  1056→      note?: string;
+  1057→      participantId?: string;
+  1058→    }) => api.createInstallmentPayment(data),
+  1059→    onSuccess: () => {
+  1060→      qc.invalidateQueries({ queryKey: ["installment-payments"] });
+  1061→      qc.invalidateQueries({ queryKey: ["debts"] });
+  1062→      qc.invalidateQueries({ queryKey: ["friend-debts"] });
+  1063→      qc.invalidateQueries({ queryKey: ["split-bills"] });
+  1064→      qc.invalidateQueries({ queryKey: ["goals"] });
+  1065→    },
+  1066→  });
+  1067→}
+  1068→
+  1069→export function useDeleteInstallmentPayment() {
+  1070→  const qc = useQueryClient();
+  1071→  return useMutation({
+  1072→    mutationFn: (id: string) => api.deleteInstallmentPayment(id),
+  1073→    onSuccess: () => {
+  1074→      qc.invalidateQueries({ queryKey: ["installment-payments"] });
+  1075→      qc.invalidateQueries({ queryKey: ["debts"] });
+  1076→      qc.invalidateQueries({ queryKey: ["friend-debts"] });
+  1077→      qc.invalidateQueries({ queryKey: ["split-bills"] });
+  1078→      qc.invalidateQueries({ queryKey: ["goals"] });
+  1079→    },
+  1080→  });
+  1081→}
+  1082→

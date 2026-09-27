@@ -70,7 +70,7 @@ export function AuditSection() {
   // Stats
   const failedCount = entries.filter((e) => !e.success).length;
   const loginAttempts = entries.filter((e) =>
-    [AUDIT_ACTIONS.LOGIN_SUCCESS, AUDIT_ACTIONS.LOGIN_FAILED].includes(e.action as typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS])
+    ([AUDIT_ACTIONS.LOGIN_SUCCESS, AUDIT_ACTIONS.LOGIN_FAILED] as string[]).includes(e.action)
   ).length;
   const failedLogins = entries.filter(
     (e) => e.action === AUDIT_ACTIONS.LOGIN_FAILED

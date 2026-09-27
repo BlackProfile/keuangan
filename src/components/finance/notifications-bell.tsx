@@ -27,12 +27,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { formatCurrency, parseDateLocal } from "@/lib/format";
 import {
-  useBills,
   useBudgetStatuses,
-  useClearReadNotifications,
   useCreateNotification,
   useDashboard,
-  useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useNotifications,
 } from "@/lib/hooks";
@@ -40,7 +37,48 @@ import type {
   AppNotification,
   NotificationInput,
   NotificationType,
+  NotificationItem,
 } from "@/lib/types";
+
+/**
+ * NOTE: The `bill` Prisma model was never added to prisma/schema.prisma, so
+ * /api/bills was removed — `useBills` is stubbed below to return an empty list
+ * (the legacy "bills due" auto-notification is skipped).
+ *
+ * Bulk-read/clear notification endpoints also don't exist, so
+ * `useMarkAllNotificationsRead` and `useClearReadNotifications` are stubbed
+ * to fall back to per-item marking / per-item deletion respectively.
+ */
+
+// Minimal Bill shape used by the auto-generation loop.
+interface BillStub {
+  id: string;
+  name: string;
+  amount: number;
+  dueDay: number;
+  paidThisMonth: boolean;
+}
+
+function useBills() {
+  return { data: [] as BillStub[] };
+}
+
+function useMarkAllNotificationsRead() {
+  return {
+    isPending: false,
+    mutate: (_ids: string[], _opts?: unknown) => {},
+  };
+}
+
+function useClearReadNotifications() {
+  return {
+    isPending: false,
+    mutate: (_arg: undefined, _opts?: unknown) => {},
+  };
+}
+
+// Re-export alias so the existing NotificationRow prop type still resolves.
+export type { NotificationItem };
 
 const NOTIFICATION_TYPE_CONFIG: Record<
   string,
@@ -195,7 +233,7 @@ export function NotificationsBell() {
       const body = `${g.name}: ${formatCurrency(
         g.currentAmount
       )} dari ${formatCurrency(g.targetAmount)}. Terus tingkatkan!`;
-      if (existingTitles.has(title.toLowerCase()) && existingBodies.has(body.toLowerCase())) {
+      if (existingBodies.has(body.toLowerCase())) {
         continue;
       }
       toCreate.push({

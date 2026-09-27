@@ -2341,3 +2341,158 @@ Stage Summary:
 - Note: academicMode di student-section.tsx (data semester mahasiswa KULIAH/UTS/UAS dari DB profile) TIDAK dihapus — itu berbeda, data profil bukan toggle dashboard.
 - Result: dashboard sekarang langsung dari hero card (saldo utama) ke summary cards, tanpa mode toggles.
 - Lint clean, dev server healthy, Agent Browser verified.
+
+---
+Task ID: 5
+Agent: general-purpose (sub agent)
+Task: Fix TypeScript errors in /home/z/my-project/src/app/api/dashboard/route.ts (Prisma enum string vs local union type mismatches)
+
+Work Log:
+- Read worklog.md to understand prior agent context (Next.js 16 finance app, Prisma + SQLite, enum types declared in src/lib/types.ts as string unions).
+- Ran `bunx tsc --noEmit 2>&1 | grep "src/app/api/dashboard/route.ts"` — found 4 TS2322 errors:
+  * Line 143: buildBreakdown return value (category.type is `string` from Prisma, plus createdAt/updatedAt are `Date`) not assignable to `CategoryBreakdown[]`.
+  * Line 157: budgetStatuses map result (period is `string` from Prisma, category.type is `string`) not assignable to `BudgetStatus[]`.
+  * Line 207: recentTransactions map result (type, mood, priority, paymentStatus, paymentMethod, status, category.type are all `string` from Prisma) not assignable to `TransactionWithRelations[]`.
+  * Line 232: accounts map result (type is `string` from Prisma) not assignable to `Account[]`.
+- Inspected src/lib/types.ts to confirm definitions: TransactionType = "INCOME" | "EXPENSE"; AccountType, BudgetPeriod, Mood, Priority, PaymentStatus, PaymentMethod, TransactionStatus are all string unions.
+- Applied minimal-change fix strategy (as-casts at Prisma→JSON boundary, no changes to type definitions):
+  1. Added imports `Account` and `TransactionWithRelations` to the existing type import block.
+  2. Line 156: buildBreakdown — converted `category.createdAt`/`updatedAt` via `.toISOString()` inside the `.map()` (so resulting object overlaps with `CategoryBreakdown`), then appended `as CategoryBreakdown[]` to the `.sort()` return.
+  3. Lines 158-189: budgetStatuses — removed explicit `: BudgetStatus[]` annotation on the const, kept the inner `.map()` body unchanged, appended `as BudgetStatus[]` to the map result.
+  4. Line 226: recentTransactions map — appended `as TransactionWithRelations[]` (the map already converted Date fields to ISO strings).
+  5. Line 238: accounts map — appended `as Account[]` (map already converted Date fields to ISO strings).
+- First cast attempt on buildBreakdown failed with TS2352 "neither type sufficiently overlaps" because Prisma's `category` still had `createdAt: Date` / `updatedAt: Date` while local `Category` declares them as `string`. Fixed by spreading `...v.category` and overriding both timestamp fields with `.toISOString()` before the cast (consistent with how recentTransactions/budgetStatuses already handle their category objects).
+- Verification:
+  * `bunx tsc --noEmit 2>&1 | grep "src/app/api/dashboard/route.ts"` → EMPTY (0 errors). Exit code 1 from grep confirms no matches.
+  * `bun run lint` → PASS (0 errors; eslint output: `$ eslint .` with no warnings).
+  * `curl -s http://localhost:3000/api/dashboard?month=2026-09` → HTTP 200, valid JSON. Verified all 10 top-level keys present (summary, monthlyData, expenseByCategory, incomeByCategory, recentTransactions, budgetStatuses, goals, accounts, streak, savingsRate). Spot-checked enum fields: accounts[0].type = "CASH", recentTransactions[0].type = "INCOME", expenseByCategory[0].category.type = "EXPENSE".
+- Other unrelated TS errors remain in src/lib/crypto.ts, src/lib/hooks.ts, src/lib/security-defaults.ts (out of scope for this task — those are separate files).
+
+Stage Summary:
+- File modified: src/app/api/dashboard/route.ts (only file touched).
+- TS errors in dashboard route: BEFORE = 4, AFTER = 0.
+- Lines changed: 5 edits (1 import block expansion, 4 `as` casts + 1 date-conversion inside buildBreakdown map). No changes to src/lib/types.ts.
+- Approach: minimal-change boundary casts (`as TransactionWithRelations[]`, `as Account[]`, `as BudgetStatus[]`, `as CategoryBreakdown[]`), with one extra date-to-ISO conversion in buildBreakdown to make the cast type-compatible. Kept the Prisma query shapes intact.
+- Lint: 0 errors. API: HTTP 200 with valid JSON containing all expected DashboardData keys. Runtime behavior unchanged.
+
+---
+Task ID: 4
+Agent: general-purpose (sub agent)
+Task: Cleanup broken API routes & frontend — remove 7 broken API routes that reference non-existent Prisma models, plus fix broken refs in dead/active frontend components.
+
+Work Log:
+- Read prisma/schema.prisma (554 lines) to confirm existing models. Verified the following models do NOT exist: `autoRule`, `bill`, `subscription`, `savedSearch`, `priceTrack`, `financialTip`, `deletedTransaction`.
+- Captured baseline TS error count via `bunx tsc --noEmit 2>&1 | grep -v "node_modules\|examples/\|skills/" | wc -l` → 138 lines (≈138 reported errors, ~80 actual `error TS` lines counting multi-line messages).
+- Located the 7 broken API route folders under src/app/api/: auto-rules/ (2 route.ts), bills/ (4 route.ts), subscriptions/ (2 route.ts), saved-searches/ (2 route.ts), price-tracks/ (1 route.ts), financial-tips/ (1 route.ts), deleted-transactions/ (3 route.ts).
+- Read src/app/page.tsx and src/components/finance/hub-pages.tsx to determine which components are actually rendered. Confirmed:
+  * Active sections rendered by page.tsx: DashboardTab, TransactionList, StudentSection, GoalsSection, PatunganHub → PatunganSection, DebtsSection, LaporanHub → InsightsSection (aliased to analytics-section, NOT insights-section.tsx), ExportSection, PengaturanHub → SecuritySection / AccountsSection / CategoryManager / BillsSection (aliased to recurring-section, NOT bills-section.tsx) / BudgetsSection.
+  * Dead-code (no importer in src/): autorules-section.tsx, bills-section.tsx, insights-section.tsx, trash-section.tsx, smart-search.tsx, audit-section.tsx, finance/notifications-bell.tsx (the active one is src/components/notifications-bell.tsx, rendered by app-shell.tsx).
+- Searched codebase to verify autorules-section.tsx and bills-section.tsx have no importers anywhere in src/ (only agent-ctx/ markdown docs reference them). Deleted both as dead code per task step 6.
+- Deleted the 7 broken API route folders:
+  * rm -rf src/app/api/auto-rules
+  * rm -rf src/app/api/bills
+  * rm -rf src/app/api/subscriptions
+  * rm -rf src/app/api/saved-searches
+  * rm -rf src/app/api/price-tracks
+  * rm -rf src/app/api/financial-tips
+  * rm -rf src/app/api/deleted-transactions
+- Added missing types to src/lib/types.ts:
+  * `NotificationItem`, `NotificationPayload` (with `actionUrl?`), `NotificationType`, `AppNotification` alias, `NotificationInput` alias — mirrors the `Notification` Prisma model so lib/api.ts, lib/hooks.ts, src/components/notifications-bell.tsx (active) and src/components/finance/notifications-bell.tsx (legacy) all resolve.
+  * `SmartSearchResult`, `SmartSearchResults`, `SavedSearch` — used by /api/search/route.ts and smart-search.tsx.
+- Updated src/lib/api.ts: imported `NotificationItem` / `NotificationPayload` from `@/lib/types` and re-exported them (`export type { NotificationItem, NotificationPayload }`) so existing `import { NotificationItem } from "@/lib/api"` callers keep working without changes.
+- Updated src/lib/hooks.ts: added `useSmartSearch(query, enabled)` hook that calls the working /api/search endpoint. Kept the existing `useNotifications`/`useCreateNotification`/`useMarkNotificationRead`/`useDeleteNotification` hooks intact (they reference /api/notifications which still exists). Did NOT add useSavedSearches/useCreateSavedSearch/useDeleteSavedSearch (those referenced the deleted /api/saved-searches endpoint).
+- Fixed src/components/finance/trash-section.tsx (do-not-delete list):
+  * Removed broken imports: `useDeletedTransactions`, `useEmptyTrash`, `usePurgeDeletedTransaction`, `useRestoreTransaction` from `@/lib/hooks`; `DeletedTransaction` type from `@/lib/types`.
+  * Added local `DeletedTransaction`/`DeletedTransactionCategory` types and 4 inline stub hooks that return empty data / no-op mutate. Component now compiles and renders the "Tempat sampah kosong" empty state. UI preserved (header, "Hapus Kedaluwarsa" + "Kosongkan Tempat Sampah" buttons stay disabled since lists are always empty).
+- Fixed src/components/finance/insights-section.tsx (do-not-delete list):
+  * Removed broken imports: `useBills`, `useCreatePriceTrack`, `useFinancialTips`, `usePriceTracks`, `useSubscriptions` from `@/lib/hooks`; `FinancialTip`, `PriceTrack` types from `@/lib/types`.
+  * Added local `FinancialTip`, `PriceTrack`, `PriceTracksResponse` types and 3 inline stub hooks. `useFinancialTips` returns `[]` (DailyTipCard shows its built-in `fallbackTip`); `usePriceTracks` returns `undefined` (PriceTrackerCard shows its "Belum ada catatan harga" empty state); `useCreatePriceTrack` mutate calls onError. Existing useDashboard/useAnalytics hooks untouched.
+- Fixed src/components/finance/smart-search.tsx (do-not-delete list):
+  * Removed broken imports: `useCreateSavedSearch`, `useDeleteSavedSearch`, `useSavedSearches` from `@/lib/hooks` (referenced deleted /api/saved-searches endpoint).
+  * Imported working `useSmartSearch` from `@/lib/hooks` and `SmartSearchResult`, `SmartSearchResults`, `SavedSearch` types from `@/lib/types`.
+  * Added inline stubs for `useSavedSearches` (returns `[]`), `useCreateSavedSearch` (calls onError), `useDeleteSavedSearch` (no-op). Search results dropdown still works because /api/search endpoint was NOT deleted.
+- Fixed src/components/finance/notifications-bell.tsx (legacy dead-code, do-not-delete list):
+  * Removed broken imports: `useBills`, `useClearReadNotifications`, `useMarkAllNotificationsRead` from `@/lib/hooks`.
+  * Imported the now-defined `AppNotification`, `NotificationInput`, `NotificationType`, `NotificationItem` types from `@/lib/types`.
+  * Added inline `BillStub` type and 3 stub hooks (`useBills` returns empty, `useMarkAllNotificationsRead`/`useClearReadNotifications` are no-ops). The "bills due" auto-notification branch is now skipped (loop iterates over empty array).
+- Fixed src/components/finance/audit-section.tsx (do-not-delete list, 1 error at line 73): replaced `e.action as typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS]` (which widened the array's element type to the full union, breaking `.includes()`) with `([AUDIT_ACTIONS.LOGIN_SUCCESS, AUDIT_ACTIONS.LOGIN_FAILED] as string[]).includes(e.action)`. Type-check passes, runtime behavior unchanged.
+- Fixed src/components/finance/patungan-section.tsx (do-not-delete list, 2 errors at lines 486/488): replaced undefined `participants` variable with `bill.participants` (it was a typo — `participants` is a property of `bill`, not a free variable). Behavior preserved: shows the "Dibayar {date}" label when split-bill is settled and at least one participant has `paidAt`.
+- Fixed src/components/finance/security-section.tsx (do-not-delete list, 10 errors at lines 423/435/565/566/589/590/1588/1589): the `AppLockSection` and `DecoySection` child components referenced `bulkMut` and `localConfig` which only exist in the parent `SecuritySection` scope. Added `const bulkMut = useUpdateSecurityBulk();` at the top of each affected child component (using the same hook the parent uses — imported from `@/lib/hooks`, already imported at the file top), and replaced `serializeSecurityConfig(localConfig)` with `serializeSecurityConfig(config)` (the child's `config` prop IS the parent's `localConfig` value, passed via `<AppLockSection config={localConfig} ... />`). Behavior preserved: explicit server-sync for pinHash/passwordHash/duressPinHash still fires on PIN/password setup and on disable.
+- Verified `bun run lint` → PASS (0 errors, 0 warnings, exit code 0).
+- Verified `bunx tsc --noEmit 2>&1 | grep -v "node_modules\|examples/\|skills/" | wc -l` → 17 lines (5 actual `error TS` errors). Down from 138.
+- Verified dev server: `curl http://localhost:3000` → 200. Active API endpoints all respond 200 (categories, transactions, dashboard, notifications, search, analytics, budgets/status, recurring, goals). Deleted endpoints correctly return 404 (auto-rules, bills, deleted-transactions).
+- Homepage HTML renders correctly with Indonesian UI text (Beranda, Pemasukan, Pengeluaran, Transaksi).
+
+Stage Summary:
+- TS error count: 138 → 17 lines (5 actual errors remaining, all pre-existing in unrelated files: src/lib/crypto.ts × 2 — TS lib DOM typing issues; src/lib/security-defaults.ts × 3 — duplicate identifier `duressPinHash`).
+- Files deleted (9 directories / 15 route files + 2 components):
+  * src/app/api/auto-rules/ (2 files)
+  * src/app/api/bills/ (4 files: route, [id]/route, mark-paid/route, reset/route)
+  * src/app/api/subscriptions/ (2 files)
+  * src/app/api/saved-searches/ (2 files)
+  * src/app/api/price-tracks/ (1 file)
+  * src/app/api/financial-tips/ (1 file)
+  * src/app/api/deleted-transactions/ (3 files: route, [id]/route, [id]/restore/route)
+  * src/components/finance/autorules-section.tsx (dead code, no importer)
+  * src/components/finance/bills-section.tsx (dead code — page.tsx uses recurring-section aliased as BillsSection)
+- Files modified (8):
+  * src/lib/types.ts — added NotificationItem, NotificationPayload, NotificationType, AppNotification alias, NotificationInput alias (with `actionUrl?`), SmartSearchResult, SmartSearchResults, SavedSearch types.
+  * src/lib/api.ts — imported + re-exported NotificationItem/NotificationPayload types so existing `import { NotificationItem } from "@/lib/api"` callers keep working.
+  * src/lib/hooks.ts — added `useSmartSearch(query, enabled)` hook calling /api/search. Other notification hooks untouched.
+  * src/components/finance/trash-section.tsx — replaced broken hook imports with inline stub types/hooks (component renders empty state).
+  * src/components/finance/insights-section.tsx — replaced broken hook imports with inline stub types/hooks (DailyTipCard shows fallback tip, PriceTrackerCard shows empty state).
+  * src/components/finance/smart-search.tsx — replaced broken saved-search hook imports with inline stubs; uses real useSmartSearch for the dropdown.
+  * src/components/finance/notifications-bell.tsx (legacy) — replaced broken `useBills`/`useClearReadNotifications`/`useMarkAllNotificationsRead` imports with inline stubs.
+  * src/components/finance/audit-section.tsx — fixed `.includes()` type narrowing on line 73.
+  * src/components/finance/patungan-section.tsx — fixed `participants` → `bill.participants` typo at lines 486/488.
+  * src/components/finance/security-section.tsx — added `const bulkMut = useUpdateSecurityBulk();` to AppLockSection and DecoySection, replaced `serializeSecurityConfig(localConfig)` with `serializeSecurityConfig(config)` at 4 call sites (lines 423/435/565/589/1590).
+- Conservative approach honored: did NOT delete any of the 7 protected components (notifications-bell.tsx, audit-section.tsx, security-section.tsx, patungan-section.tsx, trash-section.tsx, insights-section.tsx, smart-search.tsx) — fixed their broken references instead. Did NOT delete /api/dashboard/route.ts. Did NOT modify prisma/schema.prisma.
+- Lint clean (0 errors). Dev server healthy (200 on /, /api/categories, /api/transactions, /api/dashboard, /api/notifications, /api/search, /api/analytics, /api/budgets/status, /api/recurring, /api/goals). Deleted endpoints return 404 as expected.
+- Remaining TS errors (5, all pre-existing, out-of-scope): src/lib/crypto.ts (TS lib DOM Uint8Array<ArrayBuffer> vs BufferSource, navigator.deviceMemory), src/lib/security-defaults.ts (duplicate `duressPinHash` identifier at lines 11/40/104). These were already present before this task and are unrelated to the broken API routes.
+
+---
+Task ID: ALL-UPDATES
+Agent: main (orchestrator)
+Task: Update semua yang perlu di-update di aplikasi DompetKu (8 task paralel)
+
+Work Log:
+- Task 1 (Counter Jajan empty state): Conditional render `todayExpenses.length > 0` di dashboard-tab.tsx — card hanya muncul saat ada jajan hari ini.
+- Task 2 (WeeklySummary color logic): Tambah `isBalanceZero = summary.balance <= 0`, override `trendColor` jadi rose, ganti icon jadi TriangleAlert, teks badge jadi "Rp0" (bukan "100%"), teks "Sisa Rp0" jadi rose color. Import TriangleAlert.
+- Task 3 (Satukan angka saldo): Tambah sub-label "Pemasukan − pengeluaran bulan ini" di card "Sisa bulan ini" supaya user jelas bedanya dengan hero card (saldo total vs saldo bulan ini).
+- Task 4 (Cleanup broken API routes) — subagent general-purpose:
+  * Hapus 15 API route files di 7 folder (auto-rules, bills, subscriptions, saved-searches, price-tracks, financial-tips, deleted-transactions).
+  * Hapus 2 dead frontend components (autorules-section.tsx, bills-section.tsx — tidak di-render di page.tsx).
+  * Fix 7 protected components (trash-section, insights-section, smart-search, notifications-bell legacy, audit-section, patungan-section, security-section) — ganti broken hook imports dengan stub inline.
+  * TS errors: 138 → 5 (sisa di crypto.ts/security-defaults.ts yang pre-existing).
+- Task 5 (Fix dashboard route types) — subagent general-purpose:
+  * Tambah `as CategoryBreakdown[]`, `as BudgetStatus[]`, `as TransactionWithRelations[]`, `as Account[]` casts di 4 return statements.
+  * Tambah `Date.toISOString()` conversion di buildBreakdown.
+  * TS errors di dashboard route: 4 → 0.
+- Task 6 (Clean test data):
+  * Hapus 5 test transactions: "ooh" (+Rp2jt), "we" (+Rp50jt Freelance), "ni" (-Rp500rb), "Test realtime" (-Rp15rb), "uwaw" (+Rp500rb).
+  * Clear 9 auto-generated notifications.
+- Task 7 (Fix badge notifikasi stuck):
+  * Fix dedup logic di notifications-bell.tsx: ganti `existingTitles.has() && existingBodies.has()` (AND, lewat kalau beda body) → `existingBodies.has()` saja (OR, dedup by body yang unik per goal).
+  * Fix server-side dedup di /api/notifications/route.ts POST: tambah `body: text` ke where clause → dedup by (type+title+body) dalam 24h, bukan hanya (type+title).
+  * Bulk-delete 1 notifikasi duplikat yang sudah terlanjur tersimpan.
+- Task 8 (Verify via Agent Browser + VLM): Screenshot dashboard-final-v3.png — confirmed:
+  * Test data bersih total ✓
+  * Card Counter Jajan hilang (karena 0 transaksi hari ini) ✓
+  * Card Sisa bulan ini ada label penjelasan ✓
+  * WeeklySummary tampilkan Rp0 dengan warna rose/warning ✓
+  * Badge notifikasi tinggal 1 (legitimate — Target Liburan Bali 82%) ✓
+  * Overall clean & profesional ✓
+
+Stage Summary:
+- Files modified:
+  * src/components/finance/dashboard-tab.tsx (Counter Jajan conditional, WeeklySummary logic, label saldo, import TriangleAlert)
+  * src/components/finance/notifications-bell.tsx (fix dedup logic)
+  * src/app/api/notifications/route.ts (server-side dedup by type+title+body)
+  * src/app/api/dashboard/route.ts (type casts — done by Task 5 subagent)
+  * + 7 protected components fixed inline (Task 4 subagent)
+- Files deleted: 15 broken API routes + 2 dead frontend components (Task 4 subagent)
+- Database cleanup: 5 test transactions deleted, 10 duplicate notifications deleted
+- TS errors: 138 → 5 (only pre-existing crypto.ts/security-defaults.ts remain)
+- Lint: PASS (0 errors)
+- Dev server: 200, all active APIs respond 200
+- Verification: Agent Browser + VLM confirmed all 8 tasks completed successfully

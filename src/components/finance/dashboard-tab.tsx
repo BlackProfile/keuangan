@@ -15,6 +15,7 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
+  TriangleAlert,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -293,6 +294,9 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
                 ? "···"
                 : formatCurrency(summary?.monthBalance ?? 0)}
             </p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+              Pemasukan − pengeluaran bulan ini
+            </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-0.5 rounded-lg bg-muted/40 px-3 py-1.5">
             <p className="text-[10px] text-muted-foreground">Transaksi bulan ini</p>
@@ -304,14 +308,21 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
       </Card>
 
       {/* Counter Jajan Harian + Weekly Summary — 2 col grid */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <CounterJajanCard
-          count={todayExpenses.length}
-          avg={avgDailyJajan}
-          isLoading={rangeLoading}
-        />
-        <WeeklySummaryCard summary={weeklySummary} isLoading={rangeLoading} />
-      </div>
+      {todayExpenses.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CounterJajanCard
+            count={todayExpenses.length}
+            avg={avgDailyJajan}
+            isLoading={rangeLoading}
+          />
+          <WeeklySummaryCard summary={weeklySummary} isLoading={rangeLoading} />
+        </div>
+      )}
+      {todayExpenses.length === 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <WeeklySummaryCard summary={weeklySummary} isLoading={rangeLoading} />
+        </div>
+      )}
 
       {/* Comparison Bulan Lalu + Top 5 Jajan Favorit — 2 col grid */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -488,17 +499,27 @@ function WeeklySummaryCard({
   const trend = summary.trendPct;
   const isHemat = trend < 0;
   const isBoros = trend > 0;
+  const isBalanceZero = summary.balance <= 0;
   const trendLabel = isHemat
     ? `hemat ${Math.abs(Math.round(trend))}% vs minggu lalu`
     : isBoros
       ? `boros ${Math.round(trend)}% vs minggu lalu`
       : "sama dengan minggu lalu";
-  const trendColor = isHemat
-    ? "text-emerald-600 dark:text-emerald-400"
-    : isBoros
-      ? "text-rose-600 dark:text-rose-400"
-      : "text-muted-foreground";
-  const TrendIcon = isHemat ? ArrowDownRight : isBoros ? ArrowUpRight : Coins;
+  // Balance warning overrides trend color when sisa = 0 (or negative)
+  const trendColor = isBalanceZero
+    ? "text-rose-600 dark:text-rose-400"
+    : isHemat
+      ? "text-emerald-600 dark:text-emerald-400"
+      : isBoros
+        ? "text-rose-600 dark:text-rose-400"
+        : "text-muted-foreground";
+  const TrendIcon = isBalanceZero
+    ? TriangleAlert
+    : isHemat
+      ? ArrowDownRight
+      : isBoros
+        ? ArrowUpRight
+        : Coins;
 
   return (
     <Card className="p-4">
@@ -514,7 +535,7 @@ function WeeklySummaryCard({
             </p>
           </div>
         </div>
-        {!isLoading && (isHemat || isBoros) && (
+        {!isLoading && (isHemat || isBoros || isBalanceZero) && (
           <span
             className={cn(
               "flex shrink-0 items-center gap-0.5 text-xs font-medium tabular-nums",
@@ -522,7 +543,7 @@ function WeeklySummaryCard({
             )}
           >
             <TrendIcon className="h-3.5 w-3.5" />
-            {Math.abs(Math.round(trend))}%
+            {isBalanceZero ? "Rp0" : `${Math.abs(Math.round(trend))}%`}
           </span>
         )}
       </div>
@@ -530,7 +551,7 @@ function WeeklySummaryCard({
         <Skeleton className="mt-3 h-8 w-40" />
       ) : (
         <>
-          <p className="mt-3 text-lg font-bold tabular-nums">
+          <p className={cn("mt-3 text-lg font-bold tabular-nums", isBalanceZero && "text-rose-600 dark:text-rose-400")}>
             Sisa {formatCurrencyCompact(summary.balance)}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">

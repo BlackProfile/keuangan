@@ -7,11 +7,13 @@ import {
   parseDateLocal,
 } from "@/lib/format";
 import type {
+  Account,
   BudgetStatus,
   CategoryBreakdown,
   DashboardData,
   MonthlyData,
   Summary,
+  TransactionWithRelations,
 } from "@/lib/types";
 
 // GET /api/dashboard?month=YYYY-MM
@@ -142,19 +144,23 @@ export async function GET(req: Request) {
       const total = Array.from(map.values()).reduce((s, v) => s + v.total, 0);
       return Array.from(map.values())
         .map((v) => ({
-          category: v.category,
+          category: {
+            ...v.category,
+            createdAt: v.category.createdAt.toISOString(),
+            updatedAt: v.category.updatedAt.toISOString(),
+          },
           total: v.total,
           count: v.count,
           percentage: total > 0 ? (v.total / total) * 100 : 0,
         }))
-        .sort((a, b) => b.total - a.total);
+        .sort((a, b) => b.total - a.total) as CategoryBreakdown[];
     }
 
     const expenseByCategory = buildBreakdown("EXPENSE");
     const incomeByCategory = buildBreakdown("INCOME");
 
     // Budget statuses for viewed month
-    const budgetStatuses: BudgetStatus[] = budgets.map((b) => {
+    const budgetStatuses = budgets.map((b) => {
       const spent = monthTransactions
         .filter(
           (t) => t.type === "EXPENSE" && t.categoryId === b.categoryId
@@ -184,7 +190,7 @@ export async function GET(req: Request) {
         percentage,
         status,
       };
-    });
+    }) as BudgetStatus[];
 
     // Streak calculation
     const streak = calculateStreak(
@@ -221,7 +227,7 @@ export async function GET(req: Request) {
               updatedAt: t.account.updatedAt.toISOString(),
             }
           : null,
-      })),
+      })) as TransactionWithRelations[],
       budgetStatuses,
       goals: goals.map((g) => ({
         ...g,
@@ -233,7 +239,7 @@ export async function GET(req: Request) {
         ...a,
         createdAt: a.createdAt.toISOString(),
         updatedAt: a.updatedAt.toISOString(),
-      })),
+      })) as Account[],
       streak,
       savingsRate,
     };

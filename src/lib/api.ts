@@ -24,6 +24,8 @@ import type {
   GoalInput,
   Installment,
   InstallmentInput,
+  NotificationItem,
+  NotificationPayload,
   RecurringInput,
   RecurringTransaction,
   ShareLink,
@@ -41,6 +43,9 @@ import type {
   TransactionTemplateInput,
   TransferInput,
 } from "@/lib/types";
+
+// Re-export notification types so legacy callers using `import { NotificationItem } from "@/lib/api"` keep working.
+export type { NotificationItem, NotificationPayload };
 
 async function request<T>(
   url: string,

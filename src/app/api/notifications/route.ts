@@ -42,10 +42,12 @@ export async function POST(req: Request) {
     }
     const icon = (body.icon ?? "Bell").trim();
 
-    // Dedupe: same type+title within 24 hours
+    // Dedupe: same type+title+body within 24 hours
+    // (body is included so we can have per-goal milestone notifications like
+    //  "Target 80% Tercapai" with different goal names without false-deduping)
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const existing = await db.notification.findFirst({
-      where: { type, title, createdAt: { gte: since } },
+      where: { type, title, body: text, createdAt: { gte: since } },
       orderBy: { createdAt: "desc" },
     });
     if (existing) {

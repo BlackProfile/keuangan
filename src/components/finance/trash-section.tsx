@@ -34,13 +34,59 @@ import {
   formatDateLong,
   parseDateLocal,
 } from "@/lib/format";
-import {
-  useDeletedTransactions,
-  useEmptyTrash,
-  usePurgeDeletedTransaction,
-  useRestoreTransaction,
-} from "@/lib/hooks";
-import type { DeletedTransaction } from "@/lib/types";
+
+/**
+ * NOTE: The `deletedTransaction` Prisma model was never added to
+ * prisma/schema.prisma, so the /api/deleted-transactions API routes were
+ * removed. This component is kept as an empty-state placeholder for the
+ * legacy "Trash" tab — soft-deleted transactions are no longer tracked
+ * separately (deletes are now permanent via DELETE /api/transactions/[id]).
+ *
+ * The local types and stub hooks below let the component compile without
+ * the removed dependencies.
+ */
+interface DeletedTransactionCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+}
+
+interface DeletedTransaction {
+  id: string;
+  type: "INCOME" | "EXPENSE";
+  amount: number;
+  description: string;
+  date: string;
+  merchant: string | null;
+  deletedAt: string;
+  expiresAt: string;
+  category: DeletedTransactionCategory | null;
+}
+
+function useDeletedTransactions() {
+  return { data: [] as DeletedTransaction[], isLoading: false };
+}
+function useRestoreTransaction() {
+  return {
+    isPending: false,
+    variables: undefined as string | undefined,
+    mutate: (_id: string, _opts?: unknown) => {},
+  };
+}
+function usePurgeDeletedTransaction() {
+  return {
+    isPending: false,
+    variables: undefined as string | undefined,
+    mutate: (_id: string, _opts?: unknown) => {},
+  };
+}
+function useEmptyTrash() {
+  return {
+    isPending: false,
+    mutate: (_expiredOnly: boolean, _opts?: unknown) => {},
+  };
+}
 
 const TRASH_RETENTION_DAYS = 30;
 

@@ -19,14 +19,39 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  useCreateSavedSearch,
-  useDeleteSavedSearch,
-  useSavedSearches,
-  useSmartSearch,
-} from "@/lib/hooks";
+import { useSmartSearch } from "@/lib/hooks";
 import { LucideIcon } from "@/components/lucide-icon";
-import type { SmartSearchResult, SmartSearchResults } from "@/lib/types";
+import type { SmartSearchResult, SmartSearchResults, SavedSearch } from "@/lib/types";
+
+/**
+ * NOTE: The `savedSearch` Prisma model was never added to prisma/schema.prisma,
+ * so the /api/saved-searches API routes were removed. The saved-search UI
+ * (chips + "Simpan" button) is kept for visual completeness but the underlying
+ * mutations are stubbed to no-ops and `useSavedSearches` always returns empty.
+ *
+ * The actual smart-search endpoint (/api/search) still works — we use the
+ * `useSmartSearch` hook from lib/hooks.
+ */
+function useSavedSearches() {
+  return { data: [] as SavedSearch[] };
+}
+function useCreateSavedSearch() {
+  return {
+    isPending: false,
+    mutate: (_data: { name: string; filters: string }, opts?: {
+      onSuccess?: () => void;
+      onError?: (e: Error) => void;
+    }) => {
+      opts?.onError?.(new Error("Saved searches tidak tersedia di mode ini."));
+    },
+  };
+}
+function useDeleteSavedSearch() {
+  return {
+    isPending: false,
+    mutate: (_id: string, _opts?: unknown) => {},
+  };
+}
 
 interface SmartSearchProps {
   onNavigate?: (section: string, id?: string) => void;

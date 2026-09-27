@@ -1036,6 +1036,25 @@ export function useDeleteNotification() {
 
 export type { NotificationItem, NotificationPayload };
 
+// ---------- Smart Search ----------
+// Calls /api/search (which is a working endpoint). The companion
+// /api/saved-searches endpoint was removed (no Prisma model), so saved-search
+// hooks are NOT provided here — callers must stub them locally.
+import type { SmartSearchResults } from "@/lib/types";
+
+export function useSmartSearch(query: string, enabled = true) {
+  return useQuery({
+    queryKey: ["smart-search", query] as const,
+    queryFn: async () => {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error("Gagal melakukan pencarian.");
+      return (await res.json()) as SmartSearchResults;
+    },
+    enabled: enabled && query.trim().length > 0,
+    staleTime: 30_000,
+  });
+}
+
 // ---------- Installment Payments ----------
 export function useInstallmentPayments(params?: { entityType?: string; entityId?: string }) {
   return useQuery({

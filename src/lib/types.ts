@@ -777,3 +777,68 @@ export interface DailyAllowanceInfo {
     message: string;
   };
 }
+
+// ---------- Notifications ----------
+// Mirrors the `Notification` Prisma model (see prisma/schema.prisma).
+export type NotificationType =
+  | "DAILY_REMINDER"
+  | "BILL_DUE"
+  | "BUDGET_ALERT"
+  | "GOAL_MILESTONE"
+  | "ANOMALY"
+  | string; // allow ad-hoc types
+
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  icon: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface NotificationPayload {
+  type: string;
+  title: string;
+  body: string;
+  icon?: string;
+  actionUrl?: string;
+}
+
+// Kept for backwards compatibility with older code that imports `AppNotification`.
+export type AppNotification = NotificationItem;
+export type NotificationInput = NotificationPayload;
+
+// ---------- Smart Search ----------
+// Used by /api/search route and the (legacy) SmartSearch component.
+export interface SmartSearchResult {
+  id: string;
+  name: string;
+  type: "transaction" | "category" | "account" | "goal";
+  icon: string;
+  color: string;
+  subtitle?: string;
+  badge: string;
+}
+
+export interface SmartSearchResults {
+  query: string;
+  transactions: SmartSearchResult[];
+  categories: SmartSearchResult[];
+  accounts: SmartSearchResult[];
+  goals: SmartSearchResult[];
+  parsedQuery: {
+    description: string | null;
+    from: string | null;
+    to: string | null;
+    prevMonth: boolean;
+  };
+}
+
+export interface SavedSearch {
+  id: string;
+  name: string;
+  filters: string;
+  createdAt: string;
+}

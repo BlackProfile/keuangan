@@ -410,6 +410,7 @@ function AppLockSection({
   updateConfig: (p: Partial<SecurityConfig>) => void;
 }) {
   const setSecrets = useSecurityStore((s) => s.setSecrets);
+  const bulkMut = useUpdateSecurityBulk();
   const [pinDialog, setPinDialog] = React.useState(false);
   const [passwordDialog, setPasswordDialog] = React.useState(false);
 
@@ -420,7 +421,7 @@ function AppLockSection({
       updateConfig({ pinEnabled: false, pinHash: "" });
       setSecrets({ pinHash: null });
       // Clear from server too
-      bulkMut.mutate({ ...serializeSecurityConfig(localConfig), pinEnabled: "false", pinHash: "" });
+      bulkMut.mutate({ ...serializeSecurityConfig(config), pinEnabled: "false", pinHash: "" });
       auditLog(AUDIT_ACTIONS.PIN_CHANGE, "PIN dinonaktifkan", true);
       toast.success("PIN dinonaktifkan");
     }
@@ -432,7 +433,7 @@ function AppLockSection({
     } else {
       updateConfig({ passwordEnabled: false, passwordHash: "" });
       setSecrets({ passwordHash: null });
-      bulkMut.mutate({ ...serializeSecurityConfig(localConfig), passwordEnabled: "false", passwordHash: "" });
+      bulkMut.mutate({ ...serializeSecurityConfig(config), passwordEnabled: "false", passwordHash: "" });
       toast.success("Password Master dinonaktifkan");
     }
   }
@@ -563,7 +564,7 @@ function AppLockSection({
             setSecrets({ pinHash: hash });
             // Save to server so it syncs across all devices
             bulkMut.mutate(
-              { ...serializeSecurityConfig(localConfig), pinEnabled: "true", pinHash: hash },
+              { ...serializeSecurityConfig(config), pinEnabled: "true", pinHash: hash },
               {
                 onSuccess: () => toast.success("PIN aktif & tersinkron ke semua device."),
                 onError: () => toast.error("PIN aktif lokal, tapi gagal sync ke server."),
@@ -587,7 +588,7 @@ function AppLockSection({
             setSecrets({ passwordHash: hash });
             // Save to server for cross-device sync
             bulkMut.mutate(
-              { ...serializeSecurityConfig(localConfig), passwordEnabled: "true", passwordHash: hash },
+              { ...serializeSecurityConfig(config), passwordEnabled: "true", passwordHash: hash },
               {
                 onSuccess: () => toast.success("Password Master aktif & tersinkron."),
                 onError: () => toast.error("Password aktif lokal, tapi gagal sync."),
@@ -1519,6 +1520,7 @@ function DecoySection({
   updateConfig: (p: Partial<SecurityConfig>) => void;
 }) {
   const setSecrets = useSecurityStore((s) => s.setSecrets);
+  const bulkMut = useUpdateSecurityBulk();
   const [duressDialog, setDuressDialog] = React.useState(false);
 
   return (
@@ -1586,7 +1588,7 @@ function DecoySection({
             setSecrets({ duressPinHash: hash });
             // Save to server for cross-device sync
             bulkMut.mutate(
-              { ...serializeSecurityConfig(localConfig), duressPinHash: hash, decoyEnabled: "true" },
+              { ...serializeSecurityConfig(config), duressPinHash: hash, decoyEnabled: "true" },
               {
                 onSuccess: () => toast.success("PIN duress disimpan & tersinkron."),
                 onError: () => toast.error("PIN duress lokal, gagal sync."),

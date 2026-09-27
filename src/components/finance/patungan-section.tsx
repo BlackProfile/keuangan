@@ -483,9 +483,9 @@ function SplitBillCard({ bill }: { bill: SplitBill }) {
               Lunas
             </Badge>
           )}
-          {isSettled && participants.some((p) => p.paidAt) && (
+          {isSettled && bill.participants.some((p) => p.paidAt) && (
             <span className="text-[11px] text-muted-foreground">
-              Dibayar {formatDate(participants.find((p) => p.paidAt)?.paidAt ?? new Date())}
+              Dibayar {formatDate(bill.participants.find((p) => p.paidAt)?.paidAt ?? new Date())}
             </span>
           )}
         </div>

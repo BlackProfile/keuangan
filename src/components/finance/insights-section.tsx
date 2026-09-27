@@ -50,19 +50,70 @@ import {
 } from "@/lib/format";
 import {
   useAnalytics,
-  useBills,
-  useCreatePriceTrack,
   useDashboard,
-  useFinancialTips,
-  usePriceTracks,
-  useSubscriptions,
 } from "@/lib/hooks";
 import type {
   AnalyticsData,
   DashboardData,
-  FinancialTip,
-  PriceTrack,
 } from "@/lib/types";
+
+/**
+ * NOTE: The backend models `financialTip` and `priceTrack` were never added to
+ * prisma/schema.prisma, so the corresponding API routes
+ * (/api/financial-tips, /api/price-tracks) were removed.
+ * To keep this component compiling (it is intentionally kept as a dead-code
+ * fallback for the legacy "Insights" tab — the active InsightsSection in
+ * page.tsx is aliased to analytics-section), we stub the removed hooks/types
+ * below so the UI renders an empty state without crashing.
+ */
+
+interface FinancialTip {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  icon: string;
+  createdAt: string;
+}
+
+interface PriceTrack {
+  id: string;
+  itemName: string;
+  price: number;
+  merchant?: string | null;
+  date: string;
+}
+
+interface PriceTracksResponse {
+  groups: Array<{
+    itemName: string;
+    minPrice: number;
+    maxPrice: number;
+    count: number;
+    merchants?: string[];
+    entries?: PriceTrack[];
+  }>;
+  total: number;
+}
+
+// Stub hooks — return empty data so the UI renders its empty state.
+function useFinancialTips() {
+  return { data: [] as FinancialTip[], isLoading: false };
+}
+function usePriceTracks() {
+  return { data: undefined as PriceTracksResponse | undefined, isLoading: false };
+}
+function useCreatePriceTrack() {
+  return {
+    isPending: false,
+    mutate: (_data: { itemName: string; price: number; merchant?: string }, opts?: {
+      onSuccess?: () => void;
+      onError?: (e: Error) => void;
+    }) => {
+      opts?.onError?.(new Error("Pelacak harga tidak tersedia di mode ini."));
+    },
+  };
+}
 
 /** Color per tip category (backend stores categories as lowercase strings). */
 const TIP_CATEGORY_COLORS: Record<string, string> = {
