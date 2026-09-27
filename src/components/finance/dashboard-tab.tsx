@@ -9,8 +9,6 @@ import {
   CalendarRange,
   Coins,
   Flame,
-  GraduationCap,
-  Leaf,
   ListOrdered,
   Plus,
   Sparkles,
@@ -23,7 +21,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { LucideIcon } from "@/components/lucide-icon";
 import { cn } from "@/lib/utils";
 import {
@@ -49,58 +46,11 @@ interface Props {
   onViewAll: () => void;
 }
 
-const HEMAT_KEY = "dompetku:modeHemat";
-const ACADEMIC_KEY = "dompetku:academicMode";
-type AcademicMode = "OFF" | "UTS" | "UAS";
-
 export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
   // Avoid hydration mismatch — compute greeting on client only.
   const [greeting, setGreeting] = React.useState<string>("");
   React.useEffect(() => {
     setGreeting(getGreeting());
-  }, []);
-
-  // --- Mode Hemat (persisted to localStorage) ---
-  const [modeHemat, setModeHemat] = React.useState(false);
-  React.useEffect(() => {
-    try {
-      setModeHemat(localStorage.getItem(HEMAT_KEY) === "true");
-    } catch {
-      // ignore — localStorage may be unavailable (SSR / privacy mode)
-    }
-  }, []);
-  const toggleModeHemat = React.useCallback((v: boolean) => {
-    setModeHemat(v);
-    try {
-      localStorage.setItem(HEMAT_KEY, String(v));
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // --- Mode UTS/UAS (persisted, visual indicator only) ---
-  const [academicMode, setAcademicMode] = React.useState<AcademicMode>("OFF");
-  React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem(ACADEMIC_KEY) as AcademicMode | null;
-      if (saved === "UTS" || saved === "UAS" || saved === "OFF") {
-        setAcademicMode(saved);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-  const cycleAcademicMode = React.useCallback(() => {
-    setAcademicMode((prev) => {
-      const next: AcademicMode =
-        prev === "OFF" ? "UTS" : prev === "UTS" ? "UAS" : "OFF";
-      try {
-        localStorage.setItem(ACADEMIC_KEY, next);
-      } catch {
-        // ignore
-      }
-      return next;
-    });
   }, []);
 
   const monthKey = getMonthKey(new Date());
@@ -246,13 +196,10 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
   // ---- Derived: comparison bulan lalu (from analytics) ----
   const monthComparison = analytics?.monthComparison;
 
-  // Top budget (most at-risk) — hide "Hiburan" if Mode Hemat is ON
+  // Top budget (most at-risk)
   const topBudget = React.useMemo(() => {
-    const list = modeHemat
-      ? budgets.filter((b) => b.category?.name !== "Hiburan")
-      : budgets.slice();
-    return list.slice().sort((a, b) => b.percentage - a.percentage)[0];
-  }, [budgets, modeHemat]);
+    return budgets.slice().sort((a, b) => b.percentage - a.percentage)[0];
+  }, [budgets]);
 
   const topGoal = React.useMemo(() => {
     return goals
@@ -264,75 +211,8 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
       )[0];
   }, [goals]);
 
-  // Academic mode label & color
-  const academicBadge = React.useMemo(() => {
-    if (academicMode === "UTS")
-      return { label: "Mode UTS", color: "bg-amber-500 text-white" };
-    if (academicMode === "UAS")
-      return { label: "Mode UAS", color: "bg-rose-500 text-white" };
-    return null;
-  }, [academicMode]);
-
   return (
     <div className="space-y-4">
-      {/* Mode toggles row — Hemat switch + Mode UTS/UAS button */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Card
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 transition-colors",
-            modeHemat
-              ? "border-emerald-500/40 bg-emerald-500/10"
-              : "bg-card",
-          )}
-        >
-          <Leaf
-            className={cn(
-              "h-4 w-4 shrink-0",
-              modeHemat ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
-            )}
-          />
-          <span className="text-xs font-medium">Mode Hemat</span>
-          <Switch checked={modeHemat} onCheckedChange={toggleModeHemat} aria-label="Mode Hemat" />
-        </Card>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={cycleAcademicMode}
-          className={cn(
-            "h-9 gap-1.5 px-3 text-xs font-medium",
-            academicMode === "UTS" && "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-            academicMode === "UAS" && "border-rose-500/50 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-          )}
-          aria-label="Ganti Mode UTS/UAS"
-        >
-          <GraduationCap className="h-4 w-4" />
-          {academicMode === "OFF"
-            ? "Mode Kuliah"
-            : academicMode === "UTS"
-              ? "Mode UTS"
-              : "Mode UAS"}
-        </Button>
-
-        {academicBadge && (
-          <Badge className={cn("gap-1", academicBadge.color)}>
-            <GraduationCap className="h-3 w-3" />
-            {academicBadge.label}
-          </Badge>
-        )}
-
-        {modeHemat && (
-          <Badge
-            variant="outline"
-            className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          >
-            <Leaf className="h-3 w-3" />
-            Hemat aktif
-          </Badge>
-        )}
-      </div>
-
       {/* Hero — big balance + quick add */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -429,7 +309,6 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
           count={todayExpenses.length}
           avg={avgDailyJajan}
           isLoading={rangeLoading}
-          academicMode={academicMode}
         />
         <WeeklySummaryCard summary={weeklySummary} isLoading={rangeLoading} />
       </div>
@@ -535,12 +414,10 @@ function CounterJajanCard({
   count,
   avg,
   isLoading,
-  academicMode,
 }: {
   count: number;
   avg: number;
   isLoading: boolean;
-  academicMode: AcademicMode;
 }) {
   const avgRounded = Math.round(avg * 10) / 10;
   const diff = count - avg;
@@ -566,9 +443,7 @@ function CounterJajanCard({
           </span>
           <div className="min-w-0">
             <p className="truncate text-xs text-muted-foreground">
-              {academicMode === "UTS" || academicMode === "UAS"
-                ? "Jajan hari ini"
-                : "Counter jajan"}
+              Counter jajan
             </p>
             <p className="text-[11px] text-muted-foreground/70">Hari ini</p>
           </div>

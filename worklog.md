@@ -2301,3 +2301,43 @@ Stage Summary:
 - Result: dashboard sekarang langsung dari hero card (saldo utama) ke monthly summary card, tanpa card empty state "Sisa Hari Ini" di antaranya.
 - Note: User screenshot tidak tersync ke server (mount conflict tmpfs+ossfs). Asumsi berdasarkan analisis VLM. Jika user maksud elemen lain, perlu konfirmasi ulang.
 - Lint clean, dev server healthy, Agent Browser verified.
+
+---
+Task ID: DELETE-ALL-MODES
+Agent: main (orchestrator)
+Task: Hapus semua "mode" dari dashboard (Mode Hemat + Mode Kuliah/UTS/UAS + badge hemat aktif)
+
+Work Log:
+- User: "hapus semua mode" — instruksi jelas, hapus seluruh fitur mode toggle di dashboard.
+- Identifikasi elemen mode di dashboard-tab.tsx:
+  * Constants: HEMAT_KEY, ACADEMIC_KEY, AcademicMode type
+  * State: modeHemat, academicMode (dengan localStorage persistence)
+  * Functions: toggleModeHemat, cycleAcademicMode, academicBadge useMemo
+  * UI: Card Mode Hemat (switch + Leaf icon), Button Mode Kuliah/UTS/UAS (GraduationCap icon), Badge "Hemat aktif", Badge academic mode
+  * Logic: topBudget filter Hiburan when modeHemat ON, CounterJajanCard conditional label "Jajan hari ini" vs "Counter jajan"
+- Fix:
+  1. Hapus constants HEMAT_KEY, ACADEMIC_KEY, AcademicMode type (lines 52-54).
+  2. Hapus state modeHemat + academicMode + localStorage effects + toggle/cycle functions.
+  3. Hapus academicBadge useMemo.
+  4. Hapus topBudget filter Hiburan (sekarang tampilkan semua kategori).
+  5. Hapus conditional label di CounterJajanCard — tetap "Counter jajan".
+  6. Hapus academicMode prop dari CounterJajanCard.
+  7. Hapus seluruh "Mode toggles row" JSX block (~55 lines: Card Mode Hemat + Button Mode Kuliah + badge hemat + badge academic).
+  8. Hapus unused imports: GraduationCap, Leaf, Switch.
+  9. Pertahankan greeting logic (sebelumnya ikut terhapus saat hapus mode state — restore).
+- `bun run lint` → PASS (0 errors).
+- Verification via Agent Browser + VLM:
+  * "Toggle Mode Hemat sudah hilang" ✓
+  * "Button Mode Kuliah/UTS/UAS sudah hilang" ✓
+  * "Badge Hemat aktif sudah hilang" ✓
+  * "Dashboard langsung dari hero card tanpa mode toggles di atasnya" ✓
+- Dev log clean.
+
+Stage Summary:
+- File modified: src/components/finance/dashboard-tab.tsx
+  - Removed: HEMAT_KEY, ACADEMIC_KEY, AcademicMode type, modeHemat state + persistence, academicMode state + persistence, toggleModeHemat, cycleAcademicMode, academicBadge useMemo, topBudget Hiburan filter, CounterJajanCard academicMode prop + conditional label, entire "Mode toggles row" JSX block (~55 lines).
+  - Removed imports: GraduationCap, Leaf, Switch.
+  - Kept: greeting logic (restored), topBudget (now unfiltered), topGoal, CounterJajanCard (now always "Counter jajan" label).
+- Note: academicMode di student-section.tsx (data semester mahasiswa KULIAH/UTS/UAS dari DB profile) TIDAK dihapus — itu berbeda, data profil bukan toggle dashboard.
+- Result: dashboard sekarang langsung dari hero card (saldo utama) ke summary cards, tanpa mode toggles.
+- Lint clean, dev server healthy, Agent Browser verified.
