@@ -14,7 +14,10 @@ import {
   X,
   Coffee,
   Bell,
+  ArrowDown,
+  ArrowUp,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -60,6 +63,7 @@ interface NavItem {
   id: SectionId;
   label: string;
   icon: React.ReactNode;
+  badge?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -73,11 +77,12 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const BOTTOM_NAV_ITEMS: NavItem[] = [
-  { id: "beranda", label: "Home", icon: <Home className="h-5 w-5" /> },
-  { id: "transaksi", label: "Catat", icon: <ListPlus className="h-5 w-5" /> },
-  { id: "uang-saku", label: "Saku", icon: <Wallet className="h-5 w-5" /> },
-  { id: "target", label: "Target", icon: <Target className="h-5 w-5" /> },
-  { id: "patungan", label: "Bagi", icon: <Users className="h-5 w-5" /> },
+  { id: "beranda", label: "Home", icon: <Home className="h-5 w-5" />, badge: false },
+  { id: "transaksi", label: "Catat", icon: <ListPlus className="h-5 w-5" />, badge: false },
+  { id: "uang-saku", label: "Saku", icon: <Wallet className="h-5 w-5" />, badge: false },
+  { id: "target", label: "Target", icon: <Target className="h-5 w-5" />, badge: false },
+  { id: "patungan", label: "Bagi", icon: <Users className="h-5 w-5" />, badge: false },
+  { id: "pengaturan", label: "Lainnya", icon: <Settings className="h-5 w-5" />, badge: false },
 ];
 
 interface Props {
@@ -90,6 +95,7 @@ interface Props {
 
 export function AppShell({ active, onNavigate, onAdd, onJajan, children }: Props) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [fabExpanded, setFabExpanded] = React.useState(false);
 
   // Resolve which main section the active id belongs to (for highlighting).
   const activeMain: SectionId = (() => {
@@ -262,7 +268,7 @@ export function AppShell({ active, onNavigate, onAdd, onJajan, children }: Props
         </footer>
       </div>
 
-      {/* ============ Mobile bottom navigation ============ */}
+      {/* ============ Mobile bottom navigation (Material 3 style) ============ */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-stretch justify-around border-t border-border bg-background/95 backdrop-blur-md lg:hidden">
         {BOTTOM_NAV_ITEMS.map((item) => {
           const isActive = activeMain === item.id;
@@ -270,55 +276,163 @@ export function AppShell({ active, onNavigate, onAdd, onJajan, children }: Props
             <button
               key={item.id}
               onClick={() => handleNavigate(item.id)}
-              className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors",
-                isActive
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+              className="relative flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors"
               aria-label={item.label}
               aria-current={isActive ? "page" : undefined}
             >
-              <span className={cn(isActive && "scale-110 transition-transform")}>
-                {item.icon}
+              <span
+                className={cn(
+                  "relative flex items-center justify-center rounded-full px-3 py-1.5 transition-colors duration-200",
+                  isActive ? "bg-primary/15" : "bg-transparent",
+                )}
+              >
+                <motion.span
+                  animate={{ scale: isActive ? 1.1 : 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                  className={cn(
+                    "flex items-center justify-center",
+                    isActive ? "text-primary" : "text-muted-foreground",
+                  )}
+                >
+                  {item.icon}
+                </motion.span>
+                {item.badge && (
+                  <span
+                    className="absolute right-1 top-0 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-background"
+                    aria-hidden="true"
+                  />
+                )}
               </span>
-              <span>{item.label}</span>
+              <span
+                className={cn(
+                  "transition-colors",
+                  isActive
+                    ? "text-primary font-medium"
+                    : "text-muted-foreground",
+                )}
+              >
+                {item.label}
+              </span>
             </button>
           );
         })}
-        <button
-          onClick={() => handleNavigate("pengaturan")}
-          className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors",
-            activeMain === "pengaturan"
-              ? "text-primary"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          aria-label="Lainnya"
-          aria-current={activeMain === "pengaturan" ? "page" : undefined}
-        >
-          <Settings className="h-5 w-5" />
-          <span>Lainnya</span>
-        </button>
       </nav>
 
-      {/* ============ Mobile FABs (jajan left + tambah right) ============ */}
-      <button
-        onClick={onJajan}
-        className="fixed bottom-20 left-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 transition-transform hover:scale-105 active:scale-95 sm:hidden"
-        aria-label="Jajan cepat"
-      >
-        <Coffee className="h-5 w-5" />
-        <span className="sr-only">Jajan cepat</span>
-      </button>
+      {/* ============ Mobile expandable FAB (Material 3 Speed Dial) ============ */}
+      {/* Dark scrim when expanded */}
+      <AnimatePresence>
+        {fabExpanded && (
+          <motion.button
+            key="fab-scrim"
+            onClick={() => setFabExpanded(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm sm:hidden"
+            aria-label="Tutup menu aksi cepat"
+            tabIndex={fabExpanded ? 0 : -1}
+          />
+        )}
+      </AnimatePresence>
 
-      <button
-        onClick={onAdd}
-        className="fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform hover:scale-105 active:scale-95 sm:hidden"
-        aria-label="Tambah transaksi"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {/* FAB + speed dial options */}
+      <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 sm:hidden">
+        <AnimatePresence>
+          {fabExpanded && (
+            <>
+              <motion.button
+                key="fab-pemasukan"
+                onClick={() => {
+                  onAdd();
+                  setFabExpanded(false);
+                }}
+                initial={{ opacity: 0, y: 24, scale: 0.85 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 24, scale: 0.85 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 22,
+                  delay: 0,
+                }}
+                className="flex items-center gap-2 rounded-full bg-emerald-600 py-2 pl-4 pr-2 text-white shadow-lg shadow-emerald-600/30"
+                aria-label="Tambah pemasukan"
+              >
+                <span className="text-sm font-medium">Pemasukan</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/50">
+                  <ArrowDown className="h-4 w-4" />
+                </span>
+              </motion.button>
+
+              <motion.button
+                key="fab-pengeluaran"
+                onClick={() => {
+                  onAdd();
+                  setFabExpanded(false);
+                }}
+                initial={{ opacity: 0, y: 24, scale: 0.85 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 24, scale: 0.85 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 22,
+                  delay: 0.05,
+                }}
+                className="flex items-center gap-2 rounded-full bg-rose-500 py-2 pl-4 pr-2 text-white shadow-lg shadow-rose-500/30"
+                aria-label="Tambah pengeluaran"
+              >
+                <span className="text-sm font-medium">Pengeluaran</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-400/50">
+                  <ArrowUp className="h-4 w-4" />
+                </span>
+              </motion.button>
+
+              <motion.button
+                key="fab-jajan"
+                onClick={() => {
+                  onJajan();
+                  setFabExpanded(false);
+                }}
+                initial={{ opacity: 0, y: 24, scale: 0.85 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 24, scale: 0.85 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 22,
+                  delay: 0.1,
+                }}
+                className="flex items-center gap-2 rounded-full bg-amber-500 py-2 pl-4 pr-2 text-white shadow-lg shadow-amber-500/30"
+                aria-label="Jajan cepat"
+              >
+                <span className="text-sm font-medium">Jajan cepat</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-400/50">
+                  <Coffee className="h-4 w-4" />
+                </span>
+              </motion.button>
+            </>
+          )}
+        </AnimatePresence>
+
+        <motion.button
+          onClick={() => setFabExpanded((v) => !v)}
+          whileTap={{ scale: 0.9 }}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30"
+          aria-label={fabExpanded ? "Tutup menu aksi cepat" : "Tambah transaksi"}
+          aria-expanded={fabExpanded}
+          aria-haspopup="menu"
+        >
+          <motion.span
+            animate={{ rotate: fabExpanded ? 45 : 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            className="flex items-center justify-center"
+          >
+            <Plus className="h-6 w-6" />
+          </motion.span>
+        </motion.button>
+      </div>
     </div>
   );
 }

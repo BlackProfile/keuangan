@@ -8,6 +8,8 @@ import {
   ArrowUpRight,
   CalendarRange,
   Coins,
+  Eye,
+  EyeOff,
   Flame,
   ListOrdered,
   Plus,
@@ -16,6 +18,7 @@ import {
   TrendingDown,
   TrendingUp,
   TriangleAlert,
+  Wallet,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +26,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LucideIcon } from "@/components/lucide-icon";
+import {
+  AnimatedNumber,
+  DonutChart,
+  MiniBarChart,
+  ProgressRing,
+  Sparkline,
+} from "@/components/finance/chart-widgets";
 import { cn } from "@/lib/utils";
 import {
   addDays,
@@ -52,6 +62,28 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
   const [greeting, setGreeting] = React.useState<string>("");
   React.useEffect(() => {
     setGreeting(getGreeting());
+  }, []);
+
+  // Show/hide balance toggle (persisted to localStorage)
+  const [showBalance, setShowBalance] = React.useState(true);
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("dompetku:showBalance");
+      if (saved !== null) setShowBalance(saved !== "false");
+    } catch {
+      // ignore
+    }
+  }, []);
+  const toggleBalance = React.useCallback(() => {
+    setShowBalance((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("dompetku:showBalance", String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
   }, []);
 
   const monthKey = getMonthKey(new Date());
@@ -194,6 +226,52 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
     };
   }, [rangeTx, today]);
 
+  // ---- Derived: 14-day sparkline data (expenses per day) ----
+  const sparklineData = React.useMemo(() => {
+    if (!rangeTx) return [] as number[];
+    const todayDate = parseDateLocal(todayStr);
+    const days: number[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = addDays(todayDate, -i);
+      const dStr = formatDateInput(d);
+      const total = rangeTx
+        .filter((t) => {
+          if (t.type !== "EXPENSE") return false;
+          return t.date.startsWith(dStr);
+        })
+        .reduce((s, t) => s + t.amount, 0);
+      days.push(total);
+    }
+    return days;
+  }, [rangeTx, todayStr]);
+
+  // ---- Derived: weekly mini bar chart data (7 hari, Sen-Min) ----
+  const weeklyBarData = React.useMemo(() => {
+    if (!rangeTx) return [];
+    const todayDate = parseDateLocal(todayStr);
+    const labels = ["Sn", "Sl", "Rb", "Km", "Jm", "Sb", "Mg"];
+    const todayDay = (todayDate.getDay() + 6) % 7; // 0=Sen
+    const result: { label: string; value: number; isToday?: boolean }[] = [];
+    // start from last Monday
+    const monday = addDays(todayDate, -todayDay);
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(monday, i);
+      const dStr = formatDateInput(d);
+      const total = rangeTx
+        .filter((t) => {
+          if (t.type !== "EXPENSE") return false;
+          return t.date.startsWith(dStr);
+        })
+        .reduce((s, t) => s + t.amount, 0);
+      result.push({
+        label: labels[i],
+        value: total,
+        isToday: i === todayDay,
+      });
+    }
+    return result;
+  }, [rangeTx, todayStr]);
+
   // ---- Derived: comparison bulan lalu (from analytics) ----
   const monthComparison = analytics?.monthComparison;
 
@@ -214,44 +292,84 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Hero — big balance + quick add */}
+      {/* Hero — glassmorphism card with sparkline + hide/show balance */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <Card className="relative overflow-hidden border-0 p-5 text-white shadow-xl ring-inner-glow gradient-hero sm:p-6">
-          <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10" />
-          <div className="absolute -bottom-16 right-24 h-32 w-32 rounded-full bg-white/5" />
+        <Card className="relative overflow-hidden border-0 p-5 text-white shadow-2xl shadow-emerald-900/20 gradient-hero sm:p-6">
+          {/* Decorative orbs */}
+          <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/5 blur-xl" />
+          {/* Sparkline in background */}
+          {sparklineData.length > 0 && !isLoading && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 opacity-70">
+              <Sparkline
+                data={sparklineData}
+                width={400}
+                height={100}
+                className="h-full w-full"
+                strokeClassName="stroke-white/80"
+                fillClassName="fill-white/15"
+                strokeWidth={2.5}
+              />
+            </div>
+          )}
           <div className="relative">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm text-white/75">
+                <p className="text-xs font-medium text-white/70">
                   {greeting ? `${greeting} 👋` : "Halo"}
                 </p>
-                <p className="mt-0.5 text-sm font-medium text-white/90">
-                  Sisa uang Anda saat ini
+                <p className="mt-0.5 flex items-center gap-1.5 text-sm text-white/90">
+                  Total saldo
+                  <button
+                    onClick={toggleBalance}
+                    className="text-white/60 transition-colors hover:text-white"
+                    aria-label={showBalance ? "Sembunyikan saldo" : "Tampilkan saldo"}
+                  >
+                    {showBalance ? (
+                      <Eye className="h-3.5 w-3.5" />
+                    ) : (
+                      <EyeOff className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                 </p>
               </div>
               <Button
                 onClick={onAdd}
                 size="sm"
-                className="shrink-0 border border-white/20 bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                className="shrink-0 border border-white/20 bg-white/15 text-white backdrop-blur-md transition-all hover:bg-white/25 active:scale-95"
               >
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">Tambah</span>
               </Button>
             </div>
 
-            <p className="mt-4 text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
-              {isLoading ? "···" : formatCurrency(summary?.balance ?? 0)}
-            </p>
+            <div className="mt-4">
+              {isLoading ? (
+                <p className="text-3xl font-bold tracking-tight sm:text-4xl">···</p>
+              ) : showBalance ? (
+                <p className="text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
+                  <span className="text-lg font-semibold text-white/70 sm:text-xl">Rp </span>
+                  <AnimatedNumber
+                    value={summary?.balance ?? 0}
+                    format={(n) => n.toLocaleString("id-ID")}
+                  />
+                </p>
+              ) : (
+                <p className="text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
+                  •••••••
+                </p>
+              )}
+            </div>
 
-            {/* Income / Expense quick stats */}
+            {/* Income / Expense quick stats — glass pills */}
             <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
-              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-2.5 py-2 backdrop-blur sm:px-3 sm:py-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400/25 sm:h-9 sm:w-9">
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-100 sm:h-4 sm:w-4" />
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-3 py-2.5 backdrop-blur-md transition-colors hover:bg-white/15 sm:py-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-400/25 sm:h-9 sm:w-9">
+                  <TrendingUp className="h-4 w-4 text-emerald-100 sm:h-4.5 sm:w-4.5" />
                 </span>
                 <div className="min-w-0">
                   <p className="text-[10px] text-white/65 sm:text-[11px]">
@@ -260,13 +378,15 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
                   <p className="truncate text-xs font-semibold text-emerald-50 sm:text-sm">
                     {isLoading
                       ? "—"
-                      : formatCurrencyCompact(summary?.monthIncome ?? 0)}
+                      : showBalance
+                        ? formatCurrencyCompact(summary?.monthIncome ?? 0)
+                        : "•••"}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-2.5 py-2 backdrop-blur sm:px-3 sm:py-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-400/25 sm:h-9 sm:w-9">
-                  <TrendingDown className="h-3.5 w-3.5 text-rose-100 sm:h-4 sm:w-4" />
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-3 py-2.5 backdrop-blur-md transition-colors hover:bg-white/15 sm:py-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-400/25 sm:h-9 sm:w-9">
+                  <TrendingDown className="h-4 w-4 text-rose-100 sm:h-4.5 sm:w-4.5" />
                 </span>
                 <div className="min-w-0">
                   <p className="text-[10px] text-white/65 sm:text-[11px]">
@@ -275,7 +395,9 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
                   <p className="truncate text-xs font-semibold text-rose-50 sm:text-sm">
                     {isLoading
                       ? "—"
-                      : formatCurrencyCompact(summary?.monthExpense ?? 0)}
+                      : showBalance
+                        ? formatCurrencyCompact(summary?.monthExpense ?? 0)
+                        : "•••"}
                   </p>
                 </div>
               </div>
@@ -284,28 +406,67 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
         </Card>
       </motion.div>
 
-      {/* Monthly summary — sisa bulan ini + tx count */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">Sisa bulan ini</p>
-            <p className="mt-0.5 text-xl font-bold tabular-nums">
+      {/* Bento Grid — Sisa Bulan + Transaksi count + Quick stats */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card className="col-span-2 p-4 sm:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Sisa bulan ini</p>
+              <p className="mt-0.5 text-xl font-bold tabular-nums sm:text-2xl">
+                {isLoading
+                  ? "···"
+                  : showBalance
+                    ? formatCurrency(summary?.monthBalance ?? 0)
+                    : "••••••"}
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+                Pemasukan − pengeluaran bulan ini
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-0.5 rounded-xl bg-muted/50 px-3 py-2">
+              <p className="text-[10px] text-muted-foreground">Transaksi</p>
+              <p className="text-base font-bold tabular-nums">
+                {isLoading ? "—" : summary?.monthTransactionCount ?? 0}
+              </p>
+            </div>
+          </div>
+        </Card>
+        {/* Mini stat: avg/day */}
+        <Card className="p-3">
+          <div className="flex flex-col gap-1">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/10">
+              <Flame className="h-3.5 w-3.5 text-orange-500" />
+            </span>
+            <p className="text-[10px] text-muted-foreground">Rata-rata/hari</p>
+            <p className="truncate text-sm font-bold tabular-nums">
+              {rangeLoading
+                ? "—"
+                : showBalance
+                  ? formatCurrencyCompact(
+                      Math.round(
+                        (summary?.monthExpense ?? 0) /
+                          Math.max(new Date().getDate(), 1),
+                      ),
+                    )
+                  : "•••"}
+            </p>
+          </div>
+        </Card>
+        {/* Mini stat: savings rate */}
+        <Card className="p-3">
+          <div className="flex flex-col gap-1">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+            </span>
+            <p className="text-[10px] text-muted-foreground">Tingkat tabung</p>
+            <p className="truncate text-sm font-bold tabular-nums">
               {isLoading
-                ? "···"
-                : formatCurrency(summary?.monthBalance ?? 0)}
-            </p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground/70">
-              Pemasukan − pengeluaran bulan ini
+                ? "—"
+                : `${Math.round((summary?.savingsRate ?? 0) * 100)}%`}
             </p>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-0.5 rounded-lg bg-muted/40 px-3 py-1.5">
-            <p className="text-[10px] text-muted-foreground">Transaksi bulan ini</p>
-            <p className="text-sm font-semibold tabular-nums">
-              {isLoading ? "—" : summary?.monthTransactionCount ?? 0}
-            </p>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       {/* Counter Jajan Harian + Weekly Summary — 2 col grid */}
       {todayExpenses.length > 0 && (
@@ -315,12 +476,20 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
             avg={avgDailyJajan}
             isLoading={rangeLoading}
           />
-          <WeeklySummaryCard summary={weeklySummary} isLoading={rangeLoading} />
+          <WeeklySummaryCard
+            summary={weeklySummary}
+            barData={weeklyBarData}
+            isLoading={rangeLoading}
+          />
         </div>
       )}
       {todayExpenses.length === 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <WeeklySummaryCard summary={weeklySummary} isLoading={rangeLoading} />
+          <WeeklySummaryCard
+            summary={weeklySummary}
+            barData={weeklyBarData}
+            isLoading={rangeLoading}
+          />
         </div>
       )}
 
@@ -483,6 +652,7 @@ function CounterJajanCard({
 
 function WeeklySummaryCard({
   summary,
+  barData,
   isLoading,
 }: {
   summary: {
@@ -492,6 +662,7 @@ function WeeklySummaryCard({
     balance: number;
     trendPct: number;
   };
+  barData: { label: string; value: number; isToday?: boolean }[];
   isLoading: boolean;
 }) {
   // Negative trend (less spending) = good (hemat, green)
@@ -501,10 +672,10 @@ function WeeklySummaryCard({
   const isBoros = trend > 0;
   const isBalanceZero = summary.balance <= 0;
   const trendLabel = isHemat
-    ? `hemat ${Math.abs(Math.round(trend))}% vs minggu lalu`
+    ? `Hemat ${Math.abs(Math.round(trend))}% vs minggu lalu 🎉`
     : isBoros
-      ? `boros ${Math.round(trend)}% vs minggu lalu`
-      : "sama dengan minggu lalu";
+      ? `Boros ${Math.round(trend)}% — cek pengeluaran`
+      : "Sama dengan minggu lalu";
   // Balance warning overrides trend color when sisa = 0 (or negative)
   const trendColor = isBalanceZero
     ? "text-rose-600 dark:text-rose-400"
@@ -531,34 +702,60 @@ function WeeklySummaryCard({
           <div className="min-w-0">
             <p className="truncate text-xs text-muted-foreground">Minggu ini</p>
             <p className="text-[11px] text-muted-foreground/70">
-              Income · expense · sisa
+              Sisa {formatCurrencyCompact(summary.balance)}
             </p>
           </div>
         </div>
         {!isLoading && (isHemat || isBoros || isBalanceZero) && (
           <span
             className={cn(
-              "flex shrink-0 items-center gap-0.5 text-xs font-medium tabular-nums",
+              "flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums",
               trendColor,
+              isHemat && "bg-emerald-500/10",
+              isBoros && "bg-rose-500/10",
+              isBalanceZero && "bg-rose-500/10",
             )}
           >
-            <TrendIcon className="h-3.5 w-3.5" />
+            <TrendIcon className="h-3 w-3" />
             {isBalanceZero ? "Rp0" : `${Math.abs(Math.round(trend))}%`}
           </span>
         )}
       </div>
       {isLoading ? (
-        <Skeleton className="mt-3 h-8 w-40" />
+        <div className="mt-3 space-y-2">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-12 w-full" />
+        </div>
       ) : (
         <>
-          <p className={cn("mt-3 text-lg font-bold tabular-nums", isBalanceZero && "text-rose-600 dark:text-rose-400")}>
-            Sisa {formatCurrencyCompact(summary.balance)}
+          <div className="mt-3 flex items-baseline gap-2">
+            <p
+              className={cn(
+                "text-lg font-bold tabular-nums",
+                isBalanceZero && "text-rose-600 dark:text-rose-400",
+              )}
+            >
+              {formatCurrencyCompact(summary.balance)}
+            </p>
+            <span className="text-[10px] text-muted-foreground">
+              +{formatCurrencyCompact(summary.thisIncome)} · −
+              {formatCurrencyCompact(summary.thisExpense)}
+            </span>
+          </div>
+          {/* Mini bar chart — 7 hari */}
+          {barData.length > 0 && (
+            <div className="mt-3">
+              <MiniBarChart
+                data={barData}
+                height={48}
+                barColorActive="bg-primary"
+                barColorDim="bg-muted-foreground/25"
+              />
+            </div>
+          )}
+          <p className={cn("mt-2 text-[11px] font-medium", trendColor)}>
+            {trendLabel}
           </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
-            +{formatCurrencyCompact(summary.thisIncome)} · −
-            {formatCurrencyCompact(summary.thisExpense)}
-          </p>
-          <p className={cn("mt-0.5 text-[11px]", trendColor)}>{trendLabel}</p>
         </>
       )}
     </Card>
@@ -662,7 +859,21 @@ function Top5JajanCard({
   items: Array<{ description: string; count: number; total: number }>;
   isLoading: boolean;
 }) {
-  const maxCount = items.length > 0 ? Math.max(...items.map((i) => i.count)) : 0;
+  // Colors for donut slices
+  const sliceColors = [
+    "#10b981", // emerald-500
+    "#3b82f6", // blue-500
+    "#f59e0b", // amber-500
+    "#ec4899", // pink-500
+    "#8b5cf6", // violet-500
+  ];
+  const donutData = items.slice(0, 5).map((item, i) => ({
+    label: item.description,
+    value: item.total,
+    color: sliceColors[i % sliceColors.length],
+  }));
+  const totalSpent = donutData.reduce((s, d) => s + d.value, 0);
+
   return (
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -691,42 +902,36 @@ function Top5JajanCard({
           </p>
         </div>
       ) : (
-        <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
-          {items.map((item, idx) => {
-            const pct =
-              maxCount > 0 ? Math.max(8, (item.count / maxCount) * 100) : 0;
-            return (
-              <div
-                key={`${item.description}-${idx}`}
-                className="relative overflow-hidden rounded-lg border border-border/50 p-2"
-              >
-                <div
-                  className="absolute inset-y-0 left-0 bg-primary/10"
-                  style={{ width: `${pct}%` }}
-                  aria-hidden
+        <div className="flex gap-4">
+          {/* Donut chart */}
+          <div className="flex flex-col items-center gap-2">
+            <DonutChart
+              data={donutData}
+              size={96}
+              strokeWidth={14}
+              centerValue={formatCurrencyCompact(totalSpent)}
+              centerLabel="total"
+            />
+          </div>
+          {/* List compact */}
+          <div className="flex-1 space-y-1.5">
+            {items.slice(0, 5).map((item, idx) => (
+              <div key={`${item.description}-${idx}`} className="flex items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: sliceColors[idx % sliceColors.length] }}
                 />
-                <div className="relative flex items-center gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-bold text-muted-foreground tabular-nums">
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium capitalize text-foreground">
-                      {item.description}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground tabular-nums">
-                      {formatCurrencyCompact(item.total)}
-                    </p>
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className="shrink-0 text-[10px] tabular-nums"
-                  >
-                    {item.count}x
-                  </Badge>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium capitalize text-foreground">
+                    {item.description}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground tabular-nums">
+                    {formatCurrencyCompact(item.total)} · {item.count}x
+                  </p>
                 </div>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       )}
     </Card>
@@ -747,6 +952,28 @@ function BudgetMiniCard({ budget }: { budget: BudgetStatus }) {
         : budget.status === "warning"
           ? "bg-amber-400"
           : "bg-emerald-500";
+  // Proyeksi pace: linear extrapolation sampai akhir bulan
+  const today = new Date();
+  const dayOfMonth = today.getDate();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const projectedPct = Math.min(150, Math.round((budget.spent / Math.max(budget.amount, 1)) * (daysInMonth / Math.max(dayOfMonth, 1)) * 100));
+  const projectedSpent = Math.round((budget.spent / Math.max(dayOfMonth, 1)) * daysInMonth);
+  const willExceed = projectedSpent > budget.amount;
+  const daysLeft = daysInMonth - dayOfMonth;
+  const remainingAmount = Math.max(0, budget.amount - budget.spent);
+
+  // Smart label
+  let smartLabel = "";
+  if (budget.status === "over") {
+    smartLabel = `⚠️ Lewat ${formatCurrencyCompact(budget.spent - budget.amount)}`;
+  } else if (willExceed) {
+    smartLabel = `⚠️ Proyeksi: habis ${formatCurrencyCompact(projectedSpent - budget.amount)} lebih`;
+  } else if (daysLeft > 0) {
+    smartLabel = `Sisa ${formatCurrencyCompact(remainingAmount)} untuk ${daysLeft} hari`;
+  } else {
+    smartLabel = `Aman sampai akhir bulan`;
+  }
+
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between gap-2">
@@ -767,19 +994,54 @@ function BudgetMiniCard({ budget }: { budget: BudgetStatus }) {
             </p>
           </div>
         </div>
-        <span className="shrink-0 text-xs font-semibold tabular-nums">
-          {pct}%
-        </span>
+        <ProgressRing
+          percentage={pct}
+          size={36}
+          strokeWidth={3}
+          color={
+            budget.status === "over" || budget.status === "danger"
+              ? "stroke-rose-500"
+              : budget.status === "warning"
+                ? "stroke-amber-400"
+                : "stroke-emerald-500"
+          }
+        >
+          <span className="text-[10px] font-bold tabular-nums">{pct}%</span>
+        </ProgressRing>
       </div>
-      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn("h-full rounded-full", statusColor)}
-          style={{ width: `${pct}%` }}
-        />
+      <div className="mt-3 space-y-1">
+        {/* Actual bar */}
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className={cn("h-full rounded-full", statusColor)}
+          />
+        </div>
+        {/* Projection ghost bar */}
+        <div className="h-0.5 w-full overflow-hidden rounded-full bg-muted/30">
+          <div
+            className={cn("h-full rounded-full opacity-40", willExceed ? "bg-rose-400" : "bg-emerald-400")}
+            style={{ width: `${Math.min(projectedPct, 100)}%` }}
+          />
+        </div>
       </div>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
-        {formatCurrencyCompact(budget.spent)} / {formatCurrencyCompact(budget.amount)}
-      </p>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] text-muted-foreground tabular-nums">
+          {formatCurrencyCompact(budget.spent)} / {formatCurrencyCompact(budget.amount)}
+        </p>
+        <p
+          className={cn(
+            "text-[10px] font-medium",
+            willExceed || budget.status === "over"
+              ? "text-rose-600 dark:text-rose-400"
+              : "text-muted-foreground",
+          )}
+        >
+          {smartLabel}
+        </p>
+      </div>
     </Card>
   );
 }
@@ -789,9 +1051,18 @@ function GoalMiniCard({ goal }: { goal: Goal }) {
     100,
     Math.round((goal.currentAmount / Math.max(goal.targetAmount, 1)) * 100),
   );
+  const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
+  const isCompleted = goal.completed || pct >= 100;
+  // Gamified badge level
+  const level =
+    pct >= 100 ? "🏆" : pct >= 75 ? "🥇" : pct >= 50 ? "🥈" : pct >= 25 ? "🥉" : "🌱";
+
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between gap-2">
+    <Card className="relative overflow-hidden p-4">
+      {isCompleted && (
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent" />
+      )}
+      <div className="relative flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
@@ -800,21 +1071,34 @@ function GoalMiniCard({ goal }: { goal: Goal }) {
             <LucideIcon name={goal.icon || "Target"} className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-xs text-muted-foreground">Target</p>
+            <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+              <span>{level}</span>
+              <span>Target</span>
+            </p>
             <p className="truncate text-sm font-semibold">{goal.name}</p>
           </div>
         </div>
-        <Target className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <ProgressRing
+          percentage={pct}
+          size={36}
+          strokeWidth={3}
+          color="stroke-primary"
+        >
+          <span className="text-[10px] font-bold tabular-nums">{pct}%</span>
+        </ProgressRing>
       </div>
-      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
+      <div className="relative mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
           className="h-full rounded-full bg-primary"
-          style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
-        {formatCurrencyCompact(goal.currentAmount)} /{" "}
-        {formatCurrencyCompact(goal.targetAmount)}
+      <p className="relative mt-2 text-[10px] font-medium text-muted-foreground">
+        {isCompleted
+          ? "🎉 Target tercapai!"
+          : `Sisa ${formatCurrencyCompact(remaining)} lagi`}
       </p>
     </Card>
   );
