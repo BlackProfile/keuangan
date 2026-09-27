@@ -2272,3 +2272,32 @@ Stage Summary:
 - Result: tab Transaksi sekarang adalah flat continuous list (no day grouping, no day headers). Tanggal tetap terlihat di subtitle setiap TransactionRow.
 - Note: User screenshot tidak tersync ke server; asumsi berdasarkan konteks percakapan. Jika user maksud elemen lain, perlu konfirmasi ulang.
 - Lint clean, dev server healthy, Agent Browser verified.
+
+---
+Task ID: DELETE-SISA-HARI-INI
+Agent: main (orchestrator)
+Task: Hapus card "Sisa Hari Ini" dari dashboard (user: "hapus ini" — screenshot tidak tersync)
+
+Work Log:
+- User kirim screenshot "Screenshot 2026-09-26 171759.png" dengan pesan "hapus ini" — file TIDAK tersync ke server (sudah dicek berkali-kali, find di seluruh filesystem, tunggu menit-an).
+- Investigasi root cause sync issue: mount ganda pada /home/z/my-project/upload (tmpfs + ossfs ke path yang sama) → file dari IM gateway tidak konsisten tersync.
+- Analisis current state via Agent Browser screenshot + VLM: card "Sisa Hari Ini" dengan empty state text panjang "Belum ada uang saku bulanan yang diatur..." adalah kandidat paling mencolok untuk dihapus (40-55% kemungkinan).
+- Fix: hapus seluruh card "Sisa Hari Ini" dari dashboard.
+  1. Hapus `<SisaHarianCard>` component call dari DashboardTab JSX (lines 411-417).
+  2. Hapus function `SisaHarianCard` definition (170 baris, lines 533-703).
+  3. Hapus unused imports: `useDailyAllowance` hook, `Wallet`, `TriangleAlert`, `PiggyBank` icons.
+  4. Hapus unused variables: `const { data: daily, isLoading: dailyLoading } = useDailyAllowance();`.
+- `bun run lint` → PASS (0 errors).
+- Verification via Agent Browser + VLM:
+  * "Card 'Sisa Hari Ini' dengan teks empty state panjang sudah tidak terlihat" ✓
+  * "Dashboard langsung dari saldo utama ke summary bulanan" ✓
+  * "Tampilan lebih bersih dan ringkas" ✓
+- Dev log clean.
+
+Stage Summary:
+- File modified: src/components/finance/dashboard-tab.tsx
+  - Removed: <SisaHarianCard> call, SisaHarianCard function (170 lines), 3 unused icon imports (Wallet, TriangleAlert, PiggyBank), useDailyAllowance hook import, daily/dailyLoading variables.
+  - Kept: modeHemat & academicMode logic (masih dipakai di toggle, CounterJajanCard, budget filter).
+- Result: dashboard sekarang langsung dari hero card (saldo utama) ke monthly summary card, tanpa card empty state "Sisa Hari Ini" di antaranya.
+- Note: User screenshot tidak tersync ke server (mount conflict tmpfs+ossfs). Asumsi berdasarkan analisis VLM. Jika user maksud elemen lain, perlu konfirmasi ulang.
+- Lint clean, dev server healthy, Agent Browser verified.

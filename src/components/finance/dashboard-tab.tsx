@@ -12,14 +12,11 @@ import {
   GraduationCap,
   Leaf,
   ListOrdered,
-  PiggyBank,
   Plus,
   Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
-  TriangleAlert,
-  Wallet,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +38,6 @@ import {
 } from "@/lib/format";
 import {
   useAnalytics,
-  useDailyAllowance,
   useDashboard,
   useTransactions,
 } from "@/lib/hooks";
@@ -109,7 +105,6 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
 
   const monthKey = getMonthKey(new Date());
   const { data, isLoading } = useDashboard(monthKey);
-  const { data: daily, isLoading: dailyLoading } = useDailyAllowance();
   const { data: analytics } = useAnalytics(monthKey);
 
   const summary = data?.summary;
@@ -408,14 +403,6 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
         </Card>
       </motion.div>
 
-      {/* Sisa Hari Ini + Proyeksi Akhir Bulan — prominent card */}
-      <SisaHarianCard
-        daily={daily}
-        isLoading={dailyLoading}
-        modeHemat={modeHemat}
-        academicMode={academicMode}
-      />
-
       {/* Monthly summary — sisa bulan ini + tx count */}
       <Card className="p-4">
         <div className="flex items-center justify-between gap-3">
@@ -537,178 +524,6 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
         )}
       </Card>
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Sisa Hari Ini + Proyeksi Akhir Bulan — prominent card             */
-/* ------------------------------------------------------------------ */
-
-function SisaHarianCard({
-  daily,
-  isLoading,
-  modeHemat,
-  academicMode,
-}: {
-  daily: import("@/lib/types").DailyAllowanceInfo | undefined;
-  isLoading: boolean;
-  modeHemat: boolean;
-  academicMode: AcademicMode;
-}) {
-  // Compute progress + color
-  const dailyAllowance = daily?.dailyAllowance ?? 0;
-  const dailySpent = daily?.dailySpent ?? 0;
-  const dailyRemaining = daily?.dailyRemaining ?? 0;
-  const usedPct =
-    dailyAllowance > 0
-      ? Math.min(100, Math.max(0, (dailySpent / dailyAllowance) * 100))
-      : 0;
-  const remainingPct = 100 - usedPct;
-
-  let barColor = "bg-emerald-500";
-  let badgeClass = "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
-  let statusLabel = "Aman";
-  if (remainingPct < 20) {
-    barColor = "bg-rose-500";
-    badgeClass = "bg-rose-500/15 text-rose-700 dark:text-rose-300";
-    statusLabel = "Hampir habis";
-  } else if (remainingPct < 50) {
-    barColor = "bg-amber-500";
-    badgeClass = "bg-amber-500/15 text-amber-700 dark:text-amber-300";
-    statusLabel = "Hemat";
-  }
-
-  const proj = daily?.projection;
-  const willRunOut = proj?.willRunOutDay ?? null;
-  const surplus = proj?.surplusOrDeficit ?? 0;
-  const cutNeeded = proj?.dailyCutNeeded ?? 0;
-  const isSurplus = proj != null && willRunOut == null && surplus >= 0;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: 0.05 }}
-    >
-      <Card className="overflow-hidden border-0 p-4 shadow-md ring-1 ring-border/50 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                <Wallet className="h-4 w-4 text-primary" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Sisa Hari Ini</p>
-                <p className="text-[11px] text-muted-foreground/70">
-                  Uang saku harian
-                </p>
-              </div>
-            </div>
-          </div>
-          <Badge className={cn("shrink-0", badgeClass)}>{statusLabel}</Badge>
-        </div>
-
-        {isLoading ? (
-          <div className="mt-3 space-y-2">
-            <Skeleton className="h-9 w-40" />
-            <Skeleton className="h-2 w-full rounded-full" />
-            <Skeleton className="h-4 w-3/4" />
-          </div>
-        ) : dailyAllowance <= 0 ? (
-          <div className="mt-3 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-            Belum ada uang saku bulanan yang diatur. Atur di profil mahasiswa
-            untuk melihat sisa harian & proyeksi.
-          </div>
-        ) : (
-          <>
-            <p className="mt-3 text-3xl font-bold tracking-tight tabular-nums">
-              {formatCurrency(Math.max(dailyRemaining, 0))}
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-              dari {formatCurrencyCompact(dailyAllowance)} · terpakai{" "}
-              {Math.round(usedPct)}%
-            </p>
-
-            {/* Progress bar */}
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn("h-full rounded-full transition-all", barColor)}
-                style={{ width: `${usedPct}%` }}
-              />
-            </div>
-
-            {/* Projection block */}
-            <div className="mt-4 border-t border-border/60 pt-3">
-              <div className="flex items-center gap-1.5">
-                <CalendarRange className="h-3.5 w-3.5 text-muted-foreground" />
-                <p className="text-xs font-medium text-muted-foreground">
-                  Proyeksi akhir bulan
-                </p>
-              </div>
-
-              {willRunOut != null ? (
-                <div className="mt-2 flex items-start gap-2 rounded-lg bg-rose-500/10 p-2.5 text-rose-700 dark:text-rose-300">
-                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold">
-                      Uang saku habis tanggal {willRunOut}
-                    </p>
-                    {cutNeeded > 0 && (
-                      <p className="mt-0.5 text-xs">
-                        Kurangi {formatCurrency(cutNeeded)}/hari supaya aman
-                        sampai akhir bulan.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ) : isSurplus ? (
-                <div className="mt-2 flex items-start gap-2 rounded-lg bg-emerald-500/10 p-2.5 text-emerald-700 dark:text-emerald-300">
-                  <PiggyBank className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold">
-                      Aman sampai akhir bulan! 🎉
-                    </p>
-                    {surplus > 0 && (
-                      <p className="mt-0.5 text-xs">
-                        Sisa perkiraan {formatCurrencyCompact(surplus)}.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {proj?.message ?? "Proyeksi belum tersedia."}
-                </p>
-              )}
-
-              {/* Extra alerts when Mode Hemat is ON */}
-              {modeHemat && (
-                <div className="mt-2 flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-emerald-700 dark:text-emerald-300">
-                  <Leaf className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <p className="text-[11px] leading-relaxed">
-                    Mode Hemat aktif — kategori <strong>Hiburan</strong>{" "}
-                    disembunyikan dari ringkasan anggaran. Fokus pengeluaran
-                    prioritas.
-                  </p>
-                </div>
-              )}
-
-              {/* Academic mode focus hint */}
-              {(academicMode === "UTS" || academicMode === "UAS") && (
-                <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-amber-700 dark:text-amber-300">
-                  <GraduationCap className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <p className="text-[11px] leading-relaxed">
-                    {academicMode === "UTS" ? "Mode UTS" : "Mode UAS"} aktif —
-                    prioritaskan pengeluaran akademik (fotokopi, alat tulis,
-                    transport kampus).
-                  </p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </Card>
-    </motion.div>
   );
 }
 
