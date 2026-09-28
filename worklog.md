@@ -2638,3 +2638,282 @@ Stage Summary:
 - TS errors: 5 → 0 (untuk src/)
 - Remaining TS errors hanya di examples/ dan skills/ (reference files, bukan bagian aplikasi DompetKu)
 - Lint clean, dev server healthy, app verified via Agent Browser
+
+---
+Task ID: HEATMAP-RPG
+Agent: general-purpose (sub agent)
+Task: Implement Heatmap Calendar + RPG Gamification components in the finance app
+
+Work Log:
+- Read worklog.md, dashboard-tab.tsx, lib/format.ts, lib/hooks.ts, lib/types.ts, page.tsx, globals.css, eslint config to understand existing architecture and conventions.
+- Created `src/components/finance/heatmap-calendar.tsx`:
+  - GitHub-style contribution heatmap of daily EXPENSE spending.
+  - Uses `useTransactions({ from, to, limit: 500 })` fetching last 90 days (covers streak + viewed month).
+  - Filters EXPENSE, groups by yyyy-mm-dd via `formatDateInput` + `parseDateLocal`.
+  - Renders Monday-first 7-column calendar grid (using `getWeekdayMondayFirst` + `WEEKDAYS_ID`).
+  - Each day is a small rounded square (14px mobile / 16px sm+), color-coded:
+    * No txn -> bg-muted/40
+    * <Rp20k -> bg-emerald-200
+    * Rp20k-100k -> bg-amber-300
+    * Rp100k-500k -> bg-orange-400
+    * >Rp500k -> bg-rose-500
+  - Prev/next month chevron nav with month label (e.g. "September 2026") via `getMonthYearLabel`; next disabled at current month.
+  - Streak counter at top: "🔥 N hari hemat" — counts consecutive days (from today backwards) where daily expense ≤ avg daily expense.
+  - Tap a day -> bottom `Sheet` (side="bottom") opens showing that day's transactions with category icon, merchant, income/expense coloring. Tapping a transaction calls `onEdit(t)`.
+  - Color legend at the bottom.
+- Created `src/components/finance/gamification-bar.tsx`:
+  - RPG-style XP / level / achievement card on `gradient-hero` background.
+  - Uses `useDashboard(monthKey)` to compute XP client-side from:
+    * +10 XP per transaction logged (summary.transactionCount)
+    * +50 XP per budget stayed under limit (budgetStatuses where spent ≤ amount)
+    * +100 XP per goal milestone reached (every 25% progress per goal)
+  - Level thresholds: L1 0 (🌱 Pemula), L2 100 (💸 Saver), L3 300 (📊 Pengelola Cerdas), L4 700 (🏆 Sultan Micro), L5 1500 (👑 Master Finansial).
+  - Shows avatar emoji, "Level N", level name, total XP, XP progress bar to next level, hint text ("Catat N transaksi lagi untuk level up!" or XP gap).
+  - Achievement badges row (6 badges): 🔥 7-day streak, 💰 first budget, 🎯 first goal, 📊 10 transaksi, 💎 hemat budget, 🏆 goal tercapai. Locked badges show 🔒 and grayscale.
+  - Level-up confetti: detects when `currentLevel.level > prevLevel`, fires AnimatePresence overlay with 18 falling emoji pieces (🎉🎊✨💫⭐🌟🎈) and a centered "LEVEL UP!" banner with spring animation. Auto-clears after 3.8s.
+- Integration in `src/components/finance/dashboard-tab.tsx`:
+  - Imported `GamificationBar` and `HeatmapCalendar`.
+  - Added `<GamificationBar />` directly after the bento grid (after "Sisa bulan ini / Transaksi / Rata-rata/hari / Tingkat tabung" cards).
+  - Added `<HeatmapCalendar onEdit={onEdit} />` below the "Transaksi Terbaru" card so both new features are visible while scrolling the dashboard.
+- Fixed pre-existing ESLint error in `src/components/finance/dashboard-ambient.tsx` (a prior agent's untracked file): `Particles` component's `useMemo` was missing `count` in its dependency array (react-hooks/preserve-manual-memoization). Added `count` to deps so lint passes.
+- Verification:
+  * `bun run lint` -> 0 errors, 0 warnings.
+  * Dev server returned 200 OK on http://localhost:3000.
+  * Screenshots captured via agent-browser (412x915 mobile viewport):
+    - screenshots/heatmap-rpg-fullpage.png (full page)
+    - screenshots/heatmap-calendar-view.png (heatmap section)
+    - screenshots/gamification-bar-view.png (gamification section)
+    - screenshots/heatmap-day-sheet.png (bottom sheet after tapping a day)
+  * Verified via DOM eval that "Heatmap Pengeluaran" + "September 2026" + "🔥 N hari hemat" + "Level 3" + "Pengelola Cerdas" + "XP" + "630" + "Butuh 70 XP lagi untuk Level 4 — Sultan Micro" + "Achievement" all render on the page.
+  * Verified heatmap day-button clicks open the bottom Sheet with the correct day's transactions (e.g. clicking 2026-09-13 showed "13 Sep 2026 · 1 transaksi · −Rp 500.000 · Bayar listrik & air · Tagihan").
+
+Stage Summary:
+- Two new feature components delivered: `heatmap-calendar.tsx` (GitHub-style daily spending intensity heatmap with month nav, hemat-streak counter, day-detail bottom sheet) and `gamification-bar.tsx` (XP/level/achievements RPG widget with confetti-on-level-up using framer-motion).
+- Both wired into `dashboard-tab.tsx`: GamificationBar after the bento grid (top of scroll), HeatmapCalendar below recent transactions.
+- Lint passes with 0 errors (also fixed a pre-existing react-hooks/preserve-manual-memoization error in dashboard-ambient.tsx that was unrelated to this task but blocked the lint gate).
+- Dev server confirmed running and returning 200; both components verified visually and behaviorally via agent-browser.
+
+---
+Task ID: THEME-VARIANTS
+Agent: general-purpose (sub agent)
+Task: Implement 4 dashboard theme variants (neobrutalist, skeuomorphic, ambient, magazine), wrap DashboardTab to dispatch by theme, integrate ThemeProvider + ThemePicker.
+
+Work Log:
+- Read worklog.md, theme-context.tsx (ThemeProvider/useTheme + 5 themes: glass, neobrutalist, skeuomorphic, ambient, magazine), theme-picker.tsx (Popover with emoji + label list), dashboard-tab.tsx (GlassDashboard with useDashboard/useAnalytics/useTransactions hooks + summary/recent/budgets/goals/monthComparison data), app-shell.tsx (mobile + desktop headers with ThemeToggle + NotificationsBell), layout.tsx (already wraps app with next-themes ThemeProvider + QueryProvider).
+- Created `src/components/finance/dashboard-neobrutalist.tsx` (~440 lines):
+  * White bg, border-2 border-black, shadow-[6px_6px_0_0_#000] hard offset
+  * Solid flat colors (bg-yellow-300, bg-pink-400, bg-cyan-300, bg-lime-400)
+  * Hero card with white bg + black border + hard shadow + big bold saldo (text-4xl/5xl font-black uppercase tracking-tighter) + Eye/EyeOff show/hide toggle
+  * Cards press on active: active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0_0_#000]
+  * Bento grid: Sisa bulan (yellow), Rata/hari (lime), Tingkat tabung (cyan)
+  * Income/Expense colorful solid boxes with black border + small shadow
+  * Recent transactions: alternating accent color boxes per item
+- Created `src/components/finance/dashboard-skeuomorphic.tsx` (~520 lines):
+  * Leather background: linear-gradient(135deg, #3D2914, #5C3A1E) with subtle 45° noise overlay via repeating-linear-gradient (backgroundBlendMode: multiply)
+  * Credit card hero (max-w-md) with gold border-2 (border-amber-600/50 equivalent via inline style `border: 2px solid ${GOLD}80`)
+  * Card flip on click: perspective:1200px container + transform-style:preserve-3d + rotateY(180deg) on flipped + 0.6s ease transition + backface-visibility:hidden on front/back faces
+  * Front face: emboss saldo (text-shadow: 0 2px 0 rgba(0,0,0,0.7), 0 -1px 0 rgba(255,255,255,0.18)) + gold chip + masked card number
+  * Back face: monthly income/expense stats in gold-bordered cream boxes
+  * SpeedometerArc component: SVG half-circle gauge (M cx-r cy A r r 0 0 1 cx+r cy), animated value arc via framer-motion pathLength + needle line + center dot
+  * Palette: #3D2914 leather, #D4AF37 gold, #F5F5DC cream
+  * Budget + Goal cards use SpeedometerArc instead of ProgressRing
+- Created `src/components/finance/dashboard-ambient.tsx` (~310 lines):
+  * Full dark bg-slate-950 (#020617)
+  * ONE big centered number: saldo in text-6xl font-thin (3.5rem font-thin tabular-nums)
+  * Floating particles (14 dots) via CSS keyframe animation `ambient-drift` injected once via <style dangerouslySetInnerHTML>
+  * Time-based color shift: morning (5-11) = amber #FBBF24, noon (11-15) = white, evening (15-19) = orange #FB923C, night (19-5) = blue #60A5FA — re-evaluated every 5 min
+  * Minimal layout: only saldo + 3 most recent transactions (description + amount only, no icons)
+  * 3-dot nav at bottom (not icons) — first dot active (elongated pill 20x6), others inactive
+  * Saldo show/hide via Eye icon button
+- Created `src/components/finance/dashboard-magazine.tsx` (~410 lines):
+  * bg-stone-50 (#FAF8F3), terracotta #E07A5F, sage #81B29A, cream #F4F1DE, slate #3D405B
+  * Editorial header: large serif font (Georgia) for "DompetKu" + italic quote (“Uang yang dicatat akan tumbuh…”)
+  * Feature story section "Laporan Bulan Ini": narrative text generated from monthComparison data ("Kamu menabung X% lebih banyak dari bulan lalu — pengeluaran turun RpY. Pertahankan ritme ini…")
+  * Two-column masonry for transactions: CSS columns-1 sm:columns-2 with break-inside-avoid cards, each card has left border accent (alternating terracotta/sage)
+  * Donut chart replaced with horizontal bar visualization for top expense categories (5 categories, animated width fill, colored bars)
+  * Serif headings (Georgia), sans body (ui-sans-serif) — explicit fontFamily on every text node
+- Modified `src/components/finance/dashboard-tab.tsx`:
+  * Added imports: useTheme from @/lib/theme-context + 4 new dashboard components
+  * Renamed existing `export function DashboardTab(...)` to `function GlassDashboard(...)` (no longer exported directly, kept intact as private function)
+  * Added new `export function DashboardTab(props: Props)` wrapper that calls `useTheme()` and switch-dispatches to the right variant; default case renders GlassDashboard (so any unknown/fallback theme still works)
+  * All existing glass dashboard code preserved unchanged
+- Modified `src/app/layout.tsx`:
+  * Imported `ThemeProvider as AppThemeProvider` from `@/lib/theme-context`
+  * Wrapped `<QueryProvider>` (and children) with `<AppThemeProvider>` nested inside the existing next-themes `<ThemeProvider>` so both dark-mode and dashboard-theme contexts coexist
+- Modified `src/components/layout/app-shell.tsx`:
+  * Added `import { ThemePicker } from "@/components/finance/theme-picker"`
+  * Rendered `<ThemePicker />` in BOTH the mobile header (line 250) and desktop header (line 275), positioned before `<NotificationsBell />` and `<ThemeToggle />` so the user can pick dashboard theme from any screen size
+
+Verification:
+- `bun run lint` → PASS (exit 0, 0 errors)
+- `bunx tsc --noEmit` (filtered for touched files: dashboard-tab, dashboard-{neobrutalist,skeuomorphic,ambient,magazine}, theme-context, app-shell, src/app/layout) → 0 errors
+- Dev server (`bun run dev` background): HTTP 200 on `/` and HTTP 200 on `/api/dashboard` (verified after restart)
+- Dev log shows successful Prisma queries to Notification, Transaction, Category, Goal, Account, Budget — all data sources for the dashboard load cleanly
+- No compilation errors, no runtime errors in dev log
+
+Stage Summary:
+- Files created (4): src/components/finance/dashboard-neobrutalist.tsx, dashboard-skeuomorphic.tsx, dashboard-ambient.tsx, dashboard-magazine.tsx
+- Files modified (3): src/components/finance/dashboard-tab.tsx (themed wrapper + renamed GlassDashboard), src/app/layout.tsx (AppThemeProvider nesting), src/components/layout/app-shell.tsx (ThemePicker in both headers)
+- All 4 theme variants accept same Props {onAdd, onEdit, onViewAll} as DashboardTab
+- All 4 use same data source (useDashboard + useAnalytics) — no duplicated API calls
+- Theme switching is live: pick a theme in the header → useTheme() updates → DashboardTab re-renders with matching variant. Theme persists to localStorage key `dompetku:theme` (managed by ThemeProvider in theme-context.tsx)
+- Original Glass dashboard code preserved 100% — only the export wrapper was added; the implementation is intact as `GlassDashboard` private function
+- Lint clean (0 errors). TypeScript clean for touched files. Dev server returns HTTP 200.
+
+---
+Task ID: ADVANCED-VIEWS
+Agent: general-purpose (sub agent)
+Task: Implement 4 advanced feature components (Command Palette, Card Stack, Financial Timeline, Concentric Rings) and integrate them into the dashboard + transaction list.
+
+Work Log:
+- Read worklog.md + page.tsx + transaction-list.tsx + dashboard-tab.tsx + app-shell.tsx + theme-context.tsx + types.ts + constants.ts to understand existing patterns (Next.js 16, framer-motion, next-themes, TanStack Query, shadcn/ui, Tailwind v4).
+- Created `src/components/finance/command-palette.tsx`:
+  * AnimatePresence overlay with backdrop blur (bg-black/50 backdrop-blur-sm)
+  * Global Cmd+K / Ctrl+K keyboard listener (preventDefault to avoid browser's native ⌘K)
+  * Search input + grouped results (Aksi / Navigasi / Tema / Kategori)
+  * 8 base commands: Tambah transaksi (onAdd), Lihat transaksi, Anggaran, Target tabungan, Patungan, Beranda, Ganti tema (opens settings), Mode gelap (next-themes toggle)
+  * Quick category filter commands generated dynamically from `useCategories()` (top 9 expense categories)
+  * Arrow keys navigate (scrollIntoView), Enter selects, Esc closes
+  * Recent commands persisted in localStorage (`dompetku:cmd-recent`) shown at top when input empty
+  * Body scroll lock when open
+  * framer-motion slide-in (opacity+y+scale)
+- Created `src/components/finance/card-stack.tsx`:
+  * Tinder-style stack with peek of next card behind (scale 0.96, y 10, opacity 0.55)
+  * framer-motion `drag` + `dragSnapToOrigin` + `dragConstraints={{0,0,0,0}}` for spring-back
+  * Swipe thresholds: |offset| > 110px
+  * 4 directions: right → Need (green), left → Want (rose), up → Edit (calls onEdit), down → Archive
+  * Directional overlay indicators (NEED ✓ / WANT ✗ / EDIT / ARSIP) with motion-tracked opacity from drag offset
+  * Bottom action buttons (Want / Edit / Arsip / Need) + hint legend
+  * Counter "1 / 12" + Batal (undo) button
+  * Summary screen after all cards: "Kamu mengklasifikasi N transaksi! X Need, Y Want"
+  * Colorful gradient bg per category (darken() helper for gradient stop)
+- Created `src/components/finance/financial-timeline.tsx`:
+  * Vertical line down the left (pl-8, absolute w-px bg-border at left=11px)
+  * Day-grouped chapters with large dot (emerald if profit, rose if deficit) + date label + Surplus/Defisit badge
+  * Per-day segment color overlay on the line (green/red) matching the day's outcome
+  * Per-transaction small dot + Card (category icon + description + amount + time)
+  * Top summary: monthly income/expense/balance (Bulan ini: +RpX / -RpY)
+  * Animated entrance via framer-motion whileInView with stagger (delay per chapter + per tx)
+  * Editable via click / Enter / Space; quick edit pencil button on hover
+- Created `src/components/finance/concentric-rings.tsx`:
+  * SVG 240x240 with 4 concentric <circle> rings (radii 38, 56, 74, 92)
+  * Ring 1 (innermost): Savings rate % — stroke #10b981 (emerald)
+  * Ring 2: Budget usage % — stroke #f59e0b (amber)
+  * Ring 3: Goal progress % — stroke hsl(var(--primary))
+  * Ring 4 (outermost): Transaction count m/m — stroke #8b5cf6 (violet)
+  * Background track circles + animated progress circles (strokeDasharray + framer-motion strokeDashoffset animation with stagger 0.18s per ring)
+  * Center text (SVG <text>): "Total Saldo" + value + hint — tap eye icon to toggle visibility (persisted to localStorage `dompetku:showBalance`)
+  * Tap any ring → opens Radix Tooltip with detailed metric
+  * Legend grid below (4 cards) — also tappable to toggle tooltip
+  * Footer summary: Pendapatan / Pengeluaran / Selisih / Transaksi count
+- Integrated Command Palette into `src/app/page.tsx`:
+  * Added `cmdOpen` state + `setCmdOpen`
+  * Rendered `<CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} onAdd={openAdd} onNavigate={(s) => setSection(s as SectionId)} />` inside AppShell
+  * Passed `onOpenSearch={() => setCmdOpen(true)}` to AppShell
+- Modified `src/components/layout/app-shell.tsx`:
+  * Added `onOpenSearch?: () => void` optional prop
+  * Imported `Search` from lucide-react
+  * Added search button (icon-only on mobile, "Cari… ⌘K" labeled on desktop) in both headers next to NotificationsBell/ThemeToggle
+- Added ConcentricRings to `src/components/finance/dashboard-tab.tsx`:
+  * Imported `ConcentricRings` from `@/components/finance/concentric-rings`
+  * Rendered `<ConcentricRings />` immediately after the bento grid (before GamificationBar)
+- Added view-mode switcher (List | Kartu | Linimasa) to `src/components/finance/transaction-list.tsx`:
+  * Imported `Layers`, `List` from lucide-react + `CardStack` + `FinancialTimeline`
+  * Added `viewMode` state ("list" | "stack" | "timeline")
+  * Rendered view-mode toggle (ViewModeBtn sub-component + custom TimelineIcon SVG) above the summary strip
+  * Stack view: shows summary strip + CardStack (or Skeleton while loading, EmptyState if 0)
+  * Timeline view: shows summary strip + FinancialTimeline (with skeleton/empty fallbacks)
+  * List view: original behavior unchanged (summary + filter card + transaction rows)
+- Verified via agent-browser:
+  * Page renders, HTTP 200, no console errors
+  * ConcentricRings shows on dashboard with real data (Tingkat Tabung 0%, Pemakaian Anggaran 6%, Progress Target 83%, Aktivitas Transaksi 14/14)
+  * Command Palette opens via Cmd+K and via the header search button; dialog contains Aksi/Navigasi/Tema/Kategori groups; input auto-focuses
+  * Card Stack renders 12 cards with counter "1 / 12", Need/Want/Edit/Arsip buttons, gradient card with category icon + amount + date
+  * Financial Timeline renders day-grouped chapters with Surplus/Defisit badges, per-transaction cards with category icon, amount, time, edit affordance
+- `bun run lint` → 0 errors, 0 warnings.
+
+Stage Summary:
+- 4 new feature components created in `src/components/finance/`: command-palette.tsx, card-stack.tsx, financial-timeline.tsx, concentric-rings.tsx
+- Integration complete: CommandPalette wired to Cmd+K + header search button; ConcentricRings embedded in dashboard after bento grid; CardStack + FinancialTimeline accessible via view-mode toggle (List/Kartu/Linimasa) in transaction-list.tsx
+- All animations use framer-motion (drag, AnimatePresence, motion.circle strokeDashoffset, whileInView stagger)
+- Verified end-to-end via agent-browser: HTTP 200, 0 console errors, all components render with real data
+- Lint passes (0 errors / 0 warnings)
+- Screenshots saved to `/home/z/my-project/screenshots/adv-views-*.png`
+
+---
+Task ID: ADD-ALL-IDEAS
+Agent: main (orchestrator)
+Task: Tambahkan semua 10 ide redesign (theme switcher + 5 tema + 6 fitur baru)
+
+Work Log:
+- Strategy: Karena 10 ide beberapa saling konflik (Neobrutalist vs Glassmorphism vs Skeuomorphic), implementasi sebagai THEME SWITCHER — user bisa pilih tema mana yang aktif + tambah fitur-fitur baru sebagai view modes/widgets.
+
+- Created Theme system:
+  * src/lib/theme-context.tsx — ThemeProvider + useTheme() hook + THEME_LIST (5 themes)
+  * src/components/finance/theme-picker.tsx — Popover dropdown dengan 5 opsi tema
+  * ThemePicker rendered di header (mobile + desktop) via app-shell.tsx
+  * ThemeProvider wrap app di layout.tsx (nested inside next-themes ThemeProvider)
+
+- Subagent THEME-VARIANTS (4 dashboard themes):
+  * dashboard-neobrutalist.tsx — thick black borders, hard shadow offset, bold fonts, solid flat colors (yellow/pink/cyan/lime), press effect (translate-x-1 translate-y-1)
+  * dashboard-skeuomorphic.tsx — leather gradient bg, credit card hero dengan flip animation (rotateY), emboss text-shadow, gold accents, speedometer SVG arc
+  * dashboard-ambient.tsx — dark bg-slate-950, 1 big centered saldo (font-thin), 14 floating CSS particles, time-based color shift, 3-dot nav
+  * dashboard-magazine.tsx — warm earth tones (terracotta/sage/cream/slate), serif headings, editorial layout, narrative feature story, 2-col masonry
+  * dashboard-tab.tsx updated: wrapper switch dispatches ke tema aktif via useTheme()
+  * Original glass dashboard preserved sebagai default
+
+- Subagent HEATMAP-RPG (2 features):
+  * heatmap-calendar.tsx — GitHub-style contribution heatmap, 5 color tiers (no-txn/emerald/amber/orange/rose), month nav, streak counter "🔥 N hari hemat", tap day → bottom sheet
+  * gamification-bar.tsx — RPG XP/level system, 5 levels (🌱 Pemula → 👑 Master Finansial), XP bar framer-motion, 6 achievement badges, confetti on level up
+  * Both rendered di dashboard-tab.tsx (GamificationBar after bento grid, HeatmapCalendar after recent transactions)
+
+- Subagent ADVANCED-VIEWS (4 features):
+  * command-palette.tsx — Cmd+K/Ctrl+K global shortcut, search overlay, 8 base commands + dynamic category filters, arrow key nav, recent commands localStorage
+  * card-stack.tsx — Tinder-style swipeable cards, 4 directions (right=Need/left=Want/up=Edit/down=Arsip), peek next card, summary screen
+  * financial-timeline.tsx — vertical timeline, day chapters with Surplus/Defisit badges, colored line segments, whileInView stagger
+  * concentric-rings.tsx — 4 concentric SVG rings (savings/budget/goal/transaction), animated fill, tap tooltips, center saldo toggle
+  * Integration: CommandPalette di page.tsx (Cmd+K listener), ConcentricRings di dashboard, CardStack+Timeline sebagai view modes di transaction-list.tsx (toggle List/Kartu/Linimasa)
+
+Verification (all via Agent Browser + VLM):
+- ✅ Lint: 0 errors
+- ✅ TypeScript: 0 errors di src/
+- ✅ Dev server: HTTP 200
+- ✅ Glass theme (default) — verified
+- ✅ Neobrutalist theme — verified (thick borders, hard shadows, flat colors)
+- ✅ Skeuomorphic theme — verified (leather texture, credit card, gold)
+- ✅ Ambient theme — verified (dark, 1 big number, particles)
+- ✅ Magazine theme — verified (warm earth tones, serif, editorial)
+- ✅ Command Palette — verified (Cmd+K overlay, search results)
+- ✅ Gamification bar — verified (Level 3, XP 630, achievements)
+- ✅ Heatmap Calendar — verified (September 2026, streak counter, color tiers)
+- ✅ ConcentricRings — verified (4 rings: 0%, 6%, 83%, 14/14)
+- ✅ Card Stack view — verified (1/12 counter, gradient card, swipe hints)
+- ✅ Financial Timeline view — verified (day chapters, colored line, badges)
+
+Stage Summary:
+- Files created: 10 new components
+  * src/lib/theme-context.tsx (theme system)
+  * src/components/finance/theme-picker.tsx
+  * src/components/finance/dashboard-neobrutalist.tsx
+  * src/components/finance/dashboard-skeuomorphic.tsx
+  * src/components/finance/dashboard-ambient.tsx
+  * src/components/finance/dashboard-magazine.tsx
+  * src/components/finance/heatmap-calendar.tsx
+  * src/components/finance/gamification-bar.tsx
+  * src/components/finance/command-palette.tsx
+  * src/components/finance/card-stack.tsx
+  * src/components/finance/financial-timeline.tsx
+  * src/components/finance/concentric-rings.tsx
+- Files modified: dashboard-tab.tsx (theme wrapper + new widgets), app-shell.tsx (ThemePicker + search button), page.tsx (CommandPalette state), layout.tsx (ThemeProvider), transaction-list.tsx (view modes)
+- All 10 ideas implemented:
+  1. ✅ Financial Timeline (vertical narrative)
+  2. ✅ Neobrutalist theme
+  3. ✅ Skeuomorphic Leather Wallet theme
+  4. ✅ Heatmap Calendar View (GitHub style)
+  5. ✅ Command Palette (Cmd+K)
+  6. ✅ Magazine Editorial theme
+  7. ✅ Concentric Rings widget
+  8. ✅ RPG Gamification (XP/levels/achievements)
+  9. ✅ Card Stack (Tinder-style swipe)
+  10. ✅ Ambient Mode theme
+- Lint clean, 0 TS errors, dev server healthy, all features verified via Agent Browser + VLM

@@ -1,0 +1,910 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import { toast } from "sonner";
+     5→import {
+     6→  Camera,
+     7→  Copy,
+     8→  Download,
+     9→  Eye,
+    10→  EyeOff,
+    11→  Inbox,
+    12→  Loader2,
+    13→  MoreVertical,
+    14→  Pencil,
+    15→  Pin,
+    16→  Search,
+    17→  SlidersHorizontal,
+    18→  X,
+    19→} from "lucide-react";
+    20→
+    21→import { Button } from "@/components/ui/button";
+    22→import { Input } from "@/components/ui/input";
+    23→import {
+    24→  Select,
+    25→  SelectContent,
+    26→  SelectItem,
+    27→  SelectTrigger,
+    28→  SelectValue,
+    29→} from "@/components/ui/select";
+    30→import {
+    31→  Popover,
+    32→  PopoverContent,
+    33→  PopoverTrigger,
+    34→} from "@/components/ui/popover";
+    35→import {
+    36→  DropdownMenu,
+    37→  DropdownMenuContent,
+    38→  DropdownMenuItem,
+    39→  DropdownMenuSeparator,
+    40→  DropdownMenuTrigger,
+    41→} from "@/components/ui/dropdown-menu";
+    42→import { Card } from "@/components/ui/card";
+    43→import { Skeleton } from "@/components/ui/skeleton";
+    44→import { LucideIcon } from "@/components/lucide-icon";
+    45→import { cn } from "@/lib/utils";
+    46→import {
+    47→  formatCurrency,
+    48→  formatDateLong,
+    49→  parseTags,
+    50→  relativeDay,
+    51→} from "@/lib/format";
+    52→import {
+    53→  useCategories,
+    54→  useDuplicateTransaction,
+    55→  useToggleHideTransaction,
+    56→  useTogglePin,
+    57→  useTransactions,
+    58→} from "@/lib/hooks";
+    59→import type { Transaction, TransactionType } from "@/lib/types";
+    60→import {
+    61→  MOOD_OPTIONS,
+    62→  PAYMENT_METHOD_OPTIONS,
+    63→  PRIORITY_OPTIONS,
+    64→} from "@/lib/constants";
+    65→
+    66→interface Props {
+    67→  onEdit: (t: Transaction) => void;
+    68→  limit?: number;
+    69→  showFilters?: boolean;
+    70→  emptyTitle?: string;
+    71→  emptyDescription?: string;
+    72→}
+    73→
+    74→type TypeFilter = "ALL" | TransactionType;
+    75→
+    76→export function TransactionList({
+    77→  onEdit,
+    78→  limit,
+    79→  showFilters = true,
+    80→  emptyTitle = "Belum ada transaksi",
+    81→  emptyDescription = "Mulai catat pemasukan dan pengeluaran Anda.",
+    82→}: Props) {
+    83→  // Existing filters
+    84→  const [search, setSearch] = React.useState("");
+    85→  const [type, setType] = React.useState<TypeFilter>("ALL");
+    86→  const [categoryId, setCategoryId] = React.useState<string>("ALL");
+    87→  const [from, setFrom] = React.useState("");
+    88→  const [to, setTo] = React.useState("");
+    89→
+    90→  // New filters
+    91→  const [mood, setMood] = React.useState<string>("ALL");
+    92→  const [priority, setPriority] = React.useState<string>("ALL");
+    93→  const [paymentMethod, setPaymentMethod] = React.useState<string>("ALL");
+    94→
+    95→  // "Hanya" toggle chips
+    96→  const [onlyLunasPending, setOnlyLunasPending] = React.useState(false);
+    97→  const [onlyPinned, setOnlyPinned] = React.useState(false);
+    98→  const [onlyReimbursable, setOnlyReimbursable] = React.useState(false);
+    99→  const [onlyDebt, setOnlyDebt] = React.useState(false);
+   100→  const [onlySubscription, setOnlySubscription] = React.useState(false);
+   101→  const [showHidden, setShowHidden] = React.useState(false);
+   102→
+   103→  const debouncedSearch = useDebouncedValue(search, 300);
+   104→
+   105→  const { data: categories } = useCategories();
+   106→
+   107→  const params = React.useMemo(
+   108→    () => ({
+   109→      type: type === "ALL" ? undefined : type,
+   110→      categoryId: categoryId === "ALL" ? undefined : categoryId,
+   111→      search: debouncedSearch || undefined,
+   112→      from: from || undefined,
+   113→      to: to || undefined,
+   114→      limit,
+   115→      // Client-side filter params (used as cache key + filtered locally)
+   116→      mood: mood === "ALL" ? undefined : mood,
+   117→      priority: priority === "ALL" ? undefined : priority,
+   118→      paymentMethod: paymentMethod === "ALL" ? undefined : paymentMethod,
+   119→      pinned: onlyPinned || undefined,
+   120→      reimbursable: onlyReimbursable || undefined,
+   121→      debt: onlyDebt || undefined,
+   122→      subscription: onlySubscription || undefined,
+   123→      includeHidden: showHidden ? true : undefined,
+   124→    }),
+   125→    [
+   126→      type,
+   127→      categoryId,
+   128→      debouncedSearch,
+   129→      from,
+   130→      to,
+   131→      limit,
+   132→      mood,
+   133→      priority,
+   134→      paymentMethod,
+   135→      onlyPinned,
+   136→      onlyReimbursable,
+   137→      onlyDebt,
+   138→      onlySubscription,
+   139→      showHidden,
+   140→    ]
+   141→  );
+   142→
+   143→  const { data: rawTransactions, isLoading, isFetching } =
+   144→    useTransactions(params);
+   145→
+   146→  // Client-side filtering for new attributes
+   147→  const transactions = React.useMemo(() => {
+   148→    const list = rawTransactions ?? [];
+   149→    if (!onlyLunasPending && mood === "ALL" && priority === "ALL" && paymentMethod === "ALL") {
+   150→      return list;
+   151→    }
+   152→    return list.filter((t) => {
+   153→      if (mood !== "ALL" && t.mood !== mood) return false;
+   154→      if (priority !== "ALL" && t.priority !== priority) return false;
+   155→      if (paymentMethod !== "ALL" && t.paymentMethod !== paymentMethod) return false;
+   156→      if (onlyLunasPending) {
+   157→        if (t.paymentStatus !== "PAID" && t.paymentStatus !== "PENDING") return false;
+   158→      }
+   159→      return true;
+   160→    });
+   161→  }, [
+   162→    rawTransactions,
+   163→    mood,
+   164→    priority,
+   165→    paymentMethod,
+   166→    onlyLunasPending,
+   167→  ]);
+   168→
+   169→  const total = transactions.length;
+   170→  const totalIncome = transactions
+   171→    .filter((t) => t.type === "INCOME")
+   172→    .reduce((s, t) => s + t.amount, 0);
+   173→  const totalExpense = transactions
+   174→    .filter((t) => t.type === "EXPENSE")
+   175→    .reduce((s, t) => s + t.amount, 0);
+   176→  const totalBalance = totalIncome - totalExpense;
+   177→
+   178→  const hasActiveFilters =
+   179→    !!debouncedSearch ||
+   180→    type !== "ALL" ||
+   181→    categoryId !== "ALL" ||
+   182→    !!from ||
+   183→    !!to ||
+   184→    mood !== "ALL" ||
+   185→    priority !== "ALL" ||
+   186→    paymentMethod !== "ALL" ||
+   187→    onlyLunasPending ||
+   188→    onlyPinned ||
+   189→    onlyReimbursable ||
+   190→    onlyDebt ||
+   191→    onlySubscription;
+   192→
+   193→  function clearFilters() {
+   194→    setSearch("");
+   195→    setType("ALL");
+   196→    setCategoryId("ALL");
+   197→    setFrom("");
+   198→    setTo("");
+   199→    setMood("ALL");
+   200→    setPriority("ALL");
+   201→    setPaymentMethod("ALL");
+   202→    setOnlyLunasPending(false);
+   203→    setOnlyPinned(false);
+   204→    setOnlyReimbursable(false);
+   205→    setOnlyDebt(false);
+   206→    setOnlySubscription(false);
+   207→  }
+   208→
+   209→  async function handleExport() {
+   210→    try {
+   211→      const scope: Record<string, unknown> = { type: "ALL" };
+   212→      if (type !== "ALL") scope.type = type;
+   213→      if (categoryId !== "ALL") scope.categoryId = categoryId;
+   214→      if (from) scope.from = from;
+   215→      if (to) scope.to = to;
+   216→      if (showHidden) scope.includeHidden = true;
+   217→
+   218→      const res = await fetch("/api/export/csv", {
+   219→        method: "POST",
+   220→        headers: { "Content-Type": "application/json" },
+   221→        body: JSON.stringify({ scope, options: { includeHidden: showHidden } }),
+   222→      });
+   223→      if (!res.ok) throw new Error("Export gagal");
+   224→      const blob = await res.blob();
+   225→      const a = document.createElement("a");
+   226→      a.href = URL.createObjectURL(blob);
+   227→      a.download = `transaksi-dompetku-${new Date().toISOString().split("T")[0]}.csv`;
+   228→      document.body.appendChild(a);
+   229→      a.click();
+   230→      document.body.removeChild(a);
+   231→      URL.revokeObjectURL(a.href);
+   232→      toast.success("CSV berhasil diunduh");
+   233→    } catch {
+   234→      toast.error("Gagal export CSV");
+   235→    }
+   236→  }
+   237→
+   238→  return (
+   239→    <div className="space-y-4">
+   240→      {/* Summary strip — totals for current filter */}
+   241→      {showFilters && total > 0 && (
+   242→        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+   243→          <SummaryStat
+   244→            label="Pemasukan"
+   245→            value={totalIncome}
+   246→            variant="income"
+   247→            loading={isLoading}
+   248→          />
+   249→          <SummaryStat
+   250→            label="Pengeluaran"
+   251→            value={totalExpense}
+   252→            variant="expense"
+   253→            loading={isLoading}
+   254→          />
+   255→          <SummaryStat
+   256→            label="Selisih"
+   257→            value={totalBalance}
+   258→            variant={totalBalance >= 0 ? "income" : "expense"}
+   259→            loading={isLoading}
+   260→          />
+   261→          <SummaryCount label="Transaksi" value={total} loading={isLoading} />
+   262→        </div>
+   263→      )}
+   264→
+   265→      {showFilters && (
+   266→        <Card className="p-3 sm:p-4">
+   267→          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+   268→            <div className="relative flex-1">
+   269→              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+   270→              <Input
+   271→                placeholder="Cari transaksi..."
+   272→                value={search}
+   273→                onChange={(e) => setSearch(e.target.value)}
+   274→                className="pl-9"
+   275→              />
+   276→              {search && (
+   277→                <button
+   278→                  onClick={() => setSearch("")}
+   279→                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+   280→                  aria-label="Hapus pencarian"
+   281→                >
+   282→                  <X className="h-3.5 w-3.5" />
+   283→                </button>
+   284→              )}
+   285→            </div>
+   286→            <div className="flex flex-wrap items-center gap-2">
+   287→              <Select
+   288→                value={type}
+   289→                onValueChange={(v) => setType(v as TypeFilter)}
+   290→              >
+   291→                <SelectTrigger className="h-9 w-[130px]">
+   292→                  <SelectValue />
+   293→                </SelectTrigger>
+   294→                <SelectContent>
+   295→                  <SelectItem value="ALL">Semua</SelectItem>
+   296→                  <SelectItem value="INCOME">Pemasukan</SelectItem>
+   297→                  <SelectItem value="EXPENSE">Pengeluaran</SelectItem>
+   298→                </SelectContent>
+   299→              </Select>
+   300→
+   301→              <Select value={categoryId} onValueChange={setCategoryId}>
+   302→                <SelectTrigger className="h-9 w-[150px]">
+   303→                  <SelectValue placeholder="Kategori" />
+   304→                </SelectTrigger>
+   305→                <SelectContent className="max-h-72">
+   306→                  <SelectItem value="ALL">Semua kategori</SelectItem>
+   307→                  {(categories ?? []).map((c) => (
+   308→                    <SelectItem key={c.id} value={c.id}>
+   309→                      <span className="flex items-center gap-2">
+   310→                        <LucideIcon
+   311→                          name={c.icon}
+   312→                          className="h-3.5 w-3.5"
+   313→                          style={{ color: c.color }}
+   314→                        />
+   315→                        {c.name}
+   316→                      </span>
+   317→                    </SelectItem>
+   318→                  ))}
+   319→                </SelectContent>
+   320→              </Select>
+   321→
+   322→              <Select value={mood} onValueChange={setMood}>
+   323→                <SelectTrigger className="h-9 w-[130px]">
+   324→                  <SelectValue placeholder="Mood" />
+   325→                </SelectTrigger>
+   326→                <SelectContent className="max-h-72">
+   327→                  <SelectItem value="ALL">Semua mood</SelectItem>
+   328→                  {MOOD_OPTIONS.map((m) => (
+   329→                    <SelectItem key={m.value} value={m.value}>
+   330→                      <span className="flex items-center gap-2">
+   331→                        <span aria-hidden>{m.emoji}</span>
+   332→                        {m.label}
+   333→                      </span>
+   334→                    </SelectItem>
+   335→                  ))}
+   336→                </SelectContent>
+   337→              </Select>
+   338→
+   339→              <Select value={priority} onValueChange={setPriority}>
+   340→                <SelectTrigger className="h-9 w-[140px]">
+   341→                  <SelectValue placeholder="Prioritas" />
+   342→                </SelectTrigger>
+   343→                <SelectContent>
+   344→                  <SelectItem value="ALL">Semua prioritas</SelectItem>
+   345→                  {PRIORITY_OPTIONS.map((p) => (
+   346→                    <SelectItem key={p.value} value={p.value}>
+   347→                      <span className="flex items-center gap-2">
+   348→                        <span
+   349→                          className="h-2 w-2 rounded-full"
+   350→                          style={{ backgroundColor: p.color }}
+   351→                          aria-hidden
+   352→                        />
+   353→                        {p.label}
+   354→                      </span>
+   355→                    </SelectItem>
+   356→                  ))}
+   357→                </SelectContent>
+   358→              </Select>
+   359→
+   360→              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+   361→                <SelectTrigger className="h-9 w-[140px]">
+   362→                  <SelectValue placeholder="Pembayaran" />
+   363→                </SelectTrigger>
+   364→                <SelectContent>
+   365→                  <SelectItem value="ALL">Semua pembayaran</SelectItem>
+   366→                  {PAYMENT_METHOD_OPTIONS.map((pm) => (
+   367→                    <SelectItem key={pm.value} value={pm.value}>
+   368→                      <span className="flex items-center gap-2">
+   369→                        <LucideIcon
+   370→                          name={pm.icon}
+   371→                          className="h-3.5 w-3.5 text-muted-foreground"
+   372→                        />
+   373→                        {pm.label}
+   374→                      </span>
+   375→                    </SelectItem>
+   376→                  ))}
+   377→                </SelectContent>
+   378→              </Select>
+   379→
+   380→              <Popover>
+   381→                <PopoverTrigger asChild>
+   382→                  <Button
+   383→                    variant="outline"
+   384→                    size="sm"
+   385→                    className={cn(
+   386→                      "h-9 gap-1.5",
+   387→                      (from || to) && "border-primary text-primary"
+   388→                    )}
+   389→                  >
+   390→                    <SlidersHorizontal className="h-4 w-4" />
+   391→                    <span className="hidden sm:inline">Tanggal</span>
+   392→                  </Button>
+   393→                </PopoverTrigger>
+   394→                <PopoverContent className="w-72" align="end">
+   395→                  <div className="space-y-3">
+   396→                    <div className="text-sm font-medium">Rentang tanggal</div>
+   397→                    <div className="space-y-2">
+   398→                      <label className="text-xs text-muted-foreground">
+   399→                        Dari
+   400→                      </label>
+   401→                      <Input
+   402→                        type="date"
+   403→                        value={from}
+   404→                        onChange={(e) => setFrom(e.target.value)}
+   405→                      />
+   406→                    </div>
+   407→                    <div className="space-y-2">
+   408→                      <label className="text-xs text-muted-foreground">
+   409→                        Sampai
+   410→                      </label>
+   411→                      <Input
+   412→                        type="date"
+   413→                        value={to}
+   414→                        onChange={(e) => setTo(e.target.value)}
+   415→                      />
+   416→                    </div>
+   417→                    <div className="flex justify-end gap-2 pt-1">
+   418→                      <Button
+   419→                        variant="ghost"
+   420→                        size="sm"
+   421→                        onClick={() => {
+   422→                          setFrom("");
+   423→                          setTo("");
+   424→                        }}
+   425→                      >
+   426→                        Reset
+   427→                      </Button>
+   428→                    </div>
+   429→                  </div>
+   430→                </PopoverContent>
+   431→              </Popover>
+   432→
+   433→              <Button
+   434→                variant="outline"
+   435→                size="sm"
+   436→                onClick={handleExport}
+   437→                disabled={total === 0}
+   438→                className="h-9 gap-1.5"
+   439→                title="Ekspor ke CSV"
+   440→              >
+   441→                <Download className="h-4 w-4" />
+   442→                <span className="hidden sm:inline">CSV</span>
+   443→              </Button>
+   444→
+   445→              {hasActiveFilters && (
+   446→                <Button
+   447→                  variant="ghost"
+   448→                  size="sm"
+   449→                  onClick={clearFilters}
+   450→                  className="h-9 text-muted-foreground"
+   451→                >
+   452→                  <X className="mr-1 h-3.5 w-3.5" />
+   453→                  <span className="hidden sm:inline">Reset</span>
+   454→                </Button>
+   455→              )}
+   456→            </div>
+   457→          </div>
+   458→
+   459→          {/* "Hanya" toggle chips */}
+   460→          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+   461→            <span className="text-xs font-medium text-muted-foreground">
+   462→              Hanya:
+   463→            </span>
+   464→            <ToggleChip
+   465→              active={onlyLunasPending}
+   466→              onClick={() => setOnlyLunasPending((v) => !v)}
+   467→            >
+   468→              Lunas/Pending
+   469→            </ToggleChip>
+   470→            <ToggleChip
+   471→              active={onlyPinned}
+   472→              onClick={() => setOnlyPinned((v) => !v)}
+   473→            >
+   474→              <Pin className="h-3 w-3" />
+   475→              Disematkan
+   476→            </ToggleChip>
+   477→            <ToggleChip
+   478→              active={onlyReimbursable}
+   479→              onClick={() => setOnlyReimbursable((v) => !v)}
+   480→            >
+   481→              Reimbursable
+   482→            </ToggleChip>
+   483→            <ToggleChip
+   484→              active={onlyDebt}
+   485→              onClick={() => setOnlyDebt((v) => !v)}
+   486→            >
+   487→              Hutang
+   488→            </ToggleChip>
+   489→            <ToggleChip
+   490→              active={onlySubscription}
+   491→              onClick={() => setOnlySubscription((v) => !v)}
+   492→            >
+   493→              Langganan
+   494→            </ToggleChip>
+   495→            <ToggleChip
+   496→              active={showHidden}
+   497→              onClick={() => setShowHidden((v) => !v)}
+   498→            >
+   499→              <EyeOff className="mr-1 h-3 w-3" />
+   500→              Tersembunyi
+   501→            </ToggleChip>
+   502→          </div>
+   503→
+   504→          {/* Result summary */}
+   505→          {total > 0 && (
+   506→            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-3 text-xs">
+   507→              <span className="text-muted-foreground">
+   508→                {total} transaksi
+   509→                {isFetching && " · memperbarui..."}
+   510→              </span>
+   511→            </div>
+   512→          )}
+   513→        </Card>
+   514→      )}
+   515→
+   516→      {/* List */}
+   517→      {isLoading ? (
+   518→        <div className="space-y-3">
+   519→          {Array.from({ length: 5 }).map((_, i) => (
+   520→            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+   521→          ))}
+   522→        </div>
+   523→      ) : transactions.length === 0 ? (
+   524→        <EmptyState title={emptyTitle} description={emptyDescription} />
+   525→      ) : (
+   526→        <Card className="gap-0 overflow-hidden p-0">
+   527→          {transactions.map((t, idx) => (
+   528→            <TransactionRow
+   529→              key={t.id}
+   530→              transaction={t}
+   531→              onEdit={() => onEdit(t)}
+   532→              isFirst={idx === 0}
+   533→            />
+   534→          ))}
+   535→        </Card>
+   536→      )}
+   537→    </div>
+   538→  );
+   539→}
+   540→
+   541→// ----------------------------------------------------------------------------
+   542→// Sub-components
+   543→// ----------------------------------------------------------------------------
+   544→
+   545→function SummaryStat({
+   546→  label,
+   547→  value,
+   548→  variant,
+   549→  loading,
+   550→}: {
+   551→  label: string;
+   552→  value: number;
+   553→  variant: "income" | "expense";
+   554→  loading?: boolean;
+   555→}) {
+   556→  const isIncome = variant === "income";
+   557→  return (
+   558→    <Card className="p-3 sm:p-4">
+   559→      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+   560→        {label}
+   561→      </p>
+   562→      {loading ? (
+   563→        <Skeleton className="mt-1.5 h-5 w-20" />
+   564→      ) : (
+   565→        <p
+   566→          className={cn(
+   567→            "mt-1 text-sm font-bold tabular-nums sm:text-base",
+   568→            isIncome ? "text-income" : "text-expense"
+   569→          )}
+   570→        >
+   571→          {value < 0 && !isIncome ? "−" : ""}
+   572→          {value >= 0 && isIncome ? "+" : ""}
+   573→          {formatCurrency(Math.abs(value))}
+   574→        </p>
+   575→      )}
+   576→    </Card>
+   577→  );
+   578→}
+   579→
+   580→function SummaryCount({
+   581→  label,
+   582→  value,
+   583→  loading,
+   584→}: {
+   585→  label: string;
+   586→  value: number;
+   587→  loading?: boolean;
+   588→}) {
+   589→  return (
+   590→    <Card className="p-3 sm:p-4">
+   591→      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+   592→        {label}
+   593→      </p>
+   594→      {loading ? (
+   595→        <Skeleton className="mt-1.5 h-5 w-12" />
+   596→      ) : (
+   597→        <p className="mt-1 text-sm font-bold tabular-nums text-foreground sm:text-base">
+   598→          {value}
+   599→        </p>
+   600→      )}
+   601→    </Card>
+   602→  );
+   603→}
+   604→
+   605→function ToggleChip({
+   606→  active,
+   607→  onClick,
+   608→  children,
+   609→}: {
+   610→  active: boolean;
+   611→  onClick: () => void;
+   612→  children: React.ReactNode;
+   613→}) {
+   614→  return (
+   615→    <Button
+   616→      type="button"
+   617→      variant={active ? "default" : "outline"}
+   618→      size="sm"
+   619→      aria-pressed={active}
+   620→      onClick={onClick}
+   621→      className={cn(
+   622→        "h-7 gap-1 rounded-full px-2.5 text-xs",
+   623→        !active && "text-muted-foreground"
+   624→      )}
+   625→    >
+   626→      {children}
+   627→    </Button>
+   628→  );
+   629→}
+   630→
+   631→function TransactionRow({
+   632→  transaction,
+   633→  onEdit,
+   634→  isFirst = false,
+   635→}: {
+   636→  transaction: Transaction;
+   637→  onEdit: () => void;
+   638→  isFirst?: boolean;
+   639→}) {
+   640→  const duplicateMut = useDuplicateTransaction();
+   641→  const pinMut = useTogglePin();
+   642→  const hideMut = useToggleHideTransaction();
+   643→
+   644→  function handleToggleHide() {
+   645→    hideMut.mutate(transaction.id, {
+   646→      onSuccess: () => {
+   647→        toast.success(transaction.isHidden ? "Transaksi ditampilkan" : "Transaksi disembunyikan");
+   648→      },
+   649→      onError: () => toast.error("Gagal mengubah status transaksi"),
+   650→    });
+   651→  }
+   652→
+   653→  const isIncome = transaction.type === "INCOME";
+   654→  const cat = transaction.category;
+   655→
+   656→  const moodOpt = transaction.mood
+   657→    ? MOOD_OPTIONS.find((o) => o.value === transaction.mood)
+   658→    : null;
+   659→  const priorityOpt = transaction.priority
+   660→    ? PRIORITY_OPTIONS.find((o) => o.value === transaction.priority)
+   661→    : null;
+   662→  const paymentOpt = transaction.paymentMethod
+   663→    ? PAYMENT_METHOD_OPTIONS.find((o) => o.value === transaction.paymentMethod)
+   664→    : null;
+   665→
+   666→  const tags = parseTags(transaction.tags);
+   667→
+   668→  const flags: Array<{ label: string; color: string }> = [];
+   669→  if (transaction.isDebt) flags.push({ label: "Hutang", color: "#ef4444" });
+   670→  if (transaction.isReimbursable)
+   671→    flags.push({ label: "Reimbursable", color: "#0891b2" });
+   672→  if (transaction.isSubscription)
+   673→    flags.push({ label: "Langganan", color: "#a855f7" });
+   674→  if (transaction.isBusinessExpense)
+   675→    flags.push({ label: "Bisnis", color: "#f97316" });
+   676→  if (transaction.isTaxDeductible)
+   677→    flags.push({ label: "Pajak", color: "#6b7280" });
+   678→  if (transaction.isSplit) flags.push({ label: "Split", color: "#14b8a6" });
+   679→
+   680→  const hasFlagsRow = flags.length > 0 || tags.length > 0 || !!transaction.photoUrl;
+   681→
+   682→  function handleDuplicate() {
+   683→    duplicateMut.mutate(transaction.id, {
+   684→      onSuccess: () => toast.success("Transaksi berhasil diduplikat."),
+   685→      onError: (e) => toast.error(e.message ?? "Gagal menduplikat transaksi."),
+   686→    });
+   687→  }
+   688→
+   689→  function handleTogglePin() {
+   690→    pinMut.mutate(transaction.id, {
+   691→      onSuccess: (updated) =>
+   692→        toast.success(
+   693→          updated.isPinned
+   694→            ? "Transaksi disematkan."
+   695→            : "Sematan dilepas."
+   696→        ),
+   697→      onError: (e) =>
+   698→        toast.error(e.message ?? "Gagal mengubah sematan transaksi."),
+   699→    });
+   700→  }
+   701→
+   702→  return (
+   703→    <div
+   704→      className={cn(
+   705→        "group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/40 sm:px-4",
+   706→        !isFirst && "border-t border-border/60",
+   707→      )}
+   708→    >
+   709→      {/* Category icon (with optional pinned ring) */}
+   710→      <span
+   711→        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+   712→        style={{ backgroundColor: cat ? `${cat.color}1a` : undefined }}
+   713→      >
+   714→        <LucideIcon
+   715→          name={cat?.icon ?? "Circle"}
+   716→          className="h-4.5 w-4.5"
+   717→          style={{ color: cat?.color }}
+   718→        />
+   719→      </span>
+   720→
+   721→      {/* Main content */}
+   722→      <div className="min-w-0 flex-1">
+   723→        {/* Title row: description + mood emoji + priority dot + payment icon + pin */}
+   724→        <div className="flex items-center gap-1.5">
+   725→          <p className="truncate text-sm font-medium text-foreground">
+   726→            {transaction.description}
+   727→          </p>
+   728→          {moodOpt && (
+   729→            <span
+   730→              className="shrink-0 text-xs"
+   731→              title={`Mood: ${moodOpt.label}`}
+   732→              aria-label={`Mood: ${moodOpt.label}`}
+   733→            >
+   734→              {moodOpt.emoji}
+   735→            </span>
+   736→          )}
+   737→          {priorityOpt && (
+   738→            <span
+   739→              className="h-1.5 w-1.5 shrink-0 rounded-full"
+   740→              style={{ backgroundColor: priorityOpt.color }}
+   741→              title={`Prioritas: ${priorityOpt.label}`}
+   742→              aria-label={`Prioritas: ${priorityOpt.label}`}
+   743→            />
+   744→          )}
+   745→          {paymentOpt && (
+   746→            <LucideIcon
+   747→              name={paymentOpt.icon}
+   748→              className="h-3 w-3 shrink-0 text-muted-foreground"
+   749→              aria-label={`Pembayaran: ${paymentOpt.label}`}
+   750→            />
+   751→          )}
+   752→          {transaction.isPinned && (
+   753→            <Pin
+   754→              className="h-3 w-3 shrink-0 fill-primary text-primary"
+   755→              aria-label="Disematkan"
+   756→            />
+   757→          )}
+   758→        </div>
+   759→
+   760→        {/* Category + date row */}
+   761→        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+   762→          {cat?.name ?? "Tanpa kategori"}
+   763→          <span className="mx-1 text-border">·</span>
+   764→          {relativeDay(transaction.date)}
+   765→        </p>
+   766→
+   767→        {/* Flags row */}
+   768→        {hasFlagsRow && (
+   769→          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+   770→            {flags.map((f) => (
+   771→              <span
+   772→                key={f.label}
+   773→                className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none"
+   774→                style={{
+   775→                  color: f.color,
+   776→                  backgroundColor: `${f.color}1a`,
+   777→                }}
+   778→              >
+   779→                {f.label}
+   780→              </span>
+   781→            ))}
+   782→            {tags.map((tag) => (
+   783→              <span
+   784→                key={tag}
+   785→                className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground"
+   786→              >
+   787→                #{tag}
+   788→              </span>
+   789→            ))}
+   790→            {transaction.photoUrl && (
+   791→              <span
+   792→                className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground"
+   793→                title="Memiliki foto"
+   794→              >
+   795→                <Camera className="h-3 w-3" />
+   796→              </span>
+   797→            )}
+   798→          </div>
+   799→        )}
+   800→      </div>
+   801→
+   802→      {/* Right side: amount + actions */}
+   803→      <div className="flex shrink-0 items-center gap-2">
+   804→        <div className="text-right">
+   805→          <div
+   806→            className={cn(
+   807→              "text-sm font-semibold tabular-nums",
+   808→              isIncome ? "text-income" : "text-expense"
+   809→            )}
+   810→          >
+   811→            {isIncome ? "+" : "−"}
+   812→            {formatCurrency(transaction.amount)}
+   813→          </div>
+   814→        </div>
+   815→        {/* Actions: combine edit + menu into single dropdown to avoid overlap */}
+   816→        <DropdownMenu>
+   817→          <DropdownMenuTrigger asChild>
+   818→            <Button
+   819→              variant="ghost"
+   820→              size="icon"
+   821→              className="h-8 w-8 shrink-0 text-muted-foreground opacity-60 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+   822→              aria-label="Aksi transaksi"
+   823→            >
+   824→              <MoreVertical className="h-4 w-4" />
+   825→            </Button>
+   826→          </DropdownMenuTrigger>
+   827→          <DropdownMenuContent align="end" className="w-44">
+   828→            <DropdownMenuItem
+   829→              onClick={onEdit}
+   830→              className="gap-2"
+   831→            >
+   832→              <Pencil className="h-3.5 w-3.5" />
+   833→              Edit
+   834→            </DropdownMenuItem>
+   835→            <DropdownMenuItem
+   836→              onClick={handleDuplicate}
+   837→              disabled={duplicateMut.isPending}
+   838→            >
+   839→              {duplicateMut.isPending ? (
+   840→                <Loader2 className="h-4 w-4 animate-spin" />
+   841→              ) : (
+   842→                <Copy className="h-4 w-4" />
+   843→              )}
+   844→              Duplikat
+   845→            </DropdownMenuItem>
+   846→            <DropdownMenuItem
+   847→              onClick={handleTogglePin}
+   848→              disabled={pinMut.isPending}
+   849→            >
+   850→              {pinMut.isPending ? (
+   851→                <Loader2 className="h-4 w-4 animate-spin" />
+   852→              ) : (
+   853→                <Pin className="h-4 w-4" />
+   854→              )}
+   855→              {transaction.isPinned ? "Lepas Sematan" : "Sematkan"}
+   856→            </DropdownMenuItem>
+   857→            <DropdownMenuItem
+   858→              onClick={handleToggleHide}
+   859→              disabled={hideMut.isPending}
+   860→            >
+   861→              {hideMut.isPending ? (
+   862→                <Loader2 className="h-4 w-4 animate-spin" />
+   863→              ) : transaction.isHidden ? (
+   864→                <Eye className="h-4 w-4" />
+   865→              ) : (
+   866→                <EyeOff className="h-4 w-4" />
+   867→              )}
+   868→              {transaction.isHidden ? "Tampilkan" : "Sembunyikan"}
+   869→            </DropdownMenuItem>
+   870→            <DropdownMenuSeparator />
+   871→            <DropdownMenuItem onClick={() => toast("Detail transaksi")}>
+   872→              <Eye className="h-4 w-4" />
+   873→              Lihat Detail
+   874→            </DropdownMenuItem>
+   875→          </DropdownMenuContent>
+   876→        </DropdownMenu>
+   877→      </div>
+   878→    </div>
+   879→  );
+   880→}
+   881→
+   882→function EmptyState({
+   883→  title,
+   884→  description,
+   885→}: {
+   886→  title: string;
+   887→  description: string;
+   888→}) {
+   889→  return (
+   890→    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-12 text-center">
+   891→      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent">
+   892→        <Inbox className="h-6 w-6 text-muted-foreground" />
+   893→      </span>
+   894→      <div>
+   895→        <p className="text-sm font-medium text-foreground">{title}</p>
+   896→        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+   897→      </div>
+   898→    </div>
+   899→  );
+   900→}
+   901→
+   902→function useDebouncedValue<T>(value: T, delay: number): T {
+   903→  const [debounced, setDebounced] = React.useState(value);
+   904→  React.useEffect(() => {
+   905→    const t = setTimeout(() => setDebounced(value), delay);
+   906→    return () => clearTimeout(t);
+   907→  }, [value, delay]);
+   908→  return debounced;
+   909→}
+   910→

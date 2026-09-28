@@ -12,6 +12,7 @@ import { JajanButton } from "@/components/finance/jajan-button";
 import { LockScreen } from "@/components/finance/lock-screen";
 import { GoalsSection } from "@/components/finance/goals-section";
 import { BudgetsSection } from "@/components/finance/budgets-section";
+import { CommandPalette } from "@/components/finance/command-palette";
 import {
   PengaturanHub,
   PatunganHub,
@@ -142,6 +143,7 @@ export default function Home() {
   const [editing, setEditing] = React.useState<Transaction | null>(null);
   const [prefill, setPrefill] = React.useState<PrefillData | null>(null);
   const [isBlurred, setIsBlurred] = React.useState(false);
+  const [cmdOpen, setCmdOpen] = React.useState(false);
 
   const { data: categories, isLoading: catsLoading } = useCategories();
   const { data: securityRaw } = useSecuritySettings();
@@ -523,6 +525,7 @@ export default function Home() {
           onNavigate={setSection}
           onAdd={openAdd}
           onJajan={() => setJajanOpen(true)}
+          onOpenSearch={() => setCmdOpen(true)}
         >
           <div
             className={
@@ -566,6 +569,14 @@ export default function Home() {
 
           {/* Quick Jajan Sheet (controlled by AppShell FABs) */}
           <JajanButton open={jajanOpen} onOpenChange={setJajanOpen} />
+
+          {/* Command Palette (Cmd+K) */}
+          <CommandPalette
+            open={cmdOpen}
+            onOpenChange={setCmdOpen}
+            onAdd={openAdd}
+            onNavigate={(s) => setSection(s as SectionId)}
+          />
         </AppShell>
       </div>
 

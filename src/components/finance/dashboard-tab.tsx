@@ -33,6 +33,7 @@ import {
   ProgressRing,
   Sparkline,
 } from "@/components/finance/chart-widgets";
+import { ConcentricRings } from "@/components/finance/concentric-rings";
 import { cn } from "@/lib/utils";
 import {
   addDays,
@@ -50,6 +51,13 @@ import {
   useTransactions,
 } from "@/lib/hooks";
 import type { BudgetStatus, Goal, Transaction } from "@/lib/types";
+import { GamificationBar } from "@/components/finance/gamification-bar";
+import { HeatmapCalendar } from "@/components/finance/heatmap-calendar";
+import { useTheme } from "@/lib/theme-context";
+import { DashboardNeobrutalist } from "@/components/finance/dashboard-neobrutalist";
+import { DashboardSkeuomorphic } from "@/components/finance/dashboard-skeuomorphic";
+import { DashboardAmbient } from "@/components/finance/dashboard-ambient";
+import { DashboardMagazine } from "@/components/finance/dashboard-magazine";
 
 interface Props {
   onAdd: () => void;
@@ -57,7 +65,36 @@ interface Props {
   onViewAll: () => void;
 }
 
-export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
+/**
+ * DashboardTab — themed wrapper.
+ *
+ * Picks the right dashboard variant based on the active theme from
+ * `useTheme()`. The original Glassmorphism dashboard (the implementation
+ * below as `GlassDashboard`) is the default for the `glass` theme and any
+ * unknown/fallback theme.
+ */
+export function DashboardTab(props: Props) {
+  const { theme } = useTheme();
+  switch (theme) {
+    case "neobrutalist":
+      return <DashboardNeobrutalist {...props} />;
+    case "skeuomorphic":
+      return <DashboardSkeuomorphic {...props} />;
+    case "ambient":
+      return <DashboardAmbient {...props} />;
+    case "magazine":
+      return <DashboardMagazine {...props} />;
+    case "glass":
+    default:
+      return <GlassDashboard {...props} />;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Glass Dashboard — default theme (glassmorphism)                    */
+/* ------------------------------------------------------------------ */
+
+function GlassDashboard({ onAdd, onEdit, onViewAll }: Props) {
   // Avoid hydration mismatch — compute greeting on client only.
   const [greeting, setGreeting] = React.useState<string>("");
   React.useEffect(() => {
@@ -468,6 +505,12 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
         </Card>
       </div>
 
+      {/* Concentric Rings — 4 metrik utama dalam satu lingkaran */}
+      <ConcentricRings />
+
+      {/* Gamification bar — XP / level / achievements */}
+      <GamificationBar />
+
       {/* Counter Jajan Harian + Weekly Summary — 2 col grid */}
       {todayExpenses.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -582,6 +625,9 @@ export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
           </div>
         )}
       </Card>
+
+      {/* Heatmap calendar — daily spending intensity */}
+      <HeatmapCalendar onEdit={onEdit} />
     </div>
   );
 }

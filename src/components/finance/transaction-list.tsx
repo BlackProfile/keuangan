@@ -9,6 +9,8 @@ import {
   Eye,
   EyeOff,
   Inbox,
+  Layers,
+  List,
   Loader2,
   MoreVertical,
   Pencil,
@@ -42,6 +44,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LucideIcon } from "@/components/lucide-icon";
+import { CardStack } from "@/components/finance/card-stack";
+import { FinancialTimeline } from "@/components/finance/financial-timeline";
 import { cn } from "@/lib/utils";
 import {
   formatCurrency,
@@ -72,6 +76,7 @@ interface Props {
 }
 
 type TypeFilter = "ALL" | TransactionType;
+type ViewMode = "list" | "stack" | "timeline";
 
 export function TransactionList({
   onEdit,
@@ -80,6 +85,9 @@ export function TransactionList({
   emptyTitle = "Belum ada transaksi",
   emptyDescription = "Mulai catat pemasukan dan pengeluaran Anda.",
 }: Props) {
+  // View mode: list | stack | timeline
+  const [viewMode, setViewMode] = React.useState<ViewMode>("list");
+
   // Existing filters
   const [search, setSearch] = React.useState("");
   const [type, setType] = React.useState<TypeFilter>("ALL");
@@ -237,6 +245,111 @@ export function TransactionList({
 
   return (
     <div className="space-y-4">
+      {/* View mode switcher — List | Stack | Timeline */}
+      {showFilters && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-muted-foreground">Tampilan</p>
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-0.5">
+            <ViewModeBtn
+              active={viewMode === "list"}
+              onClick={() => setViewMode("list")}
+              icon={<List className="h-3.5 w-3.5" />}
+              label="List"
+            />
+            <ViewModeBtn
+              active={viewMode === "stack"}
+              onClick={() => setViewMode("stack")}
+              icon={<Layers className="h-3.5 w-3.5" />}
+              label="Kartu"
+            />
+            <ViewModeBtn
+              active={viewMode === "timeline"}
+              onClick={() => setViewMode("timeline")}
+              icon={<TimelineIcon />}
+              label="Linimasa"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Stack & Timeline views — render alternative layouts and skip the filter card */}
+      {viewMode === "stack" && (
+        <>
+          {showFilters && total > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <SummaryStat
+                label="Pemasukan"
+                value={totalIncome}
+                variant="income"
+                loading={isLoading}
+              />
+              <SummaryStat
+                label="Pengeluaran"
+                value={totalExpense}
+                variant="expense"
+                loading={isLoading}
+              />
+              <SummaryStat
+                label="Selisih"
+                value={totalBalance}
+                variant={totalBalance >= 0 ? "income" : "expense"}
+                loading={isLoading}
+              />
+              <SummaryCount label="Transaksi" value={total} loading={isLoading} />
+            </div>
+          )}
+          {isLoading ? (
+            <Skeleton className="h-[26rem] w-full rounded-2xl" />
+          ) : transactions.length === 0 ? (
+            <EmptyState title={emptyTitle} description={emptyDescription} />
+          ) : (
+            <CardStack transactions={transactions} onEdit={onEdit} />
+          )}
+        </>
+      )}
+
+      {viewMode === "timeline" && (
+        <>
+          {showFilters && total > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <SummaryStat
+                label="Pemasukan"
+                value={totalIncome}
+                variant="income"
+                loading={isLoading}
+              />
+              <SummaryStat
+                label="Pengeluaran"
+                value={totalExpense}
+                variant="expense"
+                loading={isLoading}
+              />
+              <SummaryStat
+                label="Selisih"
+                value={totalBalance}
+                variant={totalBalance >= 0 ? "income" : "expense"}
+                loading={isLoading}
+              />
+              <SummaryCount label="Transaksi" value={total} loading={isLoading} />
+            </div>
+          )}
+          {isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : transactions.length === 0 ? (
+            <EmptyState title={emptyTitle} description={emptyDescription} />
+          ) : (
+            <FinancialTimeline transactions={transactions} onEdit={onEdit} />
+          )}
+        </>
+      )}
+
+      {/* List view (default) */}
+      {viewMode === "list" && (
+        <>
       {/* Summary strip — totals for current filter */}
       {showFilters && total > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -533,6 +646,8 @@ export function TransactionList({
             />
           ))}
         </Card>
+      )}
+        </>
       )}
     </div>
   );
@@ -906,4 +1021,59 @@ function useDebouncedValue<T>(value: T, delay: number): T {
     return () => clearTimeout(t);
   }, [value, delay]);
   return debounced;
+}
+
+/* ------------------------------------------------------------------ */
+/*  View-mode toggle helpers                                          */
+/* ------------------------------------------------------------------ */
+
+function ViewModeBtn({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+        active
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+}
+
+function TimelineIcon() {
+  // Small custom timeline icon (dot + line + dot)
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <circle cx="4" cy="3" r="1.5" />
+      <circle cx="4" cy="11" r="1.5" />
+      <line x1="4" y1="4.5" x2="4" y2="9.5" />
+      <line x1="6.5" y1="3" x2="11" y2="3" />
+      <line x1="6.5" y1="11" x2="11" y2="11" />
+    </svg>
+  );
 }

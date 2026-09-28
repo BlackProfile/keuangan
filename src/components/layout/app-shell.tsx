@@ -16,6 +16,7 @@ import {
   Bell,
   ArrowDown,
   ArrowUp,
+  Search,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationsBell } from "@/components/notifications-bell";
+import { ThemePicker } from "@/components/finance/theme-picker";
 
 /**
  * SectionId — simplified 7 main sections + hub sub-sections.
@@ -90,10 +92,11 @@ interface Props {
   onNavigate: (id: SectionId) => void;
   onAdd: () => void;
   onJajan: () => void;
+  onOpenSearch?: () => void;
   children: React.ReactNode;
 }
 
-export function AppShell({ active, onNavigate, onAdd, onJajan, children }: Props) {
+export function AppShell({ active, onNavigate, onAdd, onJajan, onOpenSearch, children }: Props) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [fabExpanded, setFabExpanded] = React.useState(false);
 
@@ -232,6 +235,19 @@ export function AppShell({ active, onNavigate, onAdd, onJajan, children }: Props
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            {onOpenSearch && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={onOpenSearch}
+                aria-label="Cari perintah (Cmd+K)"
+                title="Cari perintah (Cmd+K)"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            )}
+            <ThemePicker />
             <NotificationsBell />
             <ThemeToggle />
           </div>
@@ -241,6 +257,22 @@ export function AppShell({ active, onNavigate, onAdd, onJajan, children }: Props
         <header className="sticky top-0 z-30 hidden h-16 items-center justify-between gap-3 border-b border-border bg-background/80 px-6 backdrop-blur-md lg:flex">
           <h1 className="text-lg font-bold tracking-tight">{activeLabel}</h1>
           <div className="flex items-center gap-1.5">
+            {onOpenSearch && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onOpenSearch}
+                className="gap-2 text-muted-foreground"
+                aria-label="Cari perintah (Cmd+K)"
+              >
+                <Search className="h-4 w-4" />
+                <span className="hidden xl:inline">Cari…</span>
+                <kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium sm:inline">
+                  ⌘K
+                </kbd>
+              </Button>
+            )}
+            <ThemePicker />
             <NotificationsBell />
             <ThemeToggle />
           </div>

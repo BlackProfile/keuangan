@@ -1,0 +1,1126 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import * as React from "react";
+     4→     4→import { motion } from "framer-motion";
+     5→     5→import {
+     6→     6→  ArrowDownRight,
+     7→     7→  ArrowRight,
+     8→     8→  ArrowUpRight,
+     9→     9→  CalendarRange,
+    10→    10→  Coins,
+    11→    11→  Eye,
+    12→    12→  EyeOff,
+    13→    13→  Flame,
+    14→    14→  ListOrdered,
+    15→    15→  Plus,
+    16→    16→  Sparkles,
+    17→    17→  Target,
+    18→    18→  TrendingDown,
+    19→    19→  TrendingUp,
+    20→    20→  TriangleAlert,
+    21→    21→  Wallet,
+    22→    22→} from "lucide-react";
+    23→    23→
+    24→    24→import { Badge } from "@/components/ui/badge";
+    25→    25→import { Button } from "@/components/ui/button";
+    26→    26→import { Card } from "@/components/ui/card";
+    27→    27→import { Skeleton } from "@/components/ui/skeleton";
+    28→    28→import { LucideIcon } from "@/components/lucide-icon";
+    29→    29→import {
+    30→    30→  AnimatedNumber,
+    31→    31→  DonutChart,
+    32→    32→  MiniBarChart,
+    33→    33→  ProgressRing,
+    34→    34→  Sparkline,
+    35→    35→} from "@/components/finance/chart-widgets";
+    36→    36→import { cn } from "@/lib/utils";
+    37→    37→import {
+    38→    38→  addDays,
+    39→    39→  formatCurrency,
+    40→    40→  formatCurrencyCompact,
+    41→    41→  formatDateInput,
+    42→    42→  getGreeting,
+    43→    43→  getMonthKey,
+    44→    44→  parseDateLocal,
+    45→    45→  relativeDay,
+    46→    46→} from "@/lib/format";
+    47→    47→import {
+    48→    48→  useAnalytics,
+    49→    49→  useDashboard,
+    50→    50→  useTransactions,
+    51→    51→} from "@/lib/hooks";
+    52→    52→import type { BudgetStatus, Goal, Transaction } from "@/lib/types";
+    53→    53→
+    54→    54→interface Props {
+    55→    55→  onAdd: () => void;
+    56→    56→  onEdit: (t: Transaction) => void;
+    57→    57→  onViewAll: () => void;
+    58→    58→}
+    59→    59→
+    60→    60→export function DashboardTab({ onAdd, onEdit, onViewAll }: Props) {
+    61→    61→  // Avoid hydration mismatch — compute greeting on client only.
+    62→    62→  const [greeting, setGreeting] = React.useState<string>("");
+    63→    63→  React.useEffect(() => {
+    64→    64→    setGreeting(getGreeting());
+    65→    65→  }, []);
+    66→    66→
+    67→    67→  // Show/hide balance toggle (persisted to localStorage)
+    68→    68→  const [showBalance, setShowBalance] = React.useState(true);
+    69→    69→  React.useEffect(() => {
+    70→    70→    try {
+    71→    71→      const saved = localStorage.getItem("dompetku:showBalance");
+    72→    72→      if (saved !== null) setShowBalance(saved !== "false");
+    73→    73→    } catch {
+    74→    74→      // ignore
+    75→    75→    }
+    76→    76→  }, []);
+    77→    77→  const toggleBalance = React.useCallback(() => {
+    78→    78→    setShowBalance((prev) => {
+    79→    79→      const next = !prev;
+    80→    80→      try {
+    81→    81→        localStorage.setItem("dompetku:showBalance", String(next));
+    82→    82→      } catch {
+    83→    83→        // ignore
+    84→    84→      }
+    85→    85→      return next;
+    86→    86→    });
+    87→    87→  }, []);
+    88→    88→
+    89→    89→  const monthKey = getMonthKey(new Date());
+    90→    90→  const { data, isLoading } = useDashboard(monthKey);
+    91→    91→  const { data: analytics } = useAnalytics(monthKey);
+    92→    92→
+    93→    93→  const summary = data?.summary;
+    94→    94→  const recent = data?.recentTransactions ?? [];
+    95→    95→  const budgets = data?.budgetStatuses ?? [];
+    96→    96→  const goals = data?.goals ?? [];
+    97→    97→
+    98→    98→  // Fetch current month's transactions for Top 5 jajan + counter jajan today.
+    99→    99→  const today = React.useMemo(() => new Date(), []);
+   100→   100→  const monthStartStr = React.useMemo(() => {
+   101→   101→    const d = new Date(today.getFullYear(), today.getMonth(), 1);
+   102→   102→    return formatDateInput(d);
+   103→   103→  }, [today]);
+   104→   104→  const todayStr = React.useMemo(() => formatDateInput(today), [today]);
+   105→   105→
+   106→   106→  // For weekly summary trend + last 14-day avg jajan counter:
+   107→   107→  // fetch from min(monthStart, lastWeekMonday) to today.
+   108→   108→  const lastWeekMondayStr = React.useMemo(() => {
+   109→   109→    const dayIdx = (today.getDay() + 6) % 7; // 0 = Monday
+   110→   110→    const thisMonday = addDays(today, -dayIdx);
+   111→   111→    const lastMonday = addDays(thisMonday, -7);
+   112→   112→    return formatDateInput(lastMonday);
+   113→   113→  }, [today]);
+   114→   114→  const fetchFromStr = monthStartStr < lastWeekMondayStr ? monthStartStr : lastWeekMondayStr;
+   115→   115→
+   116→   116→  const { data: rangeTx, isLoading: rangeLoading } = useTransactions({
+   117→   117→    from: fetchFromStr,
+   118→   118→    to: todayStr,
+   119→   119→    limit: 500,
+   120→   120→  });
+   121→   121→
+   122→   122→  // ---- Derived: today's EXPENSE transactions ----
+   123→   123→  const todayExpenses = React.useMemo(() => {
+   124→   124→    if (!rangeTx) return [];
+   125→   125→    return rangeTx.filter((t) => {
+   126→   126→      if (t.type !== "EXPENSE") return false;
+   127→   127→      const d = parseDateLocal(t.date);
+   128→   128→      const td = parseDateLocal(todayStr);
+   129→   129→      return (
+   130→   130→        d.getFullYear() === td.getFullYear() &&
+   131→   131→        d.getMonth() === td.getMonth() &&
+   132→   132→        d.getDate() === td.getDate()
+   133→   133→      );
+   134→   134→    });
+   135→   135→  }, [rangeTx, todayStr]);
+   136→   136→
+   137→   137→  // ---- Derived: avg daily jajan count (last 14 days) ----
+   138→   138→  const avgDailyJajan = React.useMemo(() => {
+   139→   139→    if (!rangeTx) return 0;
+   140→   140→    const countsByDay = new Map<string, number>();
+   141→   141→    const start = addDays(parseDateLocal(todayStr), -13);
+   142→   142→    start.setHours(0, 0, 0, 0);
+   143→   143→    for (let i = 0; i < 14; i++) {
+   144→   144→      const d = addDays(start, i);
+   145→   145→      countsByDay.set(formatDateInput(d), 0);
+   146→   146→    }
+   147→   147→    for (const t of rangeTx) {
+   148→   148→      if (t.type !== "EXPENSE") continue;
+   149→   149→      const d = parseDateLocal(t.date);
+   150→   150→      if (d < start) continue;
+   151→   151→      const key = formatDateInput(d);
+   152→   152→      countsByDay.set(key, (countsByDay.get(key) ?? 0) + 1);
+   153→   153→    }
+   154→   154→    const total = Array.from(countsByDay.values()).reduce((a, b) => a + b, 0);
+   155→   155→    return total / 14;
+   156→   156→  }, [rangeTx, todayStr]);
+   157→   157→
+   158→   158→  // ---- Derived: Top 5 jajan favorit (this month) ----
+   159→   159→  const top5Jajan = React.useMemo(() => {
+   160→   160→    if (!rangeTx) return [] as Array<{ description: string; count: number; total: number }>;
+   161→   161→    const monthStart = parseDateLocal(monthStartStr);
+   162→   162→    const map = new Map<string, { count: number; total: number }>();
+   163→   163→    for (const t of rangeTx) {
+   164→   164→      if (t.type !== "EXPENSE") continue;
+   165→   165→      const d = parseDateLocal(t.date);
+   166→   166→      if (d < monthStart) continue;
+   167→   167→      const key = (t.description || "").trim().toLowerCase();
+   168→   168→      if (!key) continue;
+   169→   169→      const cur = map.get(key) ?? { count: 0, total: 0 };
+   170→   170→      cur.count += 1;
+   171→   171→      cur.total += t.amount;
+   172→   172→      map.set(key, cur);
+   173→   173→    }
+   174→   174→    return Array.from(map.entries())
+   175→   175→      .map(([description, v]) => ({
+   176→   176→        description,
+   177→   177→        count: v.count,
+   178→   178→        total: v.total,
+   179→   179→      }))
+   180→   180→      .sort((a, b) => b.count - a.count || b.total - a.total)
+   181→   181→      .slice(0, 5);
+   182→   182→  }, [rangeTx, monthStartStr]);
+   183→   183→
+   184→   184→  // ---- Derived: Weekly summary (this week vs last week) ----
+   185→   185→  const weeklySummary = React.useMemo(() => {
+   186→   186→    const empty = {
+   187→   187→      thisIncome: 0,
+   188→   188→      thisExpense: 0,
+   189→   189→      lastExpense: 0,
+   190→   190→      balance: 0,
+   191→   191→      trendPct: 0, // negative = hemat (good), positive = boros (bad)
+   192→   192→    };
+   193→   193→    if (!rangeTx) return empty;
+   194→   194→    const dayIdx = (today.getDay() + 6) % 7; // 0 = Monday
+   195→   195→    const thisMonday = addDays(today, -dayIdx);
+   196→   196→    thisMonday.setHours(0, 0, 0, 0);
+   197→   197→    const lastMonday = addDays(thisMonday, -7);
+   198→   198→    const lastSunday = addDays(thisMonday, -1);
+   199→   199→    lastSunday.setHours(23, 59, 59, 999);
+   200→   200→
+   201→   201→    let thisIncome = 0;
+   202→   202→    let thisExpense = 0;
+   203→   203→    let lastExpense = 0;
+   204→   204→
+   205→   205→    for (const t of rangeTx) {
+   206→   206→      const d = parseDateLocal(t.date);
+   207→   207→      if (d >= thisMonday) {
+   208→   208→        if (t.type === "INCOME") thisIncome += t.amount;
+   209→   209→        else thisExpense += t.amount;
+   210→   210→      } else if (d >= lastMonday && d <= lastSunday) {
+   211→   211→        if (t.type === "EXPENSE") lastExpense += t.amount;
+   212→   212→      }
+   213→   213→    }
+   214→   214→    const trendPct =
+   215→   215→      lastExpense > 0
+   216→   216→        ? ((thisExpense - lastExpense) / lastExpense) * 100
+   217→   217→        : thisExpense > 0
+   218→   218→          ? -100
+   219→   219→          : 0;
+   220→   220→    return {
+   221→   221→      thisIncome,
+   222→   222→      thisExpense,
+   223→   223→      lastExpense,
+   224→   224→      balance: thisIncome - thisExpense,
+   225→   225→      trendPct,
+   226→   226→    };
+   227→   227→  }, [rangeTx, today]);
+   228→   228→
+   229→   229→  // ---- Derived: 14-day sparkline data (expenses per day) ----
+   230→   230→  const sparklineData = React.useMemo(() => {
+   231→   231→    if (!rangeTx) return [] as number[];
+   232→   232→    const todayDate = parseDateLocal(todayStr);
+   233→   233→    const days: number[] = [];
+   234→   234→    for (let i = 13; i >= 0; i--) {
+   235→   235→      const d = addDays(todayDate, -i);
+   236→   236→      const dStr = formatDateInput(d);
+   237→   237→      const total = rangeTx
+   238→   238→        .filter((t) => {
+   239→   239→          if (t.type !== "EXPENSE") return false;
+   240→   240→          return t.date.startsWith(dStr);
+   241→   241→        })
+   242→   242→        .reduce((s, t) => s + t.amount, 0);
+   243→   243→      days.push(total);
+   244→   244→    }
+   245→   245→    return days;
+   246→   246→  }, [rangeTx, todayStr]);
+   247→   247→
+   248→   248→  // ---- Derived: weekly mini bar chart data (7 hari, Sen-Min) ----
+   249→   249→  const weeklyBarData = React.useMemo(() => {
+   250→   250→    if (!rangeTx) return [];
+   251→   251→    const todayDate = parseDateLocal(todayStr);
+   252→   252→    const labels = ["Sn", "Sl", "Rb", "Km", "Jm", "Sb", "Mg"];
+   253→   253→    const todayDay = (todayDate.getDay() + 6) % 7; // 0=Sen
+   254→   254→    const result: { label: string; value: number; isToday?: boolean }[] = [];
+   255→   255→    // start from last Monday
+   256→   256→    const monday = addDays(todayDate, -todayDay);
+   257→   257→    for (let i = 0; i < 7; i++) {
+   258→   258→      const d = addDays(monday, i);
+   259→   259→      const dStr = formatDateInput(d);
+   260→   260→      const total = rangeTx
+   261→   261→        .filter((t) => {
+   262→   262→          if (t.type !== "EXPENSE") return false;
+   263→   263→          return t.date.startsWith(dStr);
+   264→   264→        })
+   265→   265→        .reduce((s, t) => s + t.amount, 0);
+   266→   266→      result.push({
+   267→   267→        label: labels[i],
+   268→   268→        value: total,
+   269→   269→        isToday: i === todayDay,
+   270→   270→      });
+   271→   271→    }
+   272→   272→    return result;
+   273→   273→  }, [rangeTx, todayStr]);
+   274→   274→
+   275→   275→  // ---- Derived: comparison bulan lalu (from analytics) ----
+   276→   276→  const monthComparison = analytics?.monthComparison;
+   277→   277→
+   278→   278→  // Top budget (most at-risk)
+   279→   279→  const topBudget = React.useMemo(() => {
+   280→   280→    return budgets.slice().sort((a, b) => b.percentage - a.percentage)[0];
+   281→   281→  }, [budgets]);
+   282→   282→
+   283→   283→  const topGoal = React.useMemo(() => {
+   284→   284→    return goals
+   285→   285→      .slice()
+   286→   286→      .sort(
+   287→   287→        (a, b) =>
+   288→   288→          b.currentAmount / Math.max(b.targetAmount, 1) -
+   289→   289→          a.currentAmount / Math.max(a.targetAmount, 1),
+   290→   290→      )[0];
+   291→   291→  }, [goals]);
+   292→   292→
+   293→   293→  return (
+   294→   294→    <div className="space-y-4">
+   295→   295→      {/* Hero — glassmorphism card with sparkline + hide/show balance */}
+   296→   296→      <motion.div
+   297→   297→        initial={{ opacity: 0, y: 8 }}
+   298→   298→        animate={{ opacity: 1, y: 0 }}
+   299→   299→        transition={{ duration: 0.3 }}
+   300→   300→      >
+   301→   301→        <Card className="relative overflow-hidden border-0 p-5 text-white shadow-2xl shadow-emerald-900/20 gradient-hero sm:p-6">
+   302→   302→          {/* Decorative orbs */}
+   303→   303→          <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+   304→   304→          <div className="absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/5 blur-xl" />
+   305→   305→          {/* Sparkline in background */}
+   306→   306→          {sparklineData.length > 0 && !isLoading && (
+   307→   307→            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 opacity-70">
+   308→   308→              <Sparkline
+   309→   309→                data={sparklineData}
+   310→   310→                width={400}
+   311→   311→                height={100}
+   312→   312→                className="h-full w-full"
+   313→   313→                strokeClassName="stroke-white/80"
+   314→   314→                fillClassName="fill-white/15"
+   315→   315→                strokeWidth={2.5}
+   316→   316→              />
+   317→   317→            </div>
+   318→   318→          )}
+   319→   319→          <div className="relative">
+   320→   320→            <div className="flex items-start justify-between gap-3">
+   321→   321→              <div className="min-w-0">
+   322→   322→                <p className="text-xs font-medium text-white/70">
+   323→   323→                  {greeting ? `${greeting} 👋` : "Halo"}
+   324→   324→                </p>
+   325→   325→                <p className="mt-0.5 flex items-center gap-1.5 text-sm text-white/90">
+   326→   326→                  Total saldo
+   327→   327→                  <button
+   328→   328→                    onClick={toggleBalance}
+   329→   329→                    className="text-white/60 transition-colors hover:text-white"
+   330→   330→                    aria-label={showBalance ? "Sembunyikan saldo" : "Tampilkan saldo"}
+   331→   331→                  >
+   332→   332→                    {showBalance ? (
+   333→   333→                      <Eye className="h-3.5 w-3.5" />
+   334→   334→                    ) : (
+   335→   335→                      <EyeOff className="h-3.5 w-3.5" />
+   336→   336→                    )}
+   337→   337→                  </button>
+   338→   338→                </p>
+   339→   339→              </div>
+   340→   340→              <Button
+   341→   341→                onClick={onAdd}
+   342→   342→                size="sm"
+   343→   343→                className="shrink-0 border border-white/20 bg-white/15 text-white backdrop-blur-md transition-all hover:bg-white/25 active:scale-95"
+   344→   344→              >
+   345→   345→                <Plus className="h-4 w-4" />
+   346→   346→                <span className="hidden sm:inline">Tambah</span>
+   347→   347→              </Button>
+   348→   348→            </div>
+   349→   349→
+   350→   350→            <div className="mt-4">
+   351→   351→              {isLoading ? (
+   352→   352→                <p className="text-3xl font-bold tracking-tight sm:text-4xl">···</p>
+   353→   353→              ) : showBalance ? (
+   354→   354→                <p className="text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
+   355→   355→                  <span className="text-lg font-semibold text-white/70 sm:text-xl">Rp </span>
+   356→   356→                  <AnimatedNumber
+   357→   357→                    value={summary?.balance ?? 0}
+   358→   358→                    format={(n) => n.toLocaleString("id-ID")}
+   359→   359→                  />
+   360→   360→                </p>
+   361→   361→              ) : (
+   362→   362→                <p className="text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
+   363→   363→                  •••••••
+   364→   364→                </p>
+   365→   365→              )}
+   366→   366→            </div>
+   367→   367→
+   368→   368→            {/* Income / Expense quick stats — glass pills */}
+   369→   369→            <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
+   370→   370→              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-3 py-2.5 backdrop-blur-md transition-colors hover:bg-white/15 sm:py-3">
+   371→   371→                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-400/25 sm:h-9 sm:w-9">
+   372→   372→                  <TrendingUp className="h-4 w-4 text-emerald-100 sm:h-4.5 sm:w-4.5" />
+   373→   373→                </span>
+   374→   374→                <div className="min-w-0">
+   375→   375→                  <p className="text-[10px] text-white/65 sm:text-[11px]">
+   376→   376→                    Pemasukan
+   377→   377→                  </p>
+   378→   378→                  <p className="truncate text-xs font-semibold text-emerald-50 sm:text-sm">
+   379→   379→                    {isLoading
+   380→   380→                      ? "—"
+   381→   381→                      : showBalance
+   382→   382→                        ? formatCurrencyCompact(summary?.monthIncome ?? 0)
+   383→   383→                        : "•••"}
+   384→   384→                  </p>
+   385→   385→                </div>
+   386→   386→              </div>
+   387→   387→              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-3 py-2.5 backdrop-blur-md transition-colors hover:bg-white/15 sm:py-3">
+   388→   388→                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-400/25 sm:h-9 sm:w-9">
+   389→   389→                  <TrendingDown className="h-4 w-4 text-rose-100 sm:h-4.5 sm:w-4.5" />
+   390→   390→                </span>
+   391→   391→                <div className="min-w-0">
+   392→   392→                  <p className="text-[10px] text-white/65 sm:text-[11px]">
+   393→   393→                    Pengeluaran
+   394→   394→                  </p>
+   395→   395→                  <p className="truncate text-xs font-semibold text-rose-50 sm:text-sm">
+   396→   396→                    {isLoading
+   397→   397→                      ? "—"
+   398→   398→                      : showBalance
+   399→   399→                        ? formatCurrencyCompact(summary?.monthExpense ?? 0)
+   400→   400→                        : "•••"}
+   401→   401→                  </p>
+   402→   402→                </div>
+   403→   403→              </div>
+   404→   404→            </div>
+   405→   405→          </div>
+   406→   406→        </Card>
+   407→   407→      </motion.div>
+   408→   408→
+   409→   409→      {/* Bento Grid — Sisa Bulan + Transaksi count + Quick stats */}
+   410→   410→      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+   411→   411→        <Card className="col-span-2 p-4 sm:col-span-2">
+   412→   412→          <div className="flex items-center justify-between gap-3">
+   413→   413→            <div className="min-w-0">
+   414→   414→              <p className="text-xs text-muted-foreground">Sisa bulan ini</p>
+   415→   415→              <p className="mt-0.5 text-xl font-bold tabular-nums sm:text-2xl">
+   416→   416→                {isLoading
+   417→   417→                  ? "···"
+   418→   418→                  : showBalance
+   419→   419→                    ? formatCurrency(summary?.monthBalance ?? 0)
+   420→   420→                    : "••••••"}
+   421→   421→              </p>
+   422→   422→              <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+   423→   423→                Pemasukan − pengeluaran bulan ini
+   424→   424→              </p>
+   425→   425→            </div>
+   426→   426→            <div className="flex shrink-0 flex-col items-end gap-0.5 rounded-xl bg-muted/50 px-3 py-2">
+   427→   427→              <p className="text-[10px] text-muted-foreground">Transaksi</p>
+   428→   428→              <p className="text-base font-bold tabular-nums">
+   429→   429→                {isLoading ? "—" : summary?.monthTransactionCount ?? 0}
+   430→   430→              </p>
+   431→   431→            </div>
+   432→   432→          </div>
+   433→   433→        </Card>
+   434→   434→        {/* Mini stat: avg/day */}
+   435→   435→        <Card className="p-3">
+   436→   436→          <div className="flex flex-col gap-1">
+   437→   437→            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/10">
+   438→   438→              <Flame className="h-3.5 w-3.5 text-orange-500" />
+   439→   439→            </span>
+   440→   440→            <p className="text-[10px] text-muted-foreground">Rata-rata/hari</p>
+   441→   441→            <p className="truncate text-sm font-bold tabular-nums">
+   442→   442→              {rangeLoading
+   443→   443→                ? "—"
+   444→   444→                : showBalance
+   445→   445→                  ? formatCurrencyCompact(
+   446→   446→                      Math.round(
+   447→   447→                        (summary?.monthExpense ?? 0) /
+   448→   448→                          Math.max(new Date().getDate(), 1),
+   449→   449→                      ),
+   450→   450→                    )
+   451→   451→                  : "•••"}
+   452→   452→            </p>
+   453→   453→          </div>
+   454→   454→        </Card>
+   455→   455→        {/* Mini stat: savings rate */}
+   456→   456→        <Card className="p-3">
+   457→   457→          <div className="flex flex-col gap-1">
+   458→   458→            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
+   459→   459→              <Sparkles className="h-3.5 w-3.5 text-primary" />
+   460→   460→            </span>
+   461→   461→            <p className="text-[10px] text-muted-foreground">Tingkat tabung</p>
+   462→   462→            <p className="truncate text-sm font-bold tabular-nums">
+   463→   463→              {isLoading
+   464→   464→                ? "—"
+   465→   465→                : `${Math.round((summary?.savingsRate ?? 0) * 100)}%`}
+   466→   466→            </p>
+   467→   467→          </div>
+   468→   468→        </Card>
+   469→   469→      </div>
+   470→   470→
+   471→   471→      {/* Counter Jajan Harian + Weekly Summary — 2 col grid */}
+   472→   472→      {todayExpenses.length > 0 && (
+   473→   473→        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+   474→   474→          <CounterJajanCard
+   475→   475→            count={todayExpenses.length}
+   476→   476→            avg={avgDailyJajan}
+   477→   477→            isLoading={rangeLoading}
+   478→   478→          />
+   479→   479→          <WeeklySummaryCard
+   480→   480→            summary={weeklySummary}
+   481→   481→            barData={weeklyBarData}
+   482→   482→            isLoading={rangeLoading}
+   483→   483→          />
+   484→   484→        </div>
+   485→   485→      )}
+   486→   486→      {todayExpenses.length === 0 && (
+   487→   487→        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+   488→   488→          <WeeklySummaryCard
+   489→   489→            summary={weeklySummary}
+   490→   490→            barData={weeklyBarData}
+   491→   491→            isLoading={rangeLoading}
+   492→   492→          />
+   493→   493→        </div>
+   494→   494→      )}
+   495→   495→
+   496→   496→      {/* Comparison Bulan Lalu + Top 5 Jajan Favorit — 2 col grid */}
+   497→   497→      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+   498→   498→        <ComparisonBulanLaluCard
+   499→   499→          current={monthComparison?.current.expense ?? 0}
+   500→   500→          previous={monthComparison?.previous.expense ?? 0}
+   501→   501→          changePct={monthComparison?.expenseChange ?? 0}
+   502→   502→          isLoading={isLoading}
+   503→   503→        />
+   504→   504→        <Top5JajanCard items={top5Jajan} isLoading={rangeLoading} />
+   505→   505→      </div>
+   506→   506→
+   507→   507→      {/* Budget + Goals — conditional, grid layout on sm+ */}
+   508→   508→      {(topBudget || topGoal) && (
+   509→   509→        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+   510→   510→          {topBudget && <BudgetMiniCard budget={topBudget} />}
+   511→   511→          {topGoal && <GoalMiniCard goal={topGoal} />}
+   512→   512→        </div>
+   513→   513→      )}
+   514→   514→
+   515→   515→      {/* Recent transactions */}
+   516→   516→      <Card className="p-4">
+   517→   517→        <div className="mb-3 flex items-center justify-between">
+   518→   518→          <div>
+   519→   519→            <h3 className="text-sm font-semibold">Transaksi Terbaru</h3>
+   520→   520→            <p className="mt-0.5 text-xs text-muted-foreground">
+   521→   521→              6 transaksi terakhir Anda
+   522→   522→            </p>
+   523→   523→          </div>
+   524→   524→          <Button variant="ghost" size="sm" onClick={onViewAll} className="gap-1">
+   525→   525→            Lihat semua
+   526→   526→            <ArrowRight className="h-3.5 w-3.5" />
+   527→   527→          </Button>
+   528→   528→        </div>
+   529→   529→
+   530→   530→        {isLoading ? (
+   531→   531→          <div className="space-y-2">
+   532→   532→            {Array.from({ length: 4 }).map((_, i) => (
+   533→   533→              <Skeleton key={i} className="h-11 w-full rounded-xl" />
+   534→   534→            ))}
+   535→   535→          </div>
+   536→   536→        ) : recent.length === 0 ? (
+   537→   537→          <EmptyTransactions onAdd={onAdd} />
+   538→   538→        ) : (
+   539→   539→          <div className="-mx-1">
+   540→   540→            {recent.slice(0, 6).map((t, idx) => {
+   541→   541→              const isIncome = t.type === "INCOME";
+   542→   542→              const cat = t.category;
+   543→   543→              return (
+   544→   544→                <button
+   545→   545→                  key={t.id}
+   546→   546→                  onClick={() => onEdit(t)}
+   547→   547→                  className={cn(
+   548→   548→                    "group flex w-full items-center gap-3 px-1 py-1 text-left transition-colors hover:bg-muted/50",
+   549→   549→                    idx > 0 && "border-t border-border/60",
+   550→   550→                  )}
+   551→   551→                >
+   552→   552→                  <span
+   553→   553→                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+   554→   554→                    style={{ backgroundColor: cat ? `${cat.color}1a` : undefined }}
+   555→   555→                  >
+   556→   556→                    <LucideIcon
+   557→   557→                      name={cat?.icon ?? "Circle"}
+   558→   558→                      className="h-4 w-4"
+   559→   559→                      style={{ color: cat?.color }}
+   560→   560→                    />
+   561→   561→                  </span>
+   562→   562→                  <div className="min-w-0 flex-1">
+   563→   563→                    <p className="truncate text-sm font-medium text-foreground">
+   564→   564→                      {t.description}
+   565→   565→                    </p>
+   566→   566→                    <p className="truncate text-xs text-muted-foreground">
+   567→   567→                      {cat?.name} · {relativeDay(t.date)}
+   568→   568→                    </p>
+   569→   569→                  </div>
+   570→   570→                  <span
+   571→   571→                    className={cn(
+   572→   572→                      "shrink-0 text-sm font-semibold tabular-nums",
+   573→   573→                      isIncome ? "text-income" : "text-expense",
+   574→   574→                    )}
+   575→   575→                  >
+   576→   576→                    {isIncome ? "+" : "−"}
+   577→   577→                    {formatCurrency(t.amount)}
+   578→   578→                  </span>
+   579→   579→                </button>
+   580→   580→              );
+   581→   581→            })}
+   582→   582→          </div>
+   583→   583→        )}
+   584→   584→      </Card>
+   585→   585→    </div>
+   586→   586→  );
+   587→   587→}
+   588→   588→
+   589→   589→/* ------------------------------------------------------------------ */
+   590→   590→/*  Counter Jajan Harian — small card                                */
+   591→   591→/* ------------------------------------------------------------------ */
+   592→   592→
+   593→   593→function CounterJajanCard({
+   594→   594→  count,
+   595→   595→  avg,
+   596→   596→  isLoading,
+   597→   597→}: {
+   598→   598→  count: number;
+   599→   599→  avg: number;
+   600→   600→  isLoading: boolean;
+   601→   601→}) {
+   602→   602→  const avgRounded = Math.round(avg * 10) / 10;
+   603→   603→  const diff = count - avg;
+   604→   604→  const diffLabel =
+   605→   605→    Math.abs(diff) < 0.1
+   606→   606→      ? "sesuai rata-rata"
+   607→   607→      : diff > 0
+   608→   608→        ? `+${Math.round(diff)}x dari biasanya`
+   609→   609→        : `${Math.round(diff)}x dari biasanya`;
+   610→   610→  const diffColor =
+   611→   611→    Math.abs(diff) < 0.1
+   612→   612→      ? "text-muted-foreground"
+   613→   613→      : diff > 0
+   614→   614→        ? "text-rose-600 dark:text-rose-400"
+   615→   615→        : "text-emerald-600 dark:text-emerald-400";
+   616→   616→
+   617→   617→  return (
+   618→   618→    <Card className="p-4">
+   619→   619→      <div className="flex items-center justify-between gap-2">
+   620→   620→        <div className="flex items-center gap-2">
+   621→   621→          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-500/10">
+   622→   622→            <Flame className="h-4 w-4 text-orange-500" />
+   623→   623→          </span>
+   624→   624→          <div className="min-w-0">
+   625→   625→            <p className="truncate text-xs text-muted-foreground">
+   626→   626→              Counter jajan
+   627→   627→            </p>
+   628→   628→            <p className="text-[11px] text-muted-foreground/70">Hari ini</p>
+   629→   629→          </div>
+   630→   630→        </div>
+   631→   631→      </div>
+   632→   632→      {isLoading ? (
+   633→   633→        <Skeleton className="mt-3 h-8 w-24" />
+   634→   634→      ) : (
+   635→   635→        <>
+   636→   636→          <p className="mt-3 text-2xl font-bold tabular-nums">
+   637→   637→            {count}
+   638→   638→            <span className="ml-1 text-sm font-medium text-muted-foreground">x</span>
+   639→   639→          </p>
+   640→   640→          <p className={cn("mt-0.5 text-[11px] tabular-nums", diffColor)}>
+   641→   641→            Biasanya {avgRounded}x/hari · {diffLabel}
+   642→   642→          </p>
+   643→   643→        </>
+   644→   644→      )}
+   645→   645→    </Card>
+   646→   646→  );
+   647→   647→}
+   648→   648→
+   649→   649→/* ------------------------------------------------------------------ */
+   650→   650→/*  Weekly Summary — compact card with trend arrow                    */
+   651→   651→/* ------------------------------------------------------------------ */
+   652→   652→
+   653→   653→function WeeklySummaryCard({
+   654→   654→  summary,
+   655→   655→  barData,
+   656→   656→  isLoading,
+   657→   657→}: {
+   658→   658→  summary: {
+   659→   659→    thisIncome: number;
+   660→   660→    thisExpense: number;
+   661→   661→    lastExpense: number;
+   662→   662→    balance: number;
+   663→   663→    trendPct: number;
+   664→   664→  };
+   665→   665→  barData: { label: string; value: number; isToday?: boolean }[];
+   666→   666→  isLoading: boolean;
+   667→   667→}) {
+   668→   668→  // Negative trend (less spending) = good (hemat, green)
+   669→   669→  // Positive trend (more spending) = bad (boros, red)
+   670→   670→  const trend = summary.trendPct;
+   671→   671→  const isHemat = trend < 0;
+   672→   672→  const isBoros = trend > 0;
+   673→   673→  const isBalanceZero = summary.balance <= 0;
+   674→   674→  const trendLabel = isHemat
+   675→   675→    ? `Hemat ${Math.abs(Math.round(trend))}% vs minggu lalu 🎉`
+   676→   676→    : isBoros
+   677→   677→      ? `Boros ${Math.round(trend)}% — cek pengeluaran`
+   678→   678→      : "Sama dengan minggu lalu";
+   679→   679→  // Balance warning overrides trend color when sisa = 0 (or negative)
+   680→   680→  const trendColor = isBalanceZero
+   681→   681→    ? "text-rose-600 dark:text-rose-400"
+   682→   682→    : isHemat
+   683→   683→      ? "text-emerald-600 dark:text-emerald-400"
+   684→   684→      : isBoros
+   685→   685→        ? "text-rose-600 dark:text-rose-400"
+   686→   686→        : "text-muted-foreground";
+   687→   687→  const TrendIcon = isBalanceZero
+   688→   688→    ? TriangleAlert
+   689→   689→    : isHemat
+   690→   690→      ? ArrowDownRight
+   691→   691→      : isBoros
+   692→   692→        ? ArrowUpRight
+   693→   693→        : Coins;
+   694→   694→
+   695→   695→  return (
+   696→   696→    <Card className="p-4">
+   697→   697→      <div className="flex items-center justify-between gap-2">
+   698→   698→        <div className="flex items-center gap-2">
+   699→   699→          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+   700→   700→            <CalendarRange className="h-4 w-4 text-primary" />
+   701→   701→          </span>
+   702→   702→          <div className="min-w-0">
+   703→   703→            <p className="truncate text-xs text-muted-foreground">Minggu ini</p>
+   704→   704→            <p className="text-[11px] text-muted-foreground/70">
+   705→   705→              Sisa {formatCurrencyCompact(summary.balance)}
+   706→   706→            </p>
+   707→   707→          </div>
+   708→   708→        </div>
+   709→   709→        {!isLoading && (isHemat || isBoros || isBalanceZero) && (
+   710→   710→          <span
+   711→   711→            className={cn(
+   712→   712→              "flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums",
+   713→   713→              trendColor,
+   714→   714→              isHemat && "bg-emerald-500/10",
+   715→   715→              isBoros && "bg-rose-500/10",
+   716→   716→              isBalanceZero && "bg-rose-500/10",
+   717→   717→            )}
+   718→   718→          >
+   719→   719→            <TrendIcon className="h-3 w-3" />
+   720→   720→            {isBalanceZero ? "Rp0" : `${Math.abs(Math.round(trend))}%`}
+   721→   721→          </span>
+   722→   722→        )}
+   723→   723→      </div>
+   724→   724→      {isLoading ? (
+   725→   725→        <div className="mt-3 space-y-2">
+   726→   726→          <Skeleton className="h-8 w-32" />
+   727→   727→          <Skeleton className="h-12 w-full" />
+   728→   728→        </div>
+   729→   729→      ) : (
+   730→   730→        <>
+   731→   731→          <div className="mt-3 flex items-baseline gap-2">
+   732→   732→            <p
+   733→   733→              className={cn(
+   734→   734→                "text-lg font-bold tabular-nums",
+   735→   735→                isBalanceZero && "text-rose-600 dark:text-rose-400",
+   736→   736→              )}
+   737→   737→            >
+   738→   738→              {formatCurrencyCompact(summary.balance)}
+   739→   739→            </p>
+   740→   740→            <span className="text-[10px] text-muted-foreground">
+   741→   741→              +{formatCurrencyCompact(summary.thisIncome)} · −
+   742→   742→              {formatCurrencyCompact(summary.thisExpense)}
+   743→   743→            </span>
+   744→   744→          </div>
+   745→   745→          {/* Mini bar chart — 7 hari */}
+   746→   746→          {barData.length > 0 && (
+   747→   747→            <div className="mt-3">
+   748→   748→              <MiniBarChart
+   749→   749→                data={barData}
+   750→   750→                height={48}
+   751→   751→                barColorActive="bg-primary"
+   752→   752→                barColorDim="bg-muted-foreground/25"
+   753→   753→              />
+   754→   754→            </div>
+   755→   755→          )}
+   756→   756→          <p className={cn("mt-2 text-[11px] font-medium", trendColor)}>
+   757→   757→            {trendLabel}
+   758→   758→          </p>
+   759→   759→        </>
+   760→   760→      )}
+   761→   761→    </Card>
+   762→   762→  );
+   763→   763→}
+   764→   764→
+   765→   765→/* ------------------------------------------------------------------ */
+   766→   766→/*  Comparison Bulan Lalu — small card                                */
+   767→   767→/* ------------------------------------------------------------------ */
+   768→   768→
+   769→   769→function ComparisonBulanLaluCard({
+   770→   770→  current,
+   771→   771→  previous,
+   772→   772→  changePct,
+   773→   773→  isLoading,
+   774→   774→}: {
+   775→   775→  current: number;
+   776→   776→  previous: number;
+   777→   777→  changePct: number;
+   778→   778→  isLoading: boolean;
+   779→   779→}) {
+   780→   780→  // Negative change = less spending = hemat (green)
+   781→   781→  // Positive change = more spending = boros (red)
+   782→   782→  const diff = previous - current; // positive = hemat
+   783→   783→  const isHemat = diff > 0 && previous > 0;
+   784→   784→  const isBoros = diff < 0 && previous > 0;
+   785→   785→  const pct = Math.abs(Math.round(changePct));
+   786→   786→  const cardClass = isHemat
+   787→   787→    ? "border-emerald-500/30 bg-emerald-500/[0.04]"
+   788→   788→    : isBoros
+   789→   789→      ? "border-rose-500/30 bg-rose-500/[0.04]"
+   790→   790→      : "";
+   791→   791→  const TrendIcon = isHemat ? ArrowDownRight : isBoros ? ArrowUpRight : Coins;
+   792→   792→  const trendColor = isHemat
+   793→   793→    ? "text-emerald-600 dark:text-emerald-400"
+   794→   794→    : isBoros
+   795→   795→      ? "text-rose-600 dark:text-rose-400"
+   796→   796→      : "text-muted-foreground";
+   797→   797→
+   798→   798→  return (
+   799→   799→    <Card className={cn("p-4", cardClass)}>
+   800→   800→      <div className="flex items-center justify-between gap-2">
+   801→   801→        <div className="flex items-center gap-2">
+   802→   802→          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+   803→   803→            <CalendarRange className="h-4 w-4 text-primary" />
+   804→   804→          </span>
+   805→   805→          <div className="min-w-0">
+   806→   806→            <p className="truncate text-xs text-muted-foreground">
+   807→   807→              Bulan ini vs lalu
+   808→   808→            </p>
+   809→   809→            <p className="text-[11px] text-muted-foreground/70">Pengeluaran</p>
+   810→   810→          </div>
+   811→   811→        </div>
+   812→   812→        {!isLoading && (isHemat || isBoros) && (
+   813→   813→          <span
+   814→   814→            className={cn(
+   815→   815→              "flex shrink-0 items-center gap-0.5 text-xs font-medium tabular-nums",
+   816→   816→              trendColor,
+   817→   817→            )}
+   818→   818→          >
+   819→   819→            <TrendIcon className="h-3.5 w-3.5" />
+   820→   820→            {pct}%
+   821→   821→          </span>
+   822→   822→        )}
+   823→   823→      </div>
+   824→   824→      {isLoading ? (
+   825→   825→        <Skeleton className="mt-3 h-8 w-44" />
+   826→   826→      ) : (
+   827→   827→        <>
+   828→   828→          <p
+   829→   829→            className={cn(
+   830→   830→              "mt-3 text-sm font-semibold tabular-nums",
+   831→   831→              isHemat && "text-emerald-600 dark:text-emerald-400",
+   832→   832→              isBoros && "text-rose-600 dark:text-rose-400",
+   833→   833→            )}
+   834→   834→          >
+   835→   835→            {isHemat
+   836→   836→              ? `Hemat ${formatCurrencyCompact(diff)}`
+   837→   837→              : isBoros
+   838→   838→                ? `Boros ${formatCurrencyCompact(Math.abs(diff))}`
+   839→   839→                : "Sama dengan bulan lalu"}
+   840→   840→          </p>
+   841→   841→          <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+   842→   842→            {formatCurrencyCompact(current)} vs{" "}
+   843→   843→            {formatCurrencyCompact(previous)}
+   844→   844→          </p>
+   845→   845→        </>
+   846→   846→      )}
+   847→   847→    </Card>
+   848→   848→  );
+   849→   849→}
+   850→   850→
+   851→   851→/* ------------------------------------------------------------------ */
+   852→   852→/*  Top 5 Jajan Favorit — mini list                                   */
+   853→   853→/* ------------------------------------------------------------------ */
+   854→   854→
+   855→   855→function Top5JajanCard({
+   856→   856→  items,
+   857→   857→  isLoading,
+   858→   858→}: {
+   859→   859→  items: Array<{ description: string; count: number; total: number }>;
+   860→   860→  isLoading: boolean;
+   861→   861→}) {
+   862→   862→  // Colors for donut slices
+   863→   863→  const sliceColors = [
+   864→   864→    "#10b981", // emerald-500
+   865→   865→    "#3b82f6", // blue-500
+   866→   866→    "#f59e0b", // amber-500
+   867→   867→    "#ec4899", // pink-500
+   868→   868→    "#8b5cf6", // violet-500
+   869→   869→  ];
+   870→   870→  const donutData = items.slice(0, 5).map((item, i) => ({
+   871→   871→    label: item.description,
+   872→   872→    value: item.total,
+   873→   873→    color: sliceColors[i % sliceColors.length],
+   874→   874→  }));
+   875→   875→  const totalSpent = donutData.reduce((s, d) => s + d.value, 0);
+   876→   876→
+   877→   877→  return (
+   878→   878→    <Card className="p-4">
+   879→   879→      <div className="mb-3 flex items-center justify-between gap-2">
+   880→   880→        <div className="flex items-center gap-2">
+   881→   881→          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+   882→   882→            <ListOrdered className="h-4 w-4 text-primary" />
+   883→   883→          </span>
+   884→   884→          <div className="min-w-0">
+   885→   885→            <p className="truncate text-xs text-muted-foreground">
+   886→   886→              Top 5 jajan favorit
+   887→   887→            </p>
+   888→   888→            <p className="text-[11px] text-muted-foreground/70">Bulan ini</p>
+   889→   889→          </div>
+   890→   890→        </div>
+   891→   891→      </div>
+   892→   892→      {isLoading ? (
+   893→   893→        <div className="space-y-2">
+   894→   894→          {Array.from({ length: 3 }).map((_, i) => (
+   895→   895→            <Skeleton key={i} className="h-9 w-full rounded-lg" />
+   896→   896→          ))}
+   897→   897→        </div>
+   898→   898→      ) : items.length === 0 ? (
+   899→   899→        <div className="rounded-lg border border-dashed border-border py-6 text-center">
+   900→   900→          <p className="text-xs text-muted-foreground">
+   901→   901→            Belum ada jajan bulan ini.
+   902→   902→          </p>
+   903→   903→        </div>
+   904→   904→      ) : (
+   905→   905→        <div className="flex gap-4">
+   906→   906→          {/* Donut chart */}
+   907→   907→          <div className="flex flex-col items-center gap-2">
+   908→   908→            <DonutChart
+   909→   909→              data={donutData}
+   910→   910→              size={96}
+   911→   911→              strokeWidth={14}
+   912→   912→              centerValue={formatCurrencyCompact(totalSpent)}
+   913→   913→              centerLabel="total"
+   914→   914→            />
+   915→   915→          </div>
+   916→   916→          {/* List compact */}
+   917→   917→          <div className="flex-1 space-y-1.5">
+   918→   918→            {items.slice(0, 5).map((item, idx) => (
+   919→   919→              <div key={`${item.description}-${idx}`} className="flex items-center gap-2">
+   920→   920→                <span
+   921→   921→                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+   922→   922→                  style={{ backgroundColor: sliceColors[idx % sliceColors.length] }}
+   923→   923→                />
+   924→   924→                <div className="min-w-0 flex-1">
+   925→   925→                  <p className="truncate text-xs font-medium capitalize text-foreground">
+   926→   926→                    {item.description}
+   927→   927→                  </p>
+   928→   928→                  <p className="text-[10px] text-muted-foreground tabular-nums">
+   929→   929→                    {formatCurrencyCompact(item.total)} · {item.count}x
+   930→   930→                  </p>
+   931→   931→                </div>
+   932→   932→              </div>
+   933→   933→            ))}
+   934→   934→          </div>
+   935→   935→        </div>
+   936→   936→      )}
+   937→   937→    </Card>
+   938→   938→  );
+   939→   939→}
+   940→   940→
+   941→   941→/* ------------------------------------------------------------------ */
+   942→   942→/*  Existing mini cards (kept)                                        */
+   943→   943→/* ------------------------------------------------------------------ */
+   944→   944→
+   945→   945→function BudgetMiniCard({ budget }: { budget: BudgetStatus }) {
+   946→   946→  const pct = Math.min(100, Math.round(budget.percentage));
+   947→   947→  const statusColor =
+   948→   948→    budget.status === "over"
+   949→   949→      ? "bg-rose-500"
+   950→   950→      : budget.status === "danger"
+   951→   951→        ? "bg-rose-400"
+   952→   952→        : budget.status === "warning"
+   953→   953→          ? "bg-amber-400"
+   954→   954→          : "bg-emerald-500";
+   955→   955→  // Proyeksi pace: linear extrapolation sampai akhir bulan
+   956→   956→  const today = new Date();
+   957→   957→  const dayOfMonth = today.getDate();
+   958→   958→  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+   959→   959→  const projectedPct = Math.min(150, Math.round((budget.spent / Math.max(budget.amount, 1)) * (daysInMonth / Math.max(dayOfMonth, 1)) * 100));
+   960→   960→  const projectedSpent = Math.round((budget.spent / Math.max(dayOfMonth, 1)) * daysInMonth);
+   961→   961→  const willExceed = projectedSpent > budget.amount;
+   962→   962→  const daysLeft = daysInMonth - dayOfMonth;
+   963→   963→  const remainingAmount = Math.max(0, budget.amount - budget.spent);
+   964→   964→
+   965→   965→  // Smart label
+   966→   966→  let smartLabel = "";
+   967→   967→  if (budget.status === "over") {
+   968→   968→    smartLabel = `⚠️ Lewat ${formatCurrencyCompact(budget.spent - budget.amount)}`;
+   969→   969→  } else if (willExceed) {
+   970→   970→    smartLabel = `⚠️ Proyeksi: habis ${formatCurrencyCompact(projectedSpent - budget.amount)} lebih`;
+   971→   971→  } else if (daysLeft > 0) {
+   972→   972→    smartLabel = `Sisa ${formatCurrencyCompact(remainingAmount)} untuk ${daysLeft} hari`;
+   973→   973→  } else {
+   974→   974→    smartLabel = `Aman sampai akhir bulan`;
+   975→   975→  }
+   976→   976→
+   977→   977→  return (
+   978→   978→    <Card className="p-4">
+   979→   979→      <div className="flex items-center justify-between gap-2">
+   980→   980→        <div className="flex items-center gap-2">
+   981→   981→          <span
+   982→   982→            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+   983→   983→            style={{
+   984→   984→              backgroundColor: `${budget.category.color}1a`,
+   985→   985→              color: budget.category.color,
+   986→   986→            }}
+   987→   987→          >
+   988→   988→            <LucideIcon name={budget.category.icon} className="h-4 w-4" />
+   989→   989→          </span>
+   990→   990→          <div className="min-w-0">
+   991→   991→            <p className="truncate text-xs text-muted-foreground">Anggaran</p>
+   992→   992→            <p className="truncate text-sm font-semibold">
+   993→   993→              {budget.category.name}
+   994→   994→            </p>
+   995→   995→          </div>
+   996→   996→        </div>
+   997→   997→        <ProgressRing
+   998→   998→          percentage={pct}
+   999→   999→          size={36}
+  1000→  1000→          strokeWidth={3}
+  1001→  1001→          color={
+  1002→  1002→            budget.status === "over" || budget.status === "danger"
+  1003→  1003→              ? "stroke-rose-500"
+  1004→  1004→              : budget.status === "warning"
+  1005→  1005→                ? "stroke-amber-400"
+  1006→  1006→                : "stroke-emerald-500"
+  1007→  1007→          }
+  1008→  1008→        >
+  1009→  1009→          <span className="text-[10px] font-bold tabular-nums">{pct}%</span>
+  1010→  1010→        </ProgressRing>
+  1011→  1011→      </div>
+  1012→  1012→      <div className="mt-3 space-y-1">
+  1013→  1013→        {/* Actual bar */}
+  1014→  1014→        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+  1015→  1015→          <motion.div
+  1016→  1016→            initial={{ width: 0 }}
+  1017→  1017→            animate={{ width: `${pct}%` }}
+  1018→  1018→            transition={{ duration: 0.6, ease: "easeOut" }}
+  1019→  1019→            className={cn("h-full rounded-full", statusColor)}
+  1020→  1020→          />
+  1021→  1021→        </div>
+  1022→  1022→        {/* Projection ghost bar */}
+  1023→  1023→        <div className="h-0.5 w-full overflow-hidden rounded-full bg-muted/30">
+  1024→  1024→          <div
+  1025→  1025→            className={cn("h-full rounded-full opacity-40", willExceed ? "bg-rose-400" : "bg-emerald-400")}
+  1026→  1026→            style={{ width: `${Math.min(projectedPct, 100)}%` }}
+  1027→  1027→          />
+  1028→  1028→        </div>
+  1029→  1029→      </div>
+  1030→  1030→      <div className="mt-2 flex items-center justify-between gap-2">
+  1031→  1031→        <p className="text-[10px] text-muted-foreground tabular-nums">
+  1032→  1032→          {formatCurrencyCompact(budget.spent)} / {formatCurrencyCompact(budget.amount)}
+  1033→  1033→        </p>
+  1034→  1034→        <p
+  1035→  1035→          className={cn(
+  1036→  1036→            "text-[10px] font-medium",
+  1037→  1037→            willExceed || budget.status === "over"
+  1038→  1038→              ? "text-rose-600 dark:text-rose-400"
+  1039→  1039→              : "text-muted-foreground",
+  1040→  1040→          )}
+  1041→  1041→        >
+  1042→  1042→          {smartLabel}
+  1043→  1043→        </p>
+  1044→  1044→      </div>
+  1045→  1045→    </Card>
+  1046→  1046→  );
+  1047→  1047→}
+  1048→  1048→
+  1049→  1049→function GoalMiniCard({ goal }: { goal: Goal }) {
+  1050→  1050→  const pct = Math.min(
+  1051→  1051→    100,
+  1052→  1052→    Math.round((goal.currentAmount / Math.max(goal.targetAmount, 1)) * 100),
+  1053→  1053→  );
+  1054→  1054→  const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
+  1055→  1055→  const isCompleted = goal.completed || pct >= 100;
+  1056→  1056→  // Gamified badge level
+  1057→  1057→  const level =
+  1058→  1058→    pct >= 100 ? "🏆" : pct >= 75 ? "🥇" : pct >= 50 ? "🥈" : pct >= 25 ? "🥉" : "🌱";
+  1059→  1059→
+  1060→  1060→  return (
+  1061→  1061→    <Card className="relative overflow-hidden p-4">
+  1062→  1062→      {isCompleted && (
+  1063→  1063→        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent" />
+  1064→  1064→      )}
+  1065→  1065→      <div className="relative flex items-center justify-between gap-2">
+  1066→  1066→        <div className="flex items-center gap-2">
+  1067→  1067→          <span
+  1068→  1068→            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+  1069→  1069→            style={{ backgroundColor: `${goal.color}1a`, color: goal.color }}
+  1070→  1070→          >
+  1071→  1071→            <LucideIcon name={goal.icon || "Target"} className="h-4 w-4" />
+  1072→  1072→          </span>
+  1073→  1073→          <div className="min-w-0">
+  1074→  1074→            <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+  1075→  1075→              <span>{level}</span>
+  1076→  1076→              <span>Target</span>
+  1077→  1077→            </p>
+  1078→  1078→            <p className="truncate text-sm font-semibold">{goal.name}</p>
+  1079→  1079→          </div>
+  1080→  1080→        </div>
+  1081→  1081→        <ProgressRing
+  1082→  1082→          percentage={pct}
+  1083→  1083→          size={36}
+  1084→  1084→          strokeWidth={3}
+  1085→  1085→          color="stroke-primary"
+  1086→  1086→        >
+  1087→  1087→          <span className="text-[10px] font-bold tabular-nums">{pct}%</span>
+  1088→  1088→        </ProgressRing>
+  1089→  1089→      </div>
+  1090→  1090→      <div className="relative mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+  1091→  1091→        <motion.div
+  1092→  1092→          initial={{ width: 0 }}
+  1093→  1093→          animate={{ width: `${pct}%` }}
+  1094→  1094→          transition={{ duration: 0.6, ease: "easeOut" }}
+  1095→  1095→          className="h-full rounded-full bg-primary"
+  1096→  1096→        />
+  1097→  1097→      </div>
+  1098→  1098→      <p className="relative mt-2 text-[10px] font-medium text-muted-foreground">
+  1099→  1099→        {isCompleted
+  1100→  1100→          ? "🎉 Target tercapai!"
+  1101→  1101→          : `Sisa ${formatCurrencyCompact(remaining)} lagi`}
+  1102→  1102→      </p>
+  1103→  1103→    </Card>
+  1104→  1104→  );
+  1105→  1105→}
+  1106→  1106→
+  1107→  1107→function EmptyTransactions({ onAdd }: { onAdd: () => void }) {
+  1108→  1108→  return (
+  1109→  1109→    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-8 text-center">
+  1110→  1110→      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent">
+  1111→  1111→        <Sparkles className="h-5 w-5 text-muted-foreground" />
+  1112→  1112→      </span>
+  1113→  1113→      <div>
+  1114→  1114→        <p className="text-sm font-medium">Belum ada transaksi</p>
+  1115→  1115→        <p className="mt-0.5 text-xs text-muted-foreground">
+  1116→  1116→          Mulai catat pemasukan & pengeluaran pertama Anda.
+  1117→  1117→        </p>
+  1118→  1118→      </div>
+  1119→  1119→      <Button onClick={onAdd} size="sm" className="mt-1 gap-1">
+  1120→  1120→        <Plus className="h-4 w-4" />
+  1121→  1121→        Tambah Transaksi
+  1122→  1122→      </Button>
+  1123→  1123→    </div>
+  1124→  1124→  );
+  1125→  1125→}
+  1126→  1126→
