@@ -2597,3 +2597,44 @@ Stage Summary:
   11. ✅ Micro-interactions (spring physics, number counting, bar chart stagger)
   12. ✅ Animated Number (odometer-style for balance)
 - Lint clean, dev server healthy, DOM verified, FAB expansion tested
+
+---
+Task ID: FIX-ALL-ERRORS
+Agent: main (orchestrator)
+Task: Perbaiki semua error di sandbox (lint, TypeScript, runtime)
+
+Work Log:
+- Audit awal: lint PASS (0 errors), tapi 5 TypeScript errors di kode aplikasi (src/):
+  1. src/components/finance/dashboard-tab.tsx(465,43): `Property 'savingsRate' does not exist on type 'Summary'`
+  2. src/lib/crypto.ts(43,7): `Uint8Array<ArrayBufferLike>` tidak assignable ke `BufferSource` (TS5 lib DOM update)
+  3. src/lib/crypto.ts(178,16): `Property 'deviceMemory' does not exist on type 'Navigator'`
+  4. src/lib/security-defaults.ts(11,3): `Duplicate identifier 'duressPinHash'` (ada di line 11 & 40)
+  5. src/lib/security-defaults.ts(104,3): `Object literal cannot have multiple properties with the same name` (duressPinHash di line 80 & 104)
+
+- Fix 1 (savingsRate): Tambah `savingsRate?: number;` ke interface Summary di src/lib/types.ts (optional karena tidak semua response API include savingsRate).
+
+- Fix 2 (Uint8Array/BufferSource): Cast semua crypto.subtle calls dengan `as BufferSource`:
+  * deriveKey: `enc.encode(password) as BufferSource`, `salt as BufferSource`
+  * hashSecret digest: `new Uint8Array([...]) as BufferSource`
+  * encryptString: `iv as BufferSource`, `enc.encode(plaintext) as BufferSource`
+  * decryptString: `iv as BufferSource`, `ciphertext as BufferSource`
+  * getDeviceFingerprint digest: `enc.encode(...) as BufferSource`
+
+- Fix 3 (deviceMemory): Cast navigator dengan intersection type `(navigator as Navigator & { deviceMemory?: number }).deviceMemory` untuk akses properti yang tidak ada di lib DOM default.
+
+- Fix 4 & 5 (duressPinHash duplicate): Hapus deklarasi `duressPinHash: string` dari section "Decoy / Duress" (line 40) dan hapus assignment `duressPinHash: ""` dari DEFAULT_SECURITY_CONFIG object literal (line 104) — tetap pertahankan yang di section "Secrets" (line 11 & line 80).
+
+Verification:
+- `bun run lint` → PASS (0 errors, 0 warnings)
+- `bunx tsc --noEmit` (src/ only) → 0 errors (5 → 0)
+- Dev server: HTTP 200
+- Agent Browser screenshot: app renders correctly, no error boundary, redesign UI visible (glassmorphism hero, sparkline, bento grid)
+
+Stage Summary:
+- Files modified: 3
+  * src/lib/types.ts (tambah savingsRate? ke Summary interface)
+  * src/lib/crypto.ts (5 BufferSource casts + 1 Navigator cast)
+  * src/lib/security-defaults.ts (hapus 1 duplicate interface field + 1 duplicate object property)
+- TS errors: 5 → 0 (untuk src/)
+- Remaining TS errors hanya di examples/ dan skills/ (reference files, bukan bagian aplikasi DompetKu)
+- Lint clean, dev server healthy, app verified via Agent Browser

@@ -32,7 +32,7 @@ export async function deriveKey(
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    enc.encode(password),
+    enc.encode(password) as BufferSource,
     "PBKDF2",
     false,
     ["deriveKey"]
@@ -40,7 +40,7 @@ export async function deriveKey(
   const key = await crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt,
+      salt: salt as BufferSource,
       iterations: PBKDF2_ITERATIONS,
       hash: "SHA-256",
     },
@@ -73,7 +73,7 @@ export async function hashSecret(secret: string): Promise<string> {
   const enc = new TextEncoder();
   const buf = await crypto.subtle.digest(
     "SHA-256",
-    new Uint8Array([...enc.encode(secret), ...salt])
+    new Uint8Array([...enc.encode(secret), ...salt]) as BufferSource
   );
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -98,9 +98,9 @@ export async function encryptString(
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const enc = new TextEncoder();
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as BufferSource },
     key,
-    enc.encode(plaintext)
+    enc.encode(plaintext) as BufferSource
   );
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv, 0);
@@ -117,9 +117,9 @@ export async function decryptString(
   const iv = combined.slice(0, 12);
   const ciphertext = combined.slice(12);
   const buf = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as BufferSource },
     key,
-    ciphertext
+    ciphertext as BufferSource
   );
   return new TextDecoder().decode(buf);
 }
@@ -175,10 +175,13 @@ export async function getDeviceFingerprint(): Promise<string> {
     `${screen.width}x${screen.height}x${screen.colorDepth}`,
     new Date().getTimezoneOffset().toString(),
     (navigator.hardwareConcurrency || 0).toString(),
-    (navigator.deviceMemory || 0).toString(),
+    ((navigator as Navigator & { deviceMemory?: number }).deviceMemory || 0).toString(),
   ];
   const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest("SHA-256", enc.encode(components.join("|")));
+  const buf = await crypto.subtle.digest(
+    "SHA-256",
+    enc.encode(components.join("|")) as BufferSource
+  );
   return Array.from(new Uint8Array(buf))
     .slice(0, 16)
     .map((b) => b.toString(16).padStart(2, "0"))

@@ -391,6 +391,7 @@ export interface Summary {
   monthBalance: number;
   transactionCount: number;
   monthTransactionCount: number;
+  savingsRate?: number;
 }
 
 export interface CategoryBreakdown {

@@ -37,7 +37,6 @@ export interface SecurityConfig {
   watermarkText: string;
   // Decoy / Duress
   decoyEnabled: boolean;
-  duressPinHash: string; // empty = not set
   panicGestureEnabled: boolean; // 5x logo click
   // Session
   sessionExpiryMinutes: number; // 0 = never
@@ -101,7 +100,6 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   watermarkEnabled: false,
   watermarkText: "Pribadi",
   decoyEnabled: false,
-  duressPinHash: "",
   panicGestureEnabled: true,
   sessionExpiryMinutes: 60,
   singleDeviceSession: false,
